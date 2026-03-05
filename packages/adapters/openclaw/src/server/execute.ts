@@ -7,7 +7,7 @@ function nonEmpty(value: unknown): string | null {
 }
 
 export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
-  const { config, runId, agent, context, onLog, onMeta } = ctx;
+  const { config, runId, agent, context, onLog, onMeta, authToken } = ctx;
   const url = asString(config.url, "").trim();
   if (!url) {
     return {
@@ -50,6 +50,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     issueIds: Array.isArray(context.issueIds)
       ? context.issueIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
       : [],
+    ...(authToken ? { authToken } : {}),
   };
 
   const body = {

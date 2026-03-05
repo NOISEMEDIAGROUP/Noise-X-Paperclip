@@ -83,7 +83,7 @@ const openclawAdapter: ServerAdapterModule = {
   execute: openclawExecute,
   testEnvironment: openclawTestEnvironment,
   models: openclawModels,
-  supportsLocalAgentJwt: false,
+  supportsLocalAgentJwt: true,
   agentConfigurationDoc: openclawAgentConfigurationDoc,
 };
 
