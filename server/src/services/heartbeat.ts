@@ -26,12 +26,18 @@ import { resolveDefaultAgentWorkspaceDir } from "../home-paths.js";
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_MAX = 10;
+const PROCESS_LOST_RETRY_MAX_ATTEMPTS = 5;
+const PROCESS_LOST_RETRY_BASE_DELAY_MS = 1_000;
 const DEFERRED_WAKE_CONTEXT_KEY = "_paperclipWakeContext";
 const startLocksByAgent = new Map<string, Promise<void>>();
 const REPO_ONLY_CWD_SENTINEL = "/__paperclip_repo_only__";
 
 function appendExcerpt(prev: string, chunk: string) {
   return appendWithCap(prev, chunk, MAX_EXCERPT_BYTES);
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
 function normalizeMaxConcurrentRuns(value: unknown) {
@@ -748,11 +754,12 @@ export function heartbeatService(db: Db) {
     const staleThresholdMs = opts?.staleThresholdMs ?? 0;
     const now = new Date();
 
-    // Find all runs in "queued" or "running" state
+    // Orphaned run cleanup only applies to runs already marked "running".
+    // Queued runs may legitimately have no process yet and should be picked up by the scheduler.
     const activeRuns = await db
       .select()
       .from(heartbeatRuns)
-      .where(inArray(heartbeatRuns.status, ["queued", "running"]));
+      .where(eq(heartbeatRuns.status, "running"));
 
     const reaped: string[] = [];
 
@@ -764,6 +771,26 @@ export function heartbeatService(db: Db) {
         const refTime = run.updatedAt ? new Date(run.updatedAt).getTime() : 0;
         if (now.getTime() - refTime < staleThresholdMs) continue;
       }
+
+      // Retry briefly before declaring process loss to tolerate transient interruptions.
+      let recovered = false;
+      for (let attempt = 1; attempt <= PROCESS_LOST_RETRY_MAX_ATTEMPTS; attempt += 1) {
+        const waitMs = attempt * PROCESS_LOST_RETRY_BASE_DELAY_MS;
+        await sleep(waitMs);
+
+        if (runningProcesses.has(run.id)) {
+          recovered = true;
+          break;
+        }
+
+        const latestRun = await getRun(run.id);
+        if (!latestRun || latestRun.status !== "running") {
+          recovered = true;
+          break;
+        }
+      }
+
+      if (recovered) continue;
 
       await setRunStatus(run.id, "failed", {
         error: "Process lost -- server may have restarted",
