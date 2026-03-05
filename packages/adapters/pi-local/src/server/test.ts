@@ -154,18 +154,37 @@ export async function testEnvironment(
       if (extraArgs.length > 0) args.push(...extraArgs);
       args.push("Respond with hello.");
 
-      const probe = await runChildProcess(
-        `pi-envtest-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        command,
-        args,
-        {
-          cwd,
-          env,
-          timeoutSec: 45,
-          graceSec: 5,
-          onLog: async () => {},
-        },
-      );
+      let probe: Awaited<ReturnType<typeof runChildProcess>> | null = null;
+      try {
+        probe = await runChildProcess(
+          `pi-envtest-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          command,
+          args,
+          {
+            cwd,
+            env,
+            timeoutSec: 45,
+            graceSec: 5,
+            onLog: async () => {},
+          },
+        );
+      } catch (err) {
+        checks.push({
+          code: "pi_hello_probe_failed",
+          level: "error",
+          message: "pi hello probe failed to start.",
+          detail: err instanceof Error ? err.message : String(err),
+          hint: "Verify CLI installation/permissions and retry the probe.",
+        });
+      }
+      if (!probe) {
+        return {
+          adapterType: ctx.adapterType,
+          status: summarizeStatus(checks),
+          checks,
+          testedAt: new Date().toISOString(),
+        };
+      }
 
       const parsed = parsePiJsonl(probe.stdout);
       const detail = summarizeProbeDetail(probe.stdout, probe.stderr, parsed.errorMessage);

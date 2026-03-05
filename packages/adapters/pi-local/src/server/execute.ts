@@ -267,7 +267,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     };
   }
 
-  const resolvedSessionId = parsed.sessionId ?? runtimeSessionId ?? runtime.sessionId ?? null;
+  const previousSessionId =
+    canResumeSession ? runtimeSessionId || runtime.sessionId || null : null;
+  const resolvedSessionId = parsed.sessionId ?? previousSessionId;
   const resolvedSessionParams = {
     ...(resolvedSessionId ? { sessionId: resolvedSessionId } : {}),
     sessionFile,

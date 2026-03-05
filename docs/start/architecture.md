@@ -32,7 +32,7 @@ Paperclip is a monorepo with four main layers.
 | Backend | Node.js 20+, Express.js 5, TypeScript |
 | Database | PostgreSQL 17 (or embedded PGlite), Drizzle ORM |
 | Auth | Better Auth (sessions + API keys) |
-| Adapters | Claude Code CLI, Codex CLI, pi CLI, shell process, HTTP webhook |
+| Adapters | Claude Code CLI, Codex CLI, Pi CLI, shell process, HTTP webhook |
 | Package manager | pnpm 9 with workspaces |
 
 ## Repository Structure

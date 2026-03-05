@@ -41,30 +41,35 @@ Follows the existing `NewIssueDialog` / `NewProjectDialog` pattern: a `Dialog` c
 **Adapter-specific fields (shown/hidden based on adapter type):**
 
 *claude_local:*
+
 | Field | Control | Default |
 |-------|---------|---------|
 | Max Turns Per Run | Number input | 80 |
 | Skip Permissions | Toggle | true |
 
 *codex_local:*
+
 | Field | Control | Default |
 |-------|---------|---------|
 | Search | Toggle | false |
 | Bypass Sandbox | Toggle | true |
 
 *pi_local:*
+
 | Field | Control | Default |
 |-------|---------|---------|
 | Thinking | Select | Auto |
 | Model | Select | Default |
 
 *process:*
+
 | Field | Control | Default |
 |-------|---------|---------|
 | Command | Text input | -- |
 | Args | Text input (comma-separated) | -- |
 
 *http:*
+
 | Field | Control | Default |
 |-------|---------|---------|
 | URL | Text input | -- |
