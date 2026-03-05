@@ -706,6 +706,12 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
               numberHint={help.intervalSec}
               showNumber={val!.heartbeatEnabled}
             />
+            <ToggleField
+              label="Skip timer runs with no assignments"
+              hint={help.skipIfNoAssignments}
+              checked={val!.skipIfNoAssignments}
+              onChange={(v) => set!({ skipIfNoAssignments: v })}
+            />
           </div>
         </div>
       ) : (
@@ -745,6 +751,16 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                   heartbeat.wakeOnDemand !== false,
                 )}
                 onChange={(v) => mark("heartbeat", "wakeOnDemand", v)}
+              />
+              <ToggleField
+                label="Skip timer runs with no assignments"
+                hint={help.skipIfNoAssignments}
+                checked={eff(
+                  "heartbeat",
+                  "skipIfNoAssignments",
+                  heartbeat.skipIfNoAssignments === true,
+                )}
+                onChange={(v) => mark("heartbeat", "skipIfNoAssignments", v)}
               />
               <Field label="Cooldown (sec)" hint={help.cooldownSec}>
                 <DraftNumberInput

@@ -1,12 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   agents,
   agentRuntimeState,
   agentTaskSessions,
   agentWakeupRequests,
+  companies,
   heartbeatRunEvents,
   heartbeatRuns,
   costEvents,
@@ -26,16 +27,23 @@ import { createLocalAgentJwt } from "../agent-auth-jwt.js";
 import { parseObject, asBoolean, asNumber, asString, appendWithCap, MAX_EXCERPT_BYTES } from "../adapters/utils.js";
 import { secretService } from "./secrets.js";
 import { issueService } from "./issues.js";
+import { logActivity } from "./activity-log.js";
 import { resolveDefaultAgentWorkspaceDir } from "../home-paths.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_MAX = 10;
 const DEFERRED_WAKE_CONTEXT_KEY = "_paperclipWakeContext";
+const DEFERRED_COMPANY_PAUSED_REASON_KEY = "_paperclipDeferredReason";
 const startLocksByAgent = new Map<string, Promise<void>>();
 const REPO_ONLY_CWD_SENTINEL = "/__paperclip_repo_only__";
 const BOOT_MARKER_RELATIVE_PATH = ".paperclip/runtime/boot-marker.json";
 const SAFE_HTTP_READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const STUCK_RUN_SWEEPER_ACTOR_ID = "heartbeat_stuck_run_sweeper";
+const STUCK_RUN_DEFAULT_QUEUED_THRESHOLD_MS = 20 * 60 * 1000;
+const STUCK_RUN_DEFAULT_RUNNING_NO_PROGRESS_THRESHOLD_MS = 20 * 60 * 1000;
+const STUCK_RUN_DEFAULT_RECOVERY_WINDOW_MS = 60 * 60 * 1000;
+const STUCK_RUN_DEFAULT_MAX_AUTO_REQUEUES = 2;
 const SENSITIVE_LABEL_TOKENS = [
   "prod",
   "production",
@@ -89,6 +97,30 @@ interface ParsedIssueAssigneeAdapterOverrides {
   adapterConfig: Record<string, unknown> | null;
   useProjectWorkspace: boolean | null;
 }
+
+export interface StuckRunSweepThresholds {
+  queuedThresholdMs: number;
+  runningNoProgressThresholdMs: number;
+}
+
+export interface StuckRunEvaluationInput {
+  status: string;
+  now: Date;
+  queuedReferenceAt: Date | null;
+  runningReferenceAt: Date | null;
+  thresholds: StuckRunSweepThresholds;
+}
+
+export interface StuckRunEvaluation {
+  reason: "queued_stale" | "running_no_progress";
+  staleForMs: number;
+  referenceAt: Date;
+}
+
+export type StuckRunRecoveryAction =
+  | { action: "already_requeued"; nextAttempt: number | null; circuitOpen: false }
+  | { action: "enqueue_recovery"; nextAttempt: number; circuitOpen: false }
+  | { action: "circuit_open"; nextAttempt: number; circuitOpen: true };
 
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
@@ -232,6 +264,99 @@ function asPositiveInteger(value: unknown): number | null {
   if (!Number.isFinite(numeric)) return null;
   const rounded = Math.floor(numeric);
   return rounded > 0 ? rounded : null;
+}
+
+function resolveStuckRunSweepThresholds(opts?: {
+  queuedThresholdMs?: number;
+  runningNoProgressThresholdMs?: number;
+}) {
+  const queuedThresholdMs =
+    opts?.queuedThresholdMs != null
+      ? Math.max(1_000, Math.floor(opts.queuedThresholdMs))
+      : Math.max(
+        1_000,
+        (asPositiveInteger(process.env.PAPERCLIP_STUCK_RUN_QUEUED_THRESHOLD_SEC) ??
+          STUCK_RUN_DEFAULT_QUEUED_THRESHOLD_MS / 1_000) * 1_000,
+      );
+  const runningNoProgressThresholdMs =
+    opts?.runningNoProgressThresholdMs != null
+      ? Math.max(1_000, Math.floor(opts.runningNoProgressThresholdMs))
+      : Math.max(
+        1_000,
+        (asPositiveInteger(process.env.PAPERCLIP_STUCK_RUN_RUNNING_NO_PROGRESS_THRESHOLD_SEC) ??
+          STUCK_RUN_DEFAULT_RUNNING_NO_PROGRESS_THRESHOLD_MS / 1_000) * 1_000,
+      );
+  return {
+    queuedThresholdMs,
+    runningNoProgressThresholdMs,
+  };
+}
+
+function latestTimestamp(values: Array<Date | null | undefined>) {
+  let latest: Date | null = null;
+  for (const value of values) {
+    if (!value) continue;
+    if (!latest || value.getTime() > latest.getTime()) {
+      latest = value;
+    }
+  }
+  return latest;
+}
+
+export function evaluateStuckRun(input: StuckRunEvaluationInput): StuckRunEvaluation | null {
+  const { status, now, queuedReferenceAt, runningReferenceAt, thresholds } = input;
+
+  if (status === "queued" && queuedReferenceAt) {
+    const staleForMs = now.getTime() - queuedReferenceAt.getTime();
+    if (staleForMs >= thresholds.queuedThresholdMs) {
+      return {
+        reason: "queued_stale",
+        staleForMs,
+        referenceAt: queuedReferenceAt,
+      };
+    }
+    return null;
+  }
+
+  if (status === "running" && runningReferenceAt) {
+    const staleForMs = now.getTime() - runningReferenceAt.getTime();
+    if (staleForMs >= thresholds.runningNoProgressThresholdMs) {
+      return {
+        reason: "running_no_progress",
+        staleForMs,
+        referenceAt: runningReferenceAt,
+      };
+    }
+  }
+
+  return null;
+}
+
+export function decideStuckRunRecoveryAction(input: {
+  recentAutoRequeues: number;
+  maxAutoRequeues: number;
+  hasPromotedDeferredRun: boolean;
+}): StuckRunRecoveryAction {
+  if (input.hasPromotedDeferredRun) {
+    return {
+      action: "already_requeued",
+      nextAttempt: null,
+      circuitOpen: false,
+    };
+  }
+  const nextAttempt = Math.max(1, input.recentAutoRequeues + 1);
+  if (nextAttempt > Math.max(1, input.maxAutoRequeues)) {
+    return {
+      action: "circuit_open",
+      nextAttempt,
+      circuitOpen: true,
+    };
+  }
+  return {
+    action: "enqueue_recovery",
+    nextAttempt,
+    circuitOpen: false,
+  };
 }
 
 function buildFailurePlaybook(errorCode: string | null) {
@@ -744,6 +869,14 @@ export function heartbeatService(db: Db) {
       .then((rows) => rows[0] ?? null);
   }
 
+  async function getCompany(companyId: string) {
+    return db
+      .select()
+      .from(companies)
+      .where(eq(companies.id, companyId))
+      .then((rows) => rows[0] ?? null);
+  }
+
   async function getRun(runId: string) {
     return db
       .select()
@@ -1094,8 +1227,28 @@ export function heartbeatService(db: Db) {
       enabled: asBoolean(heartbeat.enabled, true),
       intervalSec: Math.max(0, asNumber(heartbeat.intervalSec, 0)),
       wakeOnDemand: asBoolean(heartbeat.wakeOnDemand ?? heartbeat.wakeOnAssignment ?? heartbeat.wakeOnOnDemand ?? heartbeat.wakeOnAutomation, true),
+      skipIfNoAssignments: asBoolean(
+        heartbeat.skipIfNoAssignments ?? heartbeat.skipIfNoTasks,
+        false,
+      ),
       maxConcurrentRuns: normalizeMaxConcurrentRuns(heartbeat.maxConcurrentRuns),
     };
+  }
+
+  async function hasOpenAssignments(agent: typeof agents.$inferSelect) {
+    const rows = await db
+      .select({ id: issues.id })
+      .from(issues)
+      .where(
+        and(
+          eq(issues.companyId, agent.companyId),
+          eq(issues.assigneeAgentId, agent.id),
+          inArray(issues.status, ["todo", "in_progress", "blocked"]),
+          isNull(issues.hiddenAt),
+        ),
+      )
+      .limit(1);
+    return rows.length > 0;
   }
 
   async function countRunningRunsForAgent(agentId: string) {
@@ -1291,6 +1444,330 @@ export function heartbeatService(db: Db) {
     return { reaped: reaped.length, runIds: reaped };
   }
 
+  async function latestRunEventAt(runId: string) {
+    const latest = await db
+      .select({ createdAt: heartbeatRunEvents.createdAt })
+      .from(heartbeatRunEvents)
+      .where(eq(heartbeatRunEvents.runId, runId))
+      .orderBy(desc(heartbeatRunEvents.seq))
+      .limit(1)
+      .then((rows) => rows[0] ?? null);
+    return latest?.createdAt ?? null;
+  }
+
+  async function countRecentAutoRequeues(input: {
+    companyId: string;
+    agentId: string;
+    recoveryKey: string;
+    since: Date;
+  }) {
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(agentWakeupRequests)
+      .where(
+        and(
+          eq(agentWakeupRequests.companyId, input.companyId),
+          eq(agentWakeupRequests.agentId, input.agentId),
+          eq(agentWakeupRequests.reason, "stuck_run_auto_requeue"),
+          gte(agentWakeupRequests.requestedAt, input.since),
+          sql`coalesce(${agentWakeupRequests.payload} ->> 'recoveryKey', '') = ${input.recoveryKey}`,
+        ),
+      );
+    return Number(count ?? 0);
+  }
+
+  function buildStuckRecoveryComment(input: {
+    staleReason: StuckRunEvaluation["reason"];
+    staleForMs: number;
+    cancelledRunId: string;
+    agentId: string;
+    requeuedRunId: string | null;
+    recoveryAction: StuckRunRecoveryAction["action"];
+    maxAutoRequeues: number;
+    recoveryWindowMs: number;
+  }) {
+    const staleMinutes = Math.max(1, Math.round(input.staleForMs / 60_000));
+    const reasonLabel =
+      input.staleReason === "queued_stale"
+        ? "queued run exceeded age threshold"
+        : "running run showed no progress signals";
+    const lines = [
+      "## Recovery Update",
+      `Automatic stuck-run recovery triggered (\`${reasonLabel}\`).`,
+      "",
+      `- Cancelled run: [${input.cancelledRunId}](/agents/${input.agentId}/runs/${input.cancelledRunId})`,
+      `- Stale signal age: ${staleMinutes} minute(s)`,
+      `- Detection code: \`${input.staleReason}\``,
+    ];
+    if (input.requeuedRunId) {
+      lines.push(
+        `- Fresh attempt: [${input.requeuedRunId}](/agents/${input.agentId}/runs/${input.requeuedRunId})`,
+      );
+    } else if (input.recoveryAction === "circuit_open") {
+      lines.push(
+        "- Fresh attempt: skipped (circuit breaker open; manual intervention required)",
+      );
+    } else {
+      lines.push("- Fresh attempt: unable to queue automatically");
+    }
+    lines.push(
+      `- Circuit breaker: max ${Math.max(1, input.maxAutoRequeues)} auto-requeue(s) per ${Math.max(1, Math.floor(input.recoveryWindowMs / 60_000))} minute window`,
+    );
+    return lines.join("\n");
+  }
+
+  async function sweepStuckRuns(opts?: {
+    queuedThresholdMs?: number;
+    runningNoProgressThresholdMs?: number;
+    recoveryWindowMs?: number;
+    maxAutoRequeues?: number;
+    now?: Date;
+  }) {
+    const now = opts?.now ?? new Date();
+    const thresholds = resolveStuckRunSweepThresholds({
+      queuedThresholdMs: opts?.queuedThresholdMs,
+      runningNoProgressThresholdMs: opts?.runningNoProgressThresholdMs,
+    });
+    const recoveryWindowMs =
+      opts?.recoveryWindowMs != null
+        ? Math.max(1_000, Math.floor(opts.recoveryWindowMs))
+        : Math.max(
+          1_000,
+          (asPositiveInteger(process.env.PAPERCLIP_STUCK_RUN_RECOVERY_WINDOW_SEC) ??
+            STUCK_RUN_DEFAULT_RECOVERY_WINDOW_MS / 1_000) * 1_000,
+        );
+    const maxAutoRequeues =
+      opts?.maxAutoRequeues != null
+        ? Math.max(1, Math.floor(opts.maxAutoRequeues))
+        : Math.max(
+          1,
+          asPositiveInteger(process.env.PAPERCLIP_STUCK_RUN_MAX_AUTO_REQUEUES) ??
+            STUCK_RUN_DEFAULT_MAX_AUTO_REQUEUES,
+        );
+
+    const activeRuns = await db
+      .select()
+      .from(heartbeatRuns)
+      .where(inArray(heartbeatRuns.status, ["queued", "running"]))
+      .orderBy(asc(heartbeatRuns.createdAt));
+
+    let staleCount = 0;
+    let recoveredCount = 0;
+    let circuitOpenCount = 0;
+    const runIds: string[] = [];
+
+    for (const run of activeRuns) {
+      if (run.status === "running" && !runningProcesses.has(run.id)) {
+        // Restart/process-loss path is handled by reapOrphanedRuns.
+        continue;
+      }
+
+      const queuedReferenceAt = latestTimestamp([run.updatedAt, run.createdAt]);
+      const eventAt = run.status === "running" ? await latestRunEventAt(run.id) : null;
+      const runningReferenceAt = latestTimestamp([eventAt, run.updatedAt, run.startedAt, run.createdAt]);
+
+      const stale = evaluateStuckRun({
+        status: run.status,
+        now,
+        queuedReferenceAt,
+        runningReferenceAt,
+        thresholds,
+      });
+      if (!stale) continue;
+
+      staleCount += 1;
+      runIds.push(run.id);
+
+      const runContext = parseObject(run.contextSnapshot);
+      const issueId = readNonEmptyString(runContext.issueId);
+      const taskKey = deriveTaskKey(runContext, null);
+      const recoveryKey = issueId ?? taskKey ?? run.id;
+
+      await logActivity(db, {
+        companyId: run.companyId,
+        actorType: "system",
+        actorId: STUCK_RUN_SWEEPER_ACTOR_ID,
+        agentId: run.agentId,
+        runId: run.id,
+        action: "heartbeat.stuck_detected",
+        entityType: "heartbeat_run",
+        entityId: run.id,
+        details: {
+          status: run.status,
+          staleReason: stale.reason,
+          staleForMs: stale.staleForMs,
+          queuedThresholdMs: thresholds.queuedThresholdMs,
+          runningNoProgressThresholdMs: thresholds.runningNoProgressThresholdMs,
+          issueId,
+          taskKey,
+          recoveryKey,
+        },
+      });
+
+      const cancelled = await cancelRunByControlPlane(run.id, {
+        error: "Cancelled by stuck-run sweeper",
+        errorCode: "stuck_run_recovered",
+        eventMessage: "run cancelled by stuck-run sweeper",
+      });
+      if (!cancelled || cancelled.status !== "cancelled") {
+        continue;
+      }
+
+      const issueSnapshot = issueId
+        ? await db
+          .select({
+            id: issues.id,
+            identifier: issues.identifier,
+            title: issues.title,
+            executionRunId: issues.executionRunId,
+          })
+          .from(issues)
+          .where(and(eq(issues.id, issueId), eq(issues.companyId, run.companyId)))
+          .then((rows) => rows[0] ?? null)
+        : null;
+
+      const promotedDeferredRunId =
+        issueSnapshot?.executionRunId && issueSnapshot.executionRunId !== run.id
+          ? issueSnapshot.executionRunId
+          : null;
+      const recentAutoRequeues = await countRecentAutoRequeues({
+        companyId: run.companyId,
+        agentId: run.agentId,
+        recoveryKey,
+        since: new Date(now.getTime() - recoveryWindowMs),
+      });
+
+      const recoveryAction = decideStuckRunRecoveryAction({
+        recentAutoRequeues,
+        maxAutoRequeues,
+        hasPromotedDeferredRun: Boolean(promotedDeferredRunId),
+      });
+
+      let enqueuedRunId: string | null = null;
+      if (recoveryAction.action === "enqueue_recovery") {
+        const nextAttempt = recoveryAction.nextAttempt;
+        const recoveryContext = {
+          ...runContext,
+          paperclipRecovery: {
+            type: "stuck_run_auto_requeue",
+            staleReason: stale.reason,
+            staleForMs: stale.staleForMs,
+            recoveryKey,
+            recoveredFromRunId: run.id,
+            attempt: nextAttempt,
+            maxAutoRequeues,
+            recoveryWindowMs,
+            recoveredAt: now.toISOString(),
+          },
+        };
+        const recoveryPayload: Record<string, unknown> = {
+          recoveryKey,
+          recoveredFromRunId: run.id,
+          staleReason: stale.reason,
+          staleForMs: stale.staleForMs,
+          autoRequeueAttempt: nextAttempt,
+        };
+        const payloadIssueId = readNonEmptyString(runContext.issueId);
+        const payloadTaskId = readNonEmptyString(runContext.taskId);
+        const payloadTaskKey = deriveTaskKey(runContext, null);
+        if (payloadIssueId) recoveryPayload.issueId = payloadIssueId;
+        if (payloadTaskId) recoveryPayload.taskId = payloadTaskId;
+        if (payloadTaskKey) recoveryPayload.taskKey = payloadTaskKey;
+
+        const enqueued = await enqueueWakeup(run.agentId, {
+          source: "automation",
+          triggerDetail: "system",
+          reason: "stuck_run_auto_requeue",
+          payload: recoveryPayload,
+          requestedByActorType: "system",
+          requestedByActorId: STUCK_RUN_SWEEPER_ACTOR_ID,
+          contextSnapshot: recoveryContext,
+        });
+        enqueuedRunId = enqueued?.id ?? null;
+      }
+
+      const requeuedRunId = promotedDeferredRunId ?? enqueuedRunId;
+      if (requeuedRunId) recoveredCount += 1;
+      if (recoveryAction.circuitOpen) circuitOpenCount += 1;
+
+      await logActivity(db, {
+        companyId: run.companyId,
+        actorType: "system",
+        actorId: STUCK_RUN_SWEEPER_ACTOR_ID,
+        agentId: run.agentId,
+        runId: run.id,
+        action: recoveryAction.circuitOpen ? "heartbeat.stuck_recovery_circuit_open" : "heartbeat.stuck_recovered",
+        entityType: "heartbeat_run",
+        entityId: run.id,
+        details: {
+          staleReason: stale.reason,
+          staleForMs: stale.staleForMs,
+          recoveryAction: recoveryAction.action,
+          recoveryKey,
+          recentAutoRequeues,
+          maxAutoRequeues,
+          recoveryWindowMs,
+          requeuedRunId,
+          promotedDeferredRunId,
+          issueId,
+        },
+      });
+
+      if (issueSnapshot) {
+        const commentBody = buildStuckRecoveryComment({
+          staleReason: stale.reason,
+          staleForMs: stale.staleForMs,
+          cancelledRunId: run.id,
+          agentId: run.agentId,
+          requeuedRunId,
+          recoveryAction: recoveryAction.action,
+          maxAutoRequeues,
+          recoveryWindowMs,
+        });
+        const comment = await issuesSvc.addComment(issueSnapshot.id, commentBody, {});
+        await logActivity(db, {
+          companyId: run.companyId,
+          actorType: "system",
+          actorId: STUCK_RUN_SWEEPER_ACTOR_ID,
+          agentId: run.agentId,
+          runId: run.id,
+          action: "issue.comment_added",
+          entityType: "issue",
+          entityId: issueSnapshot.id,
+          details: {
+            commentId: comment.id,
+            bodySnippet: comment.body.slice(0, 120),
+            identifier: issueSnapshot.identifier ?? null,
+            issueTitle: issueSnapshot.title,
+            recoveryAction: recoveryAction.action,
+            requeuedRunId,
+          },
+        });
+      }
+    }
+
+    if (staleCount > 0) {
+      logger.warn(
+        {
+          scanned: activeRuns.length,
+          stale: staleCount,
+          recovered: recoveredCount,
+          circuitOpen: circuitOpenCount,
+          runIds,
+        },
+        "stuck run sweeper evaluated stale runs",
+      );
+    }
+
+    return {
+      scanned: activeRuns.length,
+      stale: staleCount,
+      recovered: recoveredCount,
+      circuitOpen: circuitOpenCount,
+      runIds,
+    };
+  }
+
   async function updateRuntimeState(
     agent: typeof agents.$inferSelect,
     run: typeof heartbeatRuns.$inferSelect,
@@ -1349,6 +1826,8 @@ export function heartbeatService(db: Db) {
     return withAgentStartLock(agentId, async () => {
       const agent = await getAgent(agentId);
       if (!agent) return [];
+      const company = await getCompany(agent.companyId);
+      if (!company || company.status !== "active") return [];
       const policy = parseHeartbeatPolicy(agent);
       const runningCount = await countRunningRunsForAgent(agentId);
       const availableSlots = Math.max(0, policy.maxConcurrentRuns - runningCount);
@@ -2169,6 +2648,9 @@ export function heartbeatService(db: Db) {
     const agent = await getAgent(agentId);
     if (!agent) throw notFound("Agent not found");
 
+    const company = await getCompany(agent.companyId);
+    if (!company) throw notFound("Company not found");
+
     if (
       agent.status === "paused" ||
       agent.status === "terminated" ||
@@ -2193,10 +2675,46 @@ export function heartbeatService(db: Db) {
         finishedAt: new Date(),
       });
     };
+    const writeDeferredCompanyPausedRequest = async () => {
+      const deferredPayload: Record<string, unknown> = {
+        ...(payload ?? {}),
+        [DEFERRED_WAKE_CONTEXT_KEY]: enrichedContextSnapshot,
+      };
+      if (reason) {
+        deferredPayload[DEFERRED_COMPANY_PAUSED_REASON_KEY] = reason;
+      }
+      await db.insert(agentWakeupRequests).values({
+        companyId: agent.companyId,
+        agentId,
+        source,
+        triggerDetail,
+        reason: "company_paused_deferred",
+        payload: deferredPayload,
+        status: "deferred_company_paused",
+        requestedByActorType: opts.requestedByActorType ?? null,
+        requestedByActorId: opts.requestedByActorId ?? null,
+        idempotencyKey: opts.idempotencyKey ?? null,
+      });
+    };
 
+    if (company.status === "paused") {
+      await writeDeferredCompanyPausedRequest();
+      return null;
+    }
+    if (company.status === "archived") {
+      await writeSkippedRequest("company.archived");
+      return null;
+    }
     if (source === "timer" && !policy.enabled) {
       await writeSkippedRequest("heartbeat.disabled");
       return null;
+    }
+    if (source === "timer" && policy.skipIfNoAssignments) {
+      const hasAssignments = await hasOpenAssignments(agent);
+      if (!hasAssignments) {
+        await writeSkippedRequest("heartbeat.no_assignments");
+        return null;
+      }
     }
     if (source !== "timer" && !policy.wakeOnDemand) {
       await writeSkippedRequest("heartbeat.wakeOnDemand.disabled");
@@ -2602,6 +3120,172 @@ export function heartbeatService(db: Db) {
     return newRun;
   }
 
+  async function replayDeferredCompanyPausedWakeups(companyId: string) {
+    const company = await getCompany(companyId);
+    if (!company || company.status !== "active") {
+      return { processed: 0, queued: 0, completedWithoutRun: 0, failed: 0 };
+    }
+
+    const deferredWakeups = await db
+      .select()
+      .from(agentWakeupRequests)
+      .where(
+        and(
+          eq(agentWakeupRequests.companyId, companyId),
+          eq(agentWakeupRequests.status, "deferred_company_paused"),
+        ),
+      )
+      .orderBy(asc(agentWakeupRequests.requestedAt));
+
+    let processed = 0;
+    let queued = 0;
+    let completedWithoutRun = 0;
+    let failed = 0;
+
+    for (const deferred of deferredWakeups) {
+      processed += 1;
+      const deferredPayload = parseObject(deferred.payload);
+      const deferredContext = parseObject(deferredPayload[DEFERRED_WAKE_CONTEXT_KEY]);
+      const replayPayload: Record<string, unknown> = { ...deferredPayload };
+      delete replayPayload[DEFERRED_WAKE_CONTEXT_KEY];
+      delete replayPayload[DEFERRED_COMPANY_PAUSED_REASON_KEY];
+      const replayReason =
+        readNonEmptyString(deferredPayload[DEFERRED_COMPANY_PAUSED_REASON_KEY]) ??
+        "company_paused_replayed";
+      const replaySource =
+        (readNonEmptyString(deferred.source) as WakeupOptions["source"]) ?? "automation";
+      const replayTriggerDetail =
+        (readNonEmptyString(deferred.triggerDetail) as WakeupOptions["triggerDetail"]) ?? undefined;
+      const replayRequestedByActorType =
+        deferred.requestedByActorType === "user" ||
+        deferred.requestedByActorType === "agent" ||
+        deferred.requestedByActorType === "system"
+          ? deferred.requestedByActorType
+          : undefined;
+
+      try {
+        const replayRun = await enqueueWakeup(deferred.agentId, {
+          source: replaySource,
+          triggerDetail: replayTriggerDetail,
+          reason: replayReason,
+          payload: Object.keys(replayPayload).length > 0 ? replayPayload : null,
+          requestedByActorType: replayRequestedByActorType,
+          requestedByActorId: deferred.requestedByActorId ?? null,
+          contextSnapshot: deferredContext,
+        });
+
+        if (replayRun) queued += 1;
+        else completedWithoutRun += 1;
+
+        await db
+          .update(agentWakeupRequests)
+          .set({
+            status: "completed",
+            reason: "company_paused_replayed",
+            runId: replayRun?.id ?? null,
+            finishedAt: new Date(),
+            error: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(agentWakeupRequests.id, deferred.id));
+      } catch (error) {
+        failed += 1;
+        const message = error instanceof Error ? error.message : "Replay failed";
+        await db
+          .update(agentWakeupRequests)
+          .set({
+            status: "failed",
+            reason: "company_paused_replay_failed",
+            finishedAt: new Date(),
+            error: message,
+            updatedAt: new Date(),
+          })
+          .where(eq(agentWakeupRequests.id, deferred.id));
+      }
+    }
+
+    return { processed, queued, completedWithoutRun, failed };
+  }
+
+  async function cancelRunByControlPlane(
+    runId: string,
+    opts?: { error?: string; errorCode?: string; eventMessage?: string },
+  ) {
+    const run = await getRun(runId);
+    if (!run) throw notFound("Heartbeat run not found");
+    if (run.status !== "running" && run.status !== "queued") return run;
+
+    const running = runningProcesses.get(run.id);
+    if (running) {
+      running.child.kill("SIGTERM");
+      const graceMs = Math.max(1, running.graceSec) * 1000;
+      setTimeout(() => {
+        if (!running.child.killed) {
+          running.child.kill("SIGKILL");
+        }
+      }, graceMs);
+    }
+
+    const errorMessage = opts?.error ?? "Cancelled by control plane";
+    const errorCode = opts?.errorCode ?? "cancelled";
+    const eventMessage = opts?.eventMessage ?? "run cancelled";
+
+    const cancelled = await setRunStatus(run.id, "cancelled", {
+      finishedAt: new Date(),
+      error: errorMessage,
+      errorCode,
+    });
+
+    await setWakeupStatus(run.wakeupRequestId, "cancelled", {
+      finishedAt: new Date(),
+      error: errorMessage,
+    });
+
+    if (cancelled) {
+      await appendRunEvent(cancelled, 1, {
+        eventType: "lifecycle",
+        stream: "system",
+        level: "warn",
+        message: eventMessage,
+      });
+      await releaseIssueExecutionAndPromote(cancelled);
+    }
+
+    runningProcesses.delete(run.id);
+    await finalizeAgentStatus(run.agentId, "cancelled");
+    await startNextQueuedRunForAgent(run.agentId);
+    return cancelled;
+  }
+
+  async function cancelActiveRunsForAgent(agentId: string, reason: string) {
+    const runs = await db
+      .select()
+      .from(heartbeatRuns)
+      .where(and(eq(heartbeatRuns.agentId, agentId), inArray(heartbeatRuns.status, ["queued", "running"])));
+
+    for (const run of runs) {
+      await setRunStatus(run.id, "cancelled", {
+        finishedAt: new Date(),
+        error: reason,
+        errorCode: "cancelled",
+      });
+
+      await setWakeupStatus(run.wakeupRequestId, "cancelled", {
+        finishedAt: new Date(),
+        error: reason,
+      });
+
+      const running = runningProcesses.get(run.id);
+      if (running) {
+        running.child.kill("SIGTERM");
+        runningProcesses.delete(run.id);
+      }
+      await releaseIssueExecutionAndPromote(run);
+    }
+
+    return runs.length;
+  }
+
   return {
     list: (companyId: string, agentId?: string, limit?: number) => {
       const query = db
@@ -2735,15 +3419,24 @@ export function heartbeatService(db: Db) {
 
     reapOrphanedRuns,
 
+    sweepStuckRuns,
+
     reportHostBootIncident,
 
     tickTimers: async (now = new Date()) => {
-      const allAgents = await db.select().from(agents);
+      const allAgents = await db
+        .select({
+          agent: agents,
+          companyStatus: companies.status,
+        })
+        .from(agents)
+        .innerJoin(companies, eq(agents.companyId, companies.id));
       let checked = 0;
       let enqueued = 0;
       let skipped = 0;
 
-      for (const agent of allAgents) {
+      for (const { agent, companyStatus } of allAgents) {
+        if (companyStatus !== "active") continue;
         if (agent.status === "paused" || agent.status === "terminated") continue;
         const policy = parseHeartbeatPolicy(agent);
         if (!policy.enabled || policy.intervalSec <= 0) continue;
@@ -2772,77 +3465,24 @@ export function heartbeatService(db: Db) {
       return { checked, enqueued, skipped };
     },
 
-    cancelRun: async (runId: string) => {
-      const run = await getRun(runId);
-      if (!run) throw notFound("Heartbeat run not found");
-      if (run.status !== "running" && run.status !== "queued") return run;
+    cancelRun: (runId: string) => cancelRunByControlPlane(runId),
 
-      const running = runningProcesses.get(run.id);
-      if (running) {
-        running.child.kill("SIGTERM");
-        const graceMs = Math.max(1, running.graceSec) * 1000;
-        setTimeout(() => {
-          if (!running.child.killed) {
-            running.child.kill("SIGKILL");
-          }
-        }, graceMs);
+    cancelActiveForAgent: (agentId: string) =>
+      cancelActiveRunsForAgent(agentId, "Cancelled due to agent pause"),
+
+    cancelActiveForCompany: async (companyId: string) => {
+      const rows = await db
+        .select({ id: agents.id })
+        .from(agents)
+        .where(eq(agents.companyId, companyId));
+      let cancelled = 0;
+      for (const row of rows) {
+        cancelled += await cancelActiveRunsForAgent(row.id, "Cancelled due to company pause");
       }
-
-      const cancelled = await setRunStatus(run.id, "cancelled", {
-        finishedAt: new Date(),
-        error: "Cancelled by control plane",
-        errorCode: "cancelled",
-      });
-
-      await setWakeupStatus(run.wakeupRequestId, "cancelled", {
-        finishedAt: new Date(),
-        error: "Cancelled by control plane",
-      });
-
-      if (cancelled) {
-        await appendRunEvent(cancelled, 1, {
-          eventType: "lifecycle",
-          stream: "system",
-          level: "warn",
-          message: "run cancelled",
-        });
-        await releaseIssueExecutionAndPromote(cancelled);
-      }
-
-      runningProcesses.delete(run.id);
-      await finalizeAgentStatus(run.agentId, "cancelled");
-      await startNextQueuedRunForAgent(run.agentId);
       return cancelled;
     },
 
-    cancelActiveForAgent: async (agentId: string) => {
-      const runs = await db
-        .select()
-        .from(heartbeatRuns)
-        .where(and(eq(heartbeatRuns.agentId, agentId), inArray(heartbeatRuns.status, ["queued", "running"])));
-
-      for (const run of runs) {
-        await setRunStatus(run.id, "cancelled", {
-          finishedAt: new Date(),
-          error: "Cancelled due to agent pause",
-          errorCode: "cancelled",
-        });
-
-        await setWakeupStatus(run.wakeupRequestId, "cancelled", {
-          finishedAt: new Date(),
-          error: "Cancelled due to agent pause",
-        });
-
-        const running = runningProcesses.get(run.id);
-        if (running) {
-          running.child.kill("SIGTERM");
-          runningProcesses.delete(run.id);
-        }
-        await releaseIssueExecutionAndPromote(run);
-      }
-
-      return runs.length;
-    },
+    replayDeferredForCompany: (companyId: string) => replayDeferredCompanyPausedWakeups(companyId),
 
     getActiveRunForAgent: async (agentId: string) => {
       const [run] = await db

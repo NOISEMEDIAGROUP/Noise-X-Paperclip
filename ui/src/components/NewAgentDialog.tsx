@@ -111,6 +111,7 @@ export function NewAgentDialog() {
         heartbeat: {
           enabled: configValues.heartbeatEnabled,
           intervalSec: configValues.intervalSec,
+          skipIfNoAssignments: configValues.skipIfNoAssignments,
           wakeOnDemand: true,
           cooldownSec: 10,
           maxConcurrentRuns: 1,

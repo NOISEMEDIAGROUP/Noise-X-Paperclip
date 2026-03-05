@@ -70,6 +70,8 @@ const ACTION_LABELS: Record<string, string> = {
   "approval.created": "requested approval",
   "approval.approved": "approved",
   "approval.rejected": "rejected",
+  "company.paused": "paused the company",
+  "company.resumed": "resumed the company",
 };
 
 function humanizeValue(value: unknown): string {

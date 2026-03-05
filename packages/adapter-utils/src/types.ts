@@ -182,4 +182,5 @@ export interface CreateConfigValues {
   maxTurnsPerRun: number;
   heartbeatEnabled: boolean;
   intervalSec: number;
+  skipIfNoAssignments: boolean;
 }
