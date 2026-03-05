@@ -1,4 +1,5 @@
 /// <reference path="./types/express.d.ts" />
+import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
@@ -50,6 +51,16 @@ type EmbeddedPostgresCtor = new (opts: {
 }) => EmbeddedPostgresInstance;
 
 const config = loadConfig();
+if (config.deploymentMode === "local_trusted") {
+  const jwtSecret = process.env.PAPERCLIP_AGENT_JWT_SECRET?.trim();
+  if (!jwtSecret) {
+    process.env.PAPERCLIP_AGENT_JWT_SECRET = randomBytes(32).toString("base64url");
+    logger.info(
+      "PAPERCLIP_AGENT_JWT_SECRET was missing; generated an ephemeral local_trusted fallback for this process.",
+    );
+  }
+}
+
 if (process.env.PAPERCLIP_SECRETS_PROVIDER === undefined) {
   process.env.PAPERCLIP_SECRETS_PROVIDER = config.secretsProvider;
 }

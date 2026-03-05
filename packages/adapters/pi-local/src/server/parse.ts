@@ -50,12 +50,35 @@ export function parsePiJsonl(stdout: string) {
       continue;
     }
 
-    if (type === "message_end" || type === "turn_end") {
+    if (type === "message_end") {
       const message = parseObject(event.message);
       if (asString(message.role, "") !== "assistant") continue;
 
       const assistantText = readAssistantText(message);
       if (assistantText) summary = assistantText;
+
+      provider = asString(message.provider, provider ?? "") || provider;
+      model = asString(message.model, model ?? "") || model;
+
+      const usageObj = parseObject(message.usage);
+      usage.inputTokens = asNumber(usageObj.input, usage.inputTokens);
+      usage.cachedInputTokens = asNumber(usageObj.cacheRead, usage.cachedInputTokens);
+      usage.outputTokens = asNumber(usageObj.output, usage.outputTokens);
+
+      const costObj = parseObject(usageObj.cost);
+      const totalCost = asNullableNumber(costObj.total);
+      if (totalCost !== null) costUsd = totalCost;
+      continue;
+    }
+
+    if (type === "turn_end") {
+      const message = parseObject(event.message);
+
+      const role = asString(message.role, "");
+      const assistantText = readAssistantText(message);
+      if (assistantText && (role === "" || role === "assistant")) {
+        summary = assistantText;
+      }
 
       provider = asString(message.provider, provider ?? "") || provider;
       model = asString(message.model, model ?? "") || model;

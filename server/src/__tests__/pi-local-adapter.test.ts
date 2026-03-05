@@ -39,6 +39,40 @@ describe("pi_local parser", () => {
       costUsd: 0.00123,
     });
   });
+
+  it("captures usage/cost from turn_end even when role is missing", () => {
+    const stdout = [
+      JSON.stringify({ type: "session", id: "pi-session-456" }),
+      JSON.stringify({
+        type: "turn_end",
+        message: {
+          provider: "openai-codex",
+          model: "gpt-5.3-codex",
+          usage: {
+            input: 300,
+            output: 21,
+            cacheRead: 77,
+            cost: { total: 0.0042 },
+          },
+        },
+      }),
+    ].join("\n");
+
+    const parsed = parsePiJsonl(stdout);
+    expect(parsed).toEqual({
+      sessionId: "pi-session-456",
+      summary: "",
+      usage: {
+        inputTokens: 300,
+        cachedInputTokens: 77,
+        outputTokens: 21,
+      },
+      errorMessage: null,
+      provider: "openai-codex",
+      model: "gpt-5.3-codex",
+      costUsd: 0.0042,
+    });
+  });
 });
 
 describe("pi_local ui stdout parser", () => {
