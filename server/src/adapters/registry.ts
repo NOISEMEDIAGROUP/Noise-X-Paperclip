@@ -23,6 +23,7 @@ import {
   sessionCodec as opencodeSessionCodec,
 } from "@paperclipai/adapter-opencode-local/server";
 import { agentConfigurationDoc as opencodeAgentConfigurationDoc, models as opencodeModels } from "@paperclipai/adapter-opencode-local";
+import { listCursorModels } from "./cursor-models.js";
 import {
   execute as openclawExecute,
   testEnvironment as openclawTestEnvironment,
@@ -32,7 +33,6 @@ import {
   models as openclawModels,
 } from "@paperclipai/adapter-openclaw";
 import { listCodexModels } from "./codex-models.js";
-import { listCursorModels } from "./cursor-models.js";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
 
@@ -68,7 +68,7 @@ const opencodeLocalAdapter: ServerAdapterModule = {
 };
 
 const cursorLocalAdapter: ServerAdapterModule = {
-  type: "cursor",
+  type: "cursor_local",
   execute: cursorExecute,
   testEnvironment: cursorTestEnvironment,
   sessionCodec: cursorSessionCodec,
