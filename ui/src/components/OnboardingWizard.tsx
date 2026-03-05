@@ -636,12 +636,14 @@ export function OnboardingWizard() {
                             if (opt.comingSoon) return;
                             const nextType = opt.value as AdapterType;
                             setAdapterType(nextType);
-                            if (nextType === "codex_local" && !model) {
+                            if (nextType === "codex_local") {
                               setModel(DEFAULT_CODEX_LOCAL_MODEL);
-                            } else if (nextType === "cursor" && !model) {
+                            } else if (nextType === "cursor") {
                               setModel(DEFAULT_CURSOR_LOCAL_MODEL);
-                            } else if (nextType === "opencode_local" && !model) {
+                            } else if (nextType === "opencode_local") {
                               setModel(DEFAULT_OPENCODE_LOCAL_MODEL);
+                            } else {
+                              setModel("");
                             }
                           }}
                         >
