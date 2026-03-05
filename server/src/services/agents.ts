@@ -156,6 +156,7 @@ export function agentService(db: Db) {
   }
 
   async function getById(id: string) {
+    if (!isUuidLike(id)) return null;
     const row = await db
       .select()
       .from(agents)
