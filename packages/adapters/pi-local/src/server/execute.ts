@@ -181,13 +181,22 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   if (!sessionFile) {
     const configuredSessionDir = asString(config.sessionDir, "").trim();
-    const sessionDir = configuredSessionDir || path.join(cwd, ".paperclip", "pi-sessions");
+    const sessionDir = configuredSessionDir
+      ? path.isAbsolute(configuredSessionDir)
+        ? configuredSessionDir
+        : path.resolve(cwd, configuredSessionDir)
+      : path.join(cwd, ".paperclip", "pi-sessions");
     await fs.mkdir(sessionDir, { recursive: true });
     const suffix = sanitizeForFilename(runId);
     sessionFile = path.join(sessionDir, `${sanitizeForFilename(agent.id)}-${suffix}.jsonl`);
   }
 
-  const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
+  const rawInstructionsFilePath = asString(config.instructionsFilePath, "").trim();
+  const instructionsFilePath = rawInstructionsFilePath
+    ? path.isAbsolute(rawInstructionsFilePath)
+      ? rawInstructionsFilePath
+      : path.resolve(cwd, rawInstructionsFilePath)
+    : "";
   const instructionsDir = instructionsFilePath ? `${path.dirname(instructionsFilePath)}/` : "";
   let instructionsPrefix = "";
   if (instructionsFilePath) {
