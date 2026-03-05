@@ -1,5 +1,4 @@
 import type { CreateConfigValues } from "@paperclipai/adapter-utils";
-import { DEFAULT_CURSOR_LOCAL_MODEL } from "../index.js";
 
 function parseCommaArgs(value: string): string[] {
   return value
@@ -51,22 +50,19 @@ function parseEnvBindings(bindings: unknown): Record<string, unknown> {
   return env;
 }
 
-function normalizeMode(value: string): "plan" | "ask" | null {
-  const mode = value.trim().toLowerCase();
-  if (mode === "plan" || mode === "ask") return mode;
-  return null;
-}
-
 export function buildCursorLocalConfig(v: CreateConfigValues): Record<string, unknown> {
   const ac: Record<string, unknown> = {};
   if (v.cwd) ac.cwd = v.cwd;
   if (v.instructionsFilePath) ac.instructionsFilePath = v.instructionsFilePath;
+  ac.command = v.command || "agent";
+  ac.model = v.model || "";
   if (v.promptTemplate) ac.promptTemplate = v.promptTemplate;
-  ac.model = v.model || DEFAULT_CURSOR_LOCAL_MODEL;
-  const mode = normalizeMode(v.thinkingEffort);
-  if (mode) ac.mode = mode;
+  ac.outputFormat = "stream-json";
   ac.timeoutSec = 0;
-  ac.graceSec = 15;
+  ac.graceSec = 20;
+  // Default true for headless: Cursor CLI otherwise prompts "Workspace Trust Required" and blocks
+  ac.force = true;
+  ac.trust = true;
   const env = parseEnvBindings(v.envBindings);
   const legacy = parseEnvVars(v.envVars);
   for (const [key, value] of Object.entries(legacy)) {
@@ -75,7 +71,6 @@ export function buildCursorLocalConfig(v: CreateConfigValues): Record<string, un
     }
   }
   if (Object.keys(env).length > 0) ac.env = env;
-  if (v.command) ac.command = v.command;
   if (v.extraArgs) ac.extraArgs = parseCommaArgs(v.extraArgs);
   return ac;
 }

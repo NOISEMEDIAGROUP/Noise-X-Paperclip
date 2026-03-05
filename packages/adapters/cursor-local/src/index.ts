@@ -1,83 +1,41 @@
-export const type = "cursor";
-export const label = "Cursor CLI (local)";
-export const DEFAULT_CURSOR_LOCAL_MODEL = "auto";
+export const type = "cursor_local";
+export const label = "Cursor (local)";
 
-const CURSOR_FALLBACK_MODEL_IDS = [
-  "auto",
-  "composer-1.5",
-  "composer-1",
-  "gpt-5.3-codex-low",
-  "gpt-5.3-codex-low-fast",
-  "gpt-5.3-codex",
-  "gpt-5.3-codex-fast",
-  "gpt-5.3-codex-high",
-  "gpt-5.3-codex-high-fast",
-  "gpt-5.3-codex-xhigh",
-  "gpt-5.3-codex-xhigh-fast",
-  "gpt-5.3-codex-spark-preview",
-  "gpt-5.2",
-  "gpt-5.2-codex-low",
-  "gpt-5.2-codex-low-fast",
-  "gpt-5.2-codex",
-  "gpt-5.2-codex-fast",
-  "gpt-5.2-codex-high",
-  "gpt-5.2-codex-high-fast",
-  "gpt-5.2-codex-xhigh",
-  "gpt-5.2-codex-xhigh-fast",
-  "gpt-5.1-codex-max",
-  "gpt-5.1-codex-max-high",
-  "gpt-5.2-high",
-  "gpt-5.1-high",
-  "gpt-5.1-codex-mini",
-  "opus-4.6-thinking",
-  "opus-4.6",
-  "opus-4.5",
-  "opus-4.5-thinking",
-  "sonnet-4.6",
-  "sonnet-4.6-thinking",
-  "sonnet-4.5",
-  "sonnet-4.5-thinking",
-  "gemini-3.1-pro",
-  "gemini-3-pro",
-  "gemini-3-flash",
-  "grok",
-  "kimi-k2.5",
+export const models = [
+  { id: "gpt-5.2", label: "gpt-5.2" },
+  { id: "sonnet-4.5", label: "sonnet-4.5" },
 ];
 
-export const models = CURSOR_FALLBACK_MODEL_IDS.map((id) => ({ id, label: id }));
+export const agentConfigurationDoc = `# cursor_local agent configuration
 
-export const agentConfigurationDoc = `# cursor agent configuration
-
-Adapter: cursor
+Adapter: cursor_local
 
 Use when:
-- You want Paperclip to run Cursor Agent CLI locally as the agent runtime
-- You want Cursor chat session resume across heartbeats via --resume
-- You want structured stream output in run logs via --output-format stream-json
+- The agent should run the Cursor CLI locally (headless/print mode) on the host machine.
+- You need session persistence across runs (Cursor supports --resume=<session_id>).
+- The task benefits from Cursor's agent tools and stream-json output for progress.
 
 Don't use when:
-- You need webhook-style external invocation (use openclaw or http)
-- You only need one-shot shell commands (use process)
-- Cursor Agent CLI is not installed on the machine
+- Cursor CLI is not installed (e.g. \`agent\` or \`cursor agent\` not on PATH).
+- You need a simple one-shot script (use the process adapter instead).
+- Running in an environment without CURSOR_API_KEY or \`agent login\` (auth required for headless).
 
 Core fields:
-- cwd (string, optional): default absolute working directory fallback for the agent process (created if missing when possible)
-- instructionsFilePath (string, optional): absolute path to a markdown instructions file prepended to the run prompt
-- promptTemplate (string, optional): run prompt template
-- model (string, optional): Cursor model id (for example auto or gpt-5.3-codex)
-- mode (string, optional): Cursor execution mode passed as --mode (plan|ask). Leave unset for normal autonomous runs.
-- command (string, optional): defaults to "agent"
-- extraArgs (string[], optional): additional CLI args
-- env (object, optional): KEY=VALUE environment variables
+- cwd (string, optional): absolute working directory; process runs with this as both cwd and --workspace.
+- command (string, optional): CLI command, default \`agent\`.
+- model (string, optional): e.g. gpt-5.2, sonnet-4.5 (see Cursor Parameters docs).
+- promptTemplate (string): prompt template for each run; rendered then passed as \`-p "<prompt>"\`.
+- outputFormat (string, optional): \`stream-json\` (recommended), \`json\`, or \`text\`.
+- instructionsFilePath (string, optional): path to instructions file (e.g. AGENTS.md) injected into context.
+- timeoutSec (number, optional): run timeout in seconds; 0 = no timeout.
+- graceSec (number, optional): SIGTERM grace period before SIGKILL.
+- force (boolean, optional): allow file modifications in print mode without confirmation (headless).
+- trust (boolean, optional): trust workspace without prompting (headless).
+  **If trust or force are disabled, headless runs may block on a \"Workspace Trust Required\" prompt**; enable both for unattended operation (defaults: true).
+- env (object, optional): environment variables (e.g. CURSOR_API_KEY via secret or plain).
+- extraArgs (string[], optional): additional CLI arguments.
 
-Operational fields:
-- timeoutSec (number, optional): run timeout in seconds
-- graceSec (number, optional): SIGTERM grace period in seconds
+Output format (stream-json): NDJSON events — system (subtype init), user, assistant, tool_call, result. See Cursor CLI Output format docs and doc/research/cursor-invocation-surface.md.
 
-Notes:
-- Runs are executed with: agent -p --output-format stream-json ...
-- Prompts are piped to Cursor via stdin.
-- Sessions are resumed with --resume when stored session cwd matches current cwd.
-- Paperclip auto-injects local skills into "~/.cursor/skills" when missing, so Cursor can discover "$paperclip" and related skills on local runs.
-- Paperclip auto-adds --yolo unless one of --trust/--yolo/-f is already present in extraArgs.
+Skills: When a Paperclip skills source is available, the adapter injects skills into user-level \`~/.cursor/skills/\` (or \`CURSOR_HOME/skills/\` when \`CURSOR_HOME\` is set), skipping existing entries. The process runs with cwd and \`--workspace\` equal to the user project directory. The adapter does not write into your project directory. See doc/research/cursor-invocation-surface.md.
 `;
