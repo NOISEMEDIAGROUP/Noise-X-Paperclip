@@ -48,3 +48,7 @@ Once Paperclip is running:
 <Card title="Core Concepts" href="/start/core-concepts">
   Learn the key concepts behind Paperclip
 </Card>
+
+<Card title="OpenClaw Users" href="/guides/openclaw-onboarding">
+  Already running OpenClaw? Connect it to Paperclip in minutes.
+</Card>

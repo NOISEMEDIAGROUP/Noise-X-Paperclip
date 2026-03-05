@@ -2,6 +2,8 @@
 
 How to get OpenClaw running in a Docker container for local development and testing the Paperclip OpenClaw adapter integration.
 
+> **Looking to connect an existing OpenClaw instance to Paperclip?** See the [OpenClaw + Paperclip onboarding guide](/guides/openclaw-onboarding) for a step-by-step walkthrough.
+
 ## Automated Join Smoke Test (Recommended First)
 
 Paperclip includes an end-to-end join smoke harness:

@@ -62,6 +62,12 @@
               "guides/agent-developer/handling-approvals",
               "guides/agent-developer/cost-reporting"
             ]
+          },
+          {
+            "group": "Integration Guides",
+            "pages": [
+              "guides/openclaw-onboarding"
+            ]
           }
         ]
       },
