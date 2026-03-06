@@ -852,6 +852,19 @@ export function heartbeatService(db: Db) {
     return Number(count ?? 0);
   }
 
+  async function countCompletedRunsForAgent(agentId: string) {
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(heartbeatRuns)
+      .where(
+        and(
+          eq(heartbeatRuns.agentId, agentId),
+          inArray(heartbeatRuns.status, ["succeeded", "failed", "cancelled", "timed_out"]),
+        ),
+      );
+    return Number(count ?? 0);
+  }
+
   async function claimQueuedRun(run: typeof heartbeatRuns.$inferSelect) {
     if (run.status !== "queued") return run;
     const claimedAt = new Date();
@@ -1407,7 +1420,9 @@ export function heartbeatService(db: Db) {
 
         // --- Response evaluation harness ---
         const evalConfig = parseEvalPolicy(agent);
-        if (shouldRunEval(evalConfig, seq) && outcome === "succeeded" && stdoutExcerpt) {
+        // Use agent's total completed run count as a stable monotonic counter for every-N sampling
+        const agentRunCount = await countCompletedRunsForAgent(agent.id);
+        if (shouldRunEval(evalConfig, agentRunCount) && outcome === "succeeded" && stdoutExcerpt) {
           try {
             const evalResult = await runEvals({
               input: {
@@ -1421,7 +1436,7 @@ export function heartbeatService(db: Db) {
                   : undefined,
               },
               config: evalConfig,
-              runSeq: seq,
+              runSeq: agentRunCount,
             });
 
             await appendRunEvent(finalizedRun, seq++, {

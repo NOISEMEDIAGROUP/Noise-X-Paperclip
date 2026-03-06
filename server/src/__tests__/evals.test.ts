@@ -40,8 +40,16 @@ describe("applyLabel", () => {
   });
 
   it("respects custom thresholds", () => {
-    expect(applyLabel("toxicity", 0.9, { failAbove: 0.95 })).toBe("pass");
     expect(applyLabel("toxicity", 0.96, { failAbove: 0.95 })).toBe("fail");
+    // Below custom failAbove but above default warnAbove (0.15) → warn via merge
+    expect(applyLabel("toxicity", 0.9, { failAbove: 0.95 })).toBe("warn");
+  });
+
+  it("merges custom thresholds with defaults instead of replacing", () => {
+    // Only override failAbove — default warnAbove (0.15) should still apply
+    expect(applyLabel("toxicity", 0.2, { failAbove: 0.95 })).toBe("warn");
+    // Below default warnAbove → pass
+    expect(applyLabel("toxicity", 0.1, { failAbove: 0.95 })).toBe("pass");
   });
 });
 
@@ -186,13 +194,38 @@ describe("determineActions", () => {
     expect(triggered).toContain("open_issue");
   });
 
-  it("fail takes precedence over warn", () => {
+  it("fail escalates: onWarn actions also fire when worstLabel is fail", () => {
+    const results: EvalResult[] = [
+      { kind: "toxicity", score: 0.5, label: "fail" },
+      { kind: "relevance", score: 0.9, label: "pass" },
+    ];
+    const { triggered, worstLabel } = determineActions(results, baseConfig);
+    expect(worstLabel).toBe("fail");
+    // onWarn actions (tag_run) should fire in addition to onFail actions
+    expect(triggered).toContain("tag_run");
+    expect(triggered).toContain("require_approval");
+    expect(triggered).toContain("open_issue");
+  });
+
+  it("fail takes precedence over warn for worstLabel", () => {
     const results: EvalResult[] = [
       { kind: "toxicity", score: 0.5, label: "fail" },
       { kind: "hallucination", score: 0.35, label: "warn" },
     ];
     const { worstLabel } = determineActions(results, baseConfig);
     expect(worstLabel).toBe("fail");
+  });
+});
+
+describe("resolveKindsForRun — empty result", () => {
+  it("returns empty array when all per-kind rates are 0", () => {
+    const kinds = resolveKindsForRun(
+      makeConfig({
+        preset: "light",
+        sampling: { perKind: { toxicity: { rate: 0 } } },
+      }),
+    );
+    expect(kinds).toEqual([]);
   });
 });
 

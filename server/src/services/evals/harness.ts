@@ -119,7 +119,10 @@ export function resolveKindsForRun(
 }
 
 export function applyLabel(kind: EvalKind, score: number, threshold?: EvalThreshold): EvalLabel {
-  const t = threshold ?? DEFAULT_THRESHOLDS[kind];
+  // Merge user overrides with defaults so partial overrides (e.g. only failAbove)
+  // don't silently drop the default warnAbove/warnBelow tier
+  const defaults = DEFAULT_THRESHOLDS[kind];
+  const t = threshold ? { ...defaults, ...threshold } : defaults;
   if (!t) return "pass";
 
   // "higher is worse" dimensions (toxicity, hallucination)
@@ -147,11 +150,12 @@ export function determineActions(
   }
 
   const actions = new Set<EvalAction>();
+  // onWarn fires at warn severity or worse (fail implies warn)
+  if ((worstLabel === "warn" || worstLabel === "fail") && config.actions.onWarn) {
+    for (const a of config.actions.onWarn) actions.add(a);
+  }
   if (worstLabel === "fail" && config.actions.onFail) {
     for (const a of config.actions.onFail) actions.add(a);
-  }
-  if (worstLabel === "warn" && config.actions.onWarn) {
-    for (const a of config.actions.onWarn) actions.add(a);
   }
 
   return { triggered: [...actions], worstLabel };
@@ -197,7 +201,13 @@ export async function runEvals(opts: RunEvalOptions): Promise<RunEvalResult> {
 
   const kinds = resolveKindsForRun(config, runSeq);
   if (kinds.length === 0) {
-    kinds.push(...ALL_EVAL_KINDS);
+    return {
+      payload: buildEvalEventPayload([], { provider: "none", model: "none" }, 0),
+      results: [],
+      actions: [],
+      worstLabel: "pass" as EvalLabel,
+      summaryMessage: "Evals: (no dimensions selected)",
+    };
   }
 
   const judge = createLlmJudge({
