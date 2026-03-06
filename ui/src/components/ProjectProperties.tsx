@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ExternalLink, Github, Plus, Trash2, X } from "lucide-react";
+import { Check, ExternalLink, Github, Plus, Trash2, X } from "lucide-react";
 import { ChoosePathButton } from "./PathInstructionsModal";
 
 interface ProjectPropertiesProps {
@@ -28,6 +28,44 @@ function PropertyRow({ label, children }: { label: string; children: React.React
       <span className="text-xs text-muted-foreground shrink-0 w-20">{label}</span>
       <div className="flex items-center gap-1.5 min-w-0">{children}</div>
     </div>
+  );
+}
+
+const PROJECT_STATUSES = ["backlog", "active", "done"] as const;
+type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+
+function StatusPickerPopover({
+  status,
+  onSelect,
+}: {
+  status: string;
+  onSelect: (s: ProjectStatus) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" className="cursor-pointer hover:opacity-80 transition-opacity">
+          <StatusBadge status={status} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-40 p-1" align="start">
+        {PROJECT_STATUSES.map((s) => (
+          <button
+            key={s}
+            type="button"
+            className="flex w-full items-center justify-between rounded px-2 py-1.5 text-sm hover:bg-accent transition-colors"
+            onClick={() => {
+              onSelect(s);
+              setOpen(false);
+            }}
+          >
+            <StatusBadge status={s} />
+            {s === status && <Check className="h-3.5 w-3.5 text-muted-foreground" />}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -213,24 +251,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
       <div className="space-y-1">
         <PropertyRow label="Status">
           {onUpdate ? (
-            <Popover>
-              <PopoverTrigger asChild>
-                <button className="cursor-pointer hover:opacity-80 transition-opacity">
-                  <StatusBadge status={project.status} />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-40 p-1" align="start">
-                {(["backlog", "active", "done"] as const).map((s) => (
-                  <button
-                    key={s}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent transition-colors"
-                    onClick={() => onUpdate({ status: s })}
-                  >
-                    <StatusBadge status={s} />
-                  </button>
-                ))}
-              </PopoverContent>
-            </Popover>
+            <StatusPickerPopover status={project.status} onSelect={(s) => onUpdate({ status: s })} />
           ) : (
             <StatusBadge status={project.status} />
           )}
