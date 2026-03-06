@@ -1,7 +1,8 @@
 # Running OpenClaw in Docker (Local Development)
 
-How to get OpenClaw running in a Docker container for local development and testing the Paperclip OpenClaw adapter integration.
+How to get OpenClaw running in a Docker container for local development and testing the Paperclip OpenClaw adapter integration?
 
+## Automated Join Smoke Test (Recommended First)
 ## Automated Join Smoke Test (Recommended First)
 
 Paperclip includes an end-to-end join smoke harness:
