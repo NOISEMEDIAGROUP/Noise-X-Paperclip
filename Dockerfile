@@ -34,11 +34,15 @@ USER node
 # Install dependencies
 RUN pnpm install --no-frozen-lockfile
 
-# Copy the rest of the source code
+# Copy project files
 COPY --chown=node:node . .
 
 # Build the project
 RUN pnpm build
+
+# Copy and setup the entrypoint script
+COPY --chown=node:node docker/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 ENV NODE_ENV=production \
   HOME=/paperclip \
@@ -53,6 +57,8 @@ ENV NODE_ENV=production \
 
 VOLUME ["/paperclip"]
 EXPOSE 3100
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Use the workspace start script
 CMD ["pnpm", "--filter", "@paperclipai/server", "start"]
