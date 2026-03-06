@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type {
   AdapterEnvironmentCheck,
   AdapterEnvironmentTestContext,
@@ -5,105 +6,145 @@ import type {
 } from "@paperclipai/adapter-utils";
 import { asString, parseObject } from "@paperclipai/adapter-utils/server-utils";
 
-function summarizeStatus(checks: AdapterEnvironmentCheck[]): AdapterEnvironmentTestResult["status"] {
-  if (checks.some((check) => check.level === "error")) return "fail";
-  if (checks.some((check) => check.level === "warn")) return "warn";
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function summarizeStatus(
+  checks: AdapterEnvironmentCheck[],
+): AdapterEnvironmentTestResult["status"] {
+  if (checks.some((c) => c.level === "error")) return "fail";
+  if (checks.some((c) => c.level === "warn")) return "warn";
   return "pass";
 }
 
-function isLoopbackHost(hostname: string): boolean {
-  const value = hostname.trim().toLowerCase();
-  return value === "localhost" || value === "127.0.0.1" || value === "::1";
+interface RpcResponse {
+  type: "res";
+  id: string;
+  ok: boolean;
+  payload: Record<string, unknown>;
 }
 
-function normalizeHostname(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  if (trimmed.startsWith("[")) {
-    const end = trimmed.indexOf("]");
-    return end > 1 ? trimmed.slice(1, end).toLowerCase() : trimmed.toLowerCase();
-  }
-  const firstColon = trimmed.indexOf(":");
-  if (firstColon > -1) return trimmed.slice(0, firstColon).toLowerCase();
-  return trimmed.toLowerCase();
+function isRpcResponse(data: unknown): data is RpcResponse {
+  if (typeof data !== "object" || data === null || Array.isArray(data)) return false;
+  const obj = data as Record<string, unknown>;
+  return obj.type === "res" && typeof obj.id === "string";
 }
 
-function pushDeploymentDiagnostics(
-  checks: AdapterEnvironmentCheck[],
-  ctx: AdapterEnvironmentTestContext,
-  endpointUrl: URL | null,
-) {
-  const mode = ctx.deployment?.mode;
-  const exposure = ctx.deployment?.exposure;
-  const bindHost = normalizeHostname(ctx.deployment?.bindHost ?? null);
-  const allowSet = new Set(
-    (ctx.deployment?.allowedHostnames ?? [])
-      .map((entry) => normalizeHostname(entry))
-      .filter((entry): entry is string => Boolean(entry)),
-  );
-  const endpointHost = endpointUrl ? normalizeHostname(endpointUrl.hostname) : null;
+/**
+ * Open a WebSocket, send a JSON-RPC request, and wait for a single response
+ * frame that matches the request id.  Rejects on timeout or connection error.
+ */
+function rpcCall(
+  url: string,
+  method: string,
+  params: Record<string, unknown>,
+  timeoutMs: number,
+  headers?: Record<string, string>,
+): Promise<RpcResponse> {
+  return new Promise<RpcResponse>((resolve, reject) => {
+    const id = crypto.randomUUID();
+    const frame = JSON.stringify({ type: "req", id, method, params });
 
-  if (!mode) return;
+    const options: Record<string, unknown> = {};
+    if (headers && Object.keys(headers).length > 0) {
+      options.headers = headers;
+    }
+    const ws: WebSocket =
+      Object.keys(options).length > 0
+        ? new (WebSocket as unknown as new (url: string, protocols?: string | string[], opts?: unknown) => WebSocket)(url, undefined, options)
+        : new WebSocket(url);
 
-  checks.push({
-    code: "openclaw_deployment_context",
-    level: "info",
-    message: `Deployment context: mode=${mode}${exposure ? ` exposure=${exposure}` : ""}`,
+    let settled = false;
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      fn();
+    };
+
+    const timer = setTimeout(() => {
+      settle(() => reject(new Error(`RPC call to ${method} timed out after ${timeoutMs}ms`)));
+    }, timeoutMs);
+
+    const onOpen = () => {
+      try {
+        ws.send(frame);
+      } catch (err) {
+        settle(() =>
+          reject(new Error(err instanceof Error ? err.message : String(err))),
+        );
+      }
+    };
+
+    const onMessage = (ev: MessageEvent) => {
+      let data: unknown;
+      try {
+        data = JSON.parse(typeof ev.data === "string" ? ev.data : String(ev.data));
+      } catch {
+        return;
+      }
+      if (!isRpcResponse(data) || data.id !== id) return;
+      settle(() => resolve(data as RpcResponse));
+    };
+
+    const onError = (ev: Event) => {
+      const msg =
+        (ev as ErrorEvent).message ?? `WebSocket connection to ${url} failed`;
+      settle(() => reject(new Error(msg)));
+    };
+
+    const onClose = () => {
+      settle(() =>
+        reject(new Error("WebSocket closed before receiving a response")),
+      );
+    };
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      ws.removeEventListener("open", onOpen);
+      ws.removeEventListener("message", onMessage);
+      ws.removeEventListener("error", onError);
+      ws.removeEventListener("close", onClose);
+      try {
+        if (
+          ws.readyState === WebSocket.OPEN ||
+          ws.readyState === WebSocket.CONNECTING
+        ) {
+          ws.close();
+        }
+      } catch {
+        // best-effort
+      }
+    };
+
+    ws.addEventListener("open", onOpen);
+    ws.addEventListener("message", onMessage);
+    ws.addEventListener("error", onError);
+    ws.addEventListener("close", onClose);
   });
-
-  if (mode === "authenticated" && exposure === "private") {
-    if (bindHost && !isLoopbackHost(bindHost) && !allowSet.has(bindHost)) {
-      checks.push({
-        code: "openclaw_private_bind_hostname_not_allowed",
-        level: "warn",
-        message: `Paperclip bind host "${bindHost}" is not in allowed hostnames.`,
-        hint: `Run pnpm paperclipai allowed-hostname ${bindHost} so remote OpenClaw callbacks can pass host checks.`,
-      });
-    }
-
-    if (!bindHost || isLoopbackHost(bindHost)) {
-      checks.push({
-        code: "openclaw_private_bind_loopback",
-        level: "warn",
-        message: "Paperclip is bound to loopback in authenticated/private mode.",
-        hint: "Bind to a reachable private hostname/IP so remote OpenClaw agents can call back.",
-      });
-    }
-
-    if (endpointHost && !isLoopbackHost(endpointHost) && allowSet.size === 0) {
-      checks.push({
-        code: "openclaw_private_no_allowed_hostnames",
-        level: "warn",
-        message: "No explicit allowed hostnames are configured for authenticated/private mode.",
-        hint: "Set one with pnpm paperclipai allowed-hostname <host> when OpenClaw runs on another machine.",
-      });
-    }
-  }
-
-  if (mode === "authenticated" && exposure === "public" && endpointUrl && endpointUrl.protocol !== "https:") {
-    checks.push({
-      code: "openclaw_public_http_endpoint",
-      level: "warn",
-      message: "OpenClaw endpoint uses HTTP in authenticated/public mode.",
-      hint: "Prefer HTTPS for public deployments.",
-    });
-  }
 }
+
+// ---------------------------------------------------------------------------
+// testEnvironment()
+// ---------------------------------------------------------------------------
 
 export async function testEnvironment(
   ctx: AdapterEnvironmentTestContext,
 ): Promise<AdapterEnvironmentTestResult> {
   const checks: AdapterEnvironmentCheck[] = [];
   const config = parseObject(ctx.config);
-  const urlValue = asString(config.url, "");
+  const gatewayUrl = asString(config.gatewayUrl, "").trim();
+  const agentId = asString(config.agentId, "").trim();
+  const authToken = asString(config.authToken, "").trim();
 
-  if (!urlValue) {
+  // ---- Validate gatewayUrl ----
+  if (!gatewayUrl) {
     checks.push({
-      code: "openclaw_url_missing",
+      code: "openclaw_gateway_url_missing",
       level: "error",
-      message: "OpenClaw adapter requires a webhook URL.",
-      hint: "Set adapterConfig.url to your OpenClaw webhook endpoint.",
+      message: "OpenClaw adapter requires a gatewayUrl.",
+      hint: "Set adapterConfig.gatewayUrl to your OpenClaw gateway WebSocket endpoint (e.g. ws://127.0.0.1:5555).",
     });
     return {
       adapterType: ctx.adapterType,
@@ -113,80 +154,141 @@ export async function testEnvironment(
     };
   }
 
-  let url: URL | null = null;
+  let parsedUrl: URL | null = null;
   try {
-    url = new URL(urlValue);
+    parsedUrl = new URL(gatewayUrl);
   } catch {
     checks.push({
-      code: "openclaw_url_invalid",
+      code: "openclaw_gateway_url_invalid",
       level: "error",
-      message: `Invalid URL: ${urlValue}`,
+      message: `Invalid gateway URL: ${gatewayUrl}`,
     });
   }
 
-  if (url && url.protocol !== "http:" && url.protocol !== "https:") {
+  if (parsedUrl && parsedUrl.protocol !== "ws:" && parsedUrl.protocol !== "wss:") {
     checks.push({
-      code: "openclaw_url_protocol_invalid",
+      code: "openclaw_gateway_url_protocol_invalid",
       level: "error",
-      message: `Unsupported URL protocol: ${url.protocol}`,
-      hint: "Use an http:// or https:// endpoint.",
+      message: `Unsupported URL protocol: ${parsedUrl.protocol}`,
+      hint: "Use a ws:// or wss:// endpoint.",
     });
   }
 
-  if (url) {
+  if (parsedUrl) {
     checks.push({
-      code: "openclaw_url_valid",
+      code: "openclaw_gateway_url_valid",
       level: "info",
-      message: `Configured endpoint: ${url.toString()}`,
+      message: `Configured gateway: ${parsedUrl.toString()}`,
     });
-
-    if (isLoopbackHost(url.hostname)) {
-      checks.push({
-        code: "openclaw_loopback_endpoint",
-        level: "warn",
-        message: "Endpoint uses loopback hostname. Remote OpenClaw workers cannot reach localhost on the Paperclip host.",
-        hint: "Use a reachable hostname/IP (for example Tailscale/private hostname or public domain).",
-      });
-    }
   }
 
-  pushDeploymentDiagnostics(checks, ctx, url);
+  // ---- Validate agentId ----
+  if (!agentId) {
+    checks.push({
+      code: "openclaw_agent_id_missing",
+      level: "error",
+      message: "OpenClaw adapter requires an agentId.",
+      hint: "Set adapterConfig.agentId to the OpenClaw agent identifier.",
+    });
+  } else {
+    checks.push({
+      code: "openclaw_agent_id_configured",
+      level: "info",
+      message: `Configured agentId: ${agentId}`,
+    });
+  }
 
-  const method = asString(config.method, "POST").trim().toUpperCase() || "POST";
-  checks.push({
-    code: "openclaw_method_configured",
-    level: "info",
-    message: `Configured method: ${method}`,
-  });
+  // ---- Probe: connect to gateway and call agents.list ----
+  const canProbe =
+    parsedUrl !== null &&
+    (parsedUrl.protocol === "ws:" || parsedUrl.protocol === "wss:") &&
+    checks.every(
+      (c) =>
+        c.code !== "openclaw_gateway_url_invalid" &&
+        c.code !== "openclaw_gateway_url_protocol_invalid",
+    );
 
-  if (url && (url.protocol === "http:" || url.protocol === "https:")) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
+  if (canProbe) {
+    const headers: Record<string, string> = {};
+    if (authToken) {
+      headers.authorization = `Bearer ${authToken}`;
+    }
+
     try {
-      const response = await fetch(url, { method: "HEAD", signal: controller.signal });
-      if (!response.ok && response.status !== 405 && response.status !== 501) {
+      const res = await rpcCall(gatewayUrl, "agents.list", {}, 8000, headers);
+
+      if (!res.ok) {
         checks.push({
-          code: "openclaw_endpoint_probe_unexpected_status",
+          code: "openclaw_agents_list_error",
           level: "warn",
-          message: `Endpoint probe returned HTTP ${response.status}.`,
-          hint: "Verify OpenClaw webhook reachability and auth/network settings.",
+          message: "agents.list RPC returned an error.",
+          detail: JSON.stringify(res.payload).slice(0, 240),
         });
       } else {
         checks.push({
-          code: "openclaw_endpoint_probe_ok",
+          code: "openclaw_gateway_reachable",
           level: "info",
-          message: "Endpoint responded to a HEAD probe.",
+          message: "Successfully connected to gateway and called agents.list.",
         });
+
+        // Verify agentId exists in the returned agents
+        const agents = Array.isArray(res.payload.agents)
+          ? res.payload.agents
+          : [];
+        const defaultId =
+          typeof res.payload.defaultId === "string"
+            ? res.payload.defaultId
+            : null;
+
+        if (agentId) {
+          const found = agents.some(
+            (a: unknown) =>
+              typeof a === "object" &&
+              a !== null &&
+              (a as Record<string, unknown>).id === agentId,
+          );
+
+          if (found) {
+            checks.push({
+              code: "openclaw_agent_found",
+              level: "info",
+              message: `Agent "${agentId}" exists on the gateway.`,
+            });
+          } else if (agentId === defaultId) {
+            checks.push({
+              code: "openclaw_agent_is_default",
+              level: "info",
+              message: `Agent "${agentId}" matches the gateway default agent.`,
+            });
+          } else {
+            const agentIds = agents
+              .map((a: unknown) =>
+                typeof a === "object" && a !== null
+                  ? (a as Record<string, unknown>).id
+                  : null,
+              )
+              .filter((id: unknown): id is string => typeof id === "string");
+            checks.push({
+              code: "openclaw_agent_not_found",
+              level: "warn",
+              message: `Agent "${agentId}" was not found in the gateway's agent list.`,
+              detail:
+                agentIds.length > 0
+                  ? `Available agents: ${agentIds.join(", ")}`
+                  : "No agents returned by gateway.",
+              hint: "Verify the agentId in your adapter config matches an agent registered in the OpenClaw gateway.",
+            });
+          }
+        }
       }
     } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
       checks.push({
-        code: "openclaw_endpoint_probe_failed",
+        code: "openclaw_gateway_probe_failed",
         level: "warn",
-        message: err instanceof Error ? err.message : "Endpoint probe failed",
-        hint: "This may be expected in restricted networks; validate from the Paperclip server host.",
+        message: `Gateway probe failed: ${errMsg}`,
+        hint: "Verify the gateway is running and reachable at the configured URL.",
       });
-    } finally {
-      clearTimeout(timeout);
     }
   }
 
