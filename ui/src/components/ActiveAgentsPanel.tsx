@@ -8,8 +8,10 @@ import { getUIAdapter } from "../adapters";
 import type { TranscriptEntry } from "../adapters";
 import { queryKeys } from "../lib/queryKeys";
 import { cn, relativeTime } from "../lib/utils";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Plus } from "lucide-react";
 import { Identity } from "./Identity";
+import { useDialog } from "../context/DialogContext";
+import { Button } from "./ui/button";
 
 type FeedTone = "info" | "warn" | "error" | "assistant" | "tool";
 
@@ -319,11 +321,19 @@ export function ActiveAgentsPanel({ companyId }: ActiveAgentsPanelProps) {
     };
   }, [activeRunIds, companyId, runById]);
 
+  const { openNewAgent } = useDialog();
+
   return (
     <div>
-      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-        Agents
-      </h3>
+      <div className="flex items-center justify-between mb-3">
+        <Link to="/agents/all" className="text-sm font-semibold text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors no-underline">
+          Agents
+        </Link>
+        <Button size="sm" variant="outline" onClick={openNewAgent}>
+          <Plus className="h-3.5 w-3.5 mr-1.5" />
+          New Agent
+        </Button>
+      </div>
       {runs.length === 0 ? (
         <div className="border border-border rounded-lg p-4">
           <p className="text-sm text-muted-foreground">No recent agent runs.</p>

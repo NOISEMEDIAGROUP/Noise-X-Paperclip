@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { agentsApi, type AgentKey, type ClaudeLoginResult } from "../api/agents";
 import { heartbeatsApi } from "../api/heartbeats";
 import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
-import { activityApi } from "../api/activity";
+import { activityApi, type IssueForRun } from "../api/activity";
 import { issuesApi } from "../api/issues";
 import { usePanel } from "../context/PanelContext";
 import { useSidebar } from "../context/SidebarContext";
@@ -1342,12 +1342,15 @@ function RunsTab({
 
 /* ---- Run Detail (expanded) ---- */
 
+type RunViewTab = "summary" | "technical";
+
 function RunDetail({ run, agentRouteId, adapterType }: { run: HeartbeatRun; agentRouteId: string; adapterType: string }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const metrics = runMetrics(run);
   const [sessionOpen, setSessionOpen] = useState(false);
   const [claudeLoginResult, setClaudeLoginResult] = useState<ClaudeLoginResult | null>(null);
+  const [viewTab, setViewTab] = useState<RunViewTab>("summary");
 
   useEffect(() => {
     setClaudeLoginResult(null);
@@ -1487,6 +1490,32 @@ function RunDetail({ run, agentRouteId, adapterType }: { run: HeartbeatRun; agen
 
   return (
     <div className="space-y-4 min-w-0">
+      {/* Tab switcher */}
+      <div className="flex items-center gap-0 border-b border-border">
+        <button
+          className={cn(
+            "px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px",
+            viewTab === "summary"
+              ? "border-foreground text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+          onClick={() => setViewTab("summary")}
+        >
+          Summary
+        </button>
+        <button
+          className={cn(
+            "px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px",
+            viewTab === "technical"
+              ? "border-foreground text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+          onClick={() => setViewTab("technical")}
+        >
+          Technical
+        </button>
+      </div>
+
       {/* Run summary card */}
       <div className="border border-border rounded-lg overflow-hidden">
         <div className="flex flex-col sm:flex-row">
@@ -1701,46 +1730,273 @@ function RunDetail({ run, agentRouteId, adapterType }: { run: HeartbeatRun; agen
         )}
       </div>
 
-      {/* Issues touched by this run */}
-      {touchedIssues && touchedIssues.length > 0 && (
-        <div className="space-y-2">
-          <span className="text-xs font-medium text-muted-foreground">Issues Touched ({touchedIssues.length})</span>
-          <div className="border border-border rounded-lg divide-y divide-border">
+      {/* Summary tab */}
+      {viewTab === "summary" && (
+        <RunSummaryView run={run} touchedIssues={touchedIssues ?? []} adapterType={adapterType} />
+      )}
+
+      {/* Technical tab */}
+      {viewTab === "technical" && (
+        <>
+          {/* Issues touched by this run */}
+          {touchedIssues && touchedIssues.length > 0 && (
+            <div className="space-y-2">
+              <span className="text-xs font-medium text-muted-foreground">Issues Touched ({touchedIssues.length})</span>
+              <div className="border border-border rounded-lg divide-y divide-border">
+                {touchedIssues.map((issue) => (
+                  <Link
+                    key={issue.issueId}
+                    to={`/issues/${issue.identifier ?? issue.issueId}`}
+                    className="flex items-center justify-between w-full px-3 py-2 text-xs hover:bg-accent/20 transition-colors text-left no-underline text-inherit"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <StatusBadge status={issue.status} />
+                      <span className="truncate">{issue.title}</span>
+                    </div>
+                    <span className="font-mono text-muted-foreground shrink-0 ml-2">{issue.identifier ?? issue.issueId.slice(0, 8)}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* stderr excerpt for failed runs */}
+          {run.stderrExcerpt && (
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-red-600 dark:text-red-400">stderr</span>
+              <pre className="bg-neutral-100 dark:bg-neutral-950 rounded-md p-3 text-xs font-mono text-red-700 dark:text-red-300 overflow-x-auto whitespace-pre-wrap">{run.stderrExcerpt}</pre>
+            </div>
+          )}
+
+          {/* stdout excerpt when no log is available */}
+          {run.stdoutExcerpt && !run.logRef && (
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">stdout</span>
+              <pre className="bg-neutral-100 dark:bg-neutral-950 rounded-md p-3 text-xs font-mono text-foreground overflow-x-auto whitespace-pre-wrap">{run.stdoutExcerpt}</pre>
+            </div>
+          )}
+
+          {/* Log viewer */}
+          <LogViewer run={run} adapterType={adapterType} />
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ---- Summary View (human-friendly) ---- */
+
+function summarizeRunStatus(run: HeartbeatRun): { label: string; description: string } {
+  const statusMap: Record<string, { label: string; description: string }> = {
+    succeeded: { label: "Completed successfully", description: "The agent finished its work without errors." },
+    failed: { label: "Failed", description: run.error ? `The agent encountered an error: ${run.error}` : "The agent ran into a problem and couldn't finish." },
+    running: { label: "Working...", description: "The agent is currently working on this task." },
+    queued: { label: "Waiting to start", description: "The agent is queued and will start shortly." },
+    timed_out: { label: "Timed out", description: "The agent took too long and was stopped." },
+    cancelled: { label: "Cancelled", description: "This run was cancelled before it finished." },
+  };
+  return statusMap[run.status] ?? { label: run.status, description: "" };
+}
+
+function extractAssistantMessages(run: HeartbeatRun): string[] {
+  const excerpt = run.stdoutExcerpt ?? "";
+  const messages: string[] = [];
+  for (const line of excerpt.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+      if (parsed.type === "assistant" && typeof parsed.message === "object" && parsed.message !== null) {
+        const msg = parsed.message as Record<string, unknown>;
+        if (Array.isArray(msg.content)) {
+          for (const block of msg.content) {
+            if (typeof block === "object" && block !== null && (block as Record<string, unknown>).type === "text") {
+              const text = (block as Record<string, unknown>).text;
+              if (typeof text === "string" && text.trim()) {
+                messages.push(text.trim());
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // not JSON, skip
+    }
+  }
+  return messages;
+}
+
+function extractToolNames(run: HeartbeatRun): string[] {
+  const excerpt = run.stdoutExcerpt ?? "";
+  const tools = new Set<string>();
+  for (const line of excerpt.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+      if (parsed.type === "assistant" && typeof parsed.message === "object" && parsed.message !== null) {
+        const msg = parsed.message as Record<string, unknown>;
+        if (Array.isArray(msg.content)) {
+          for (const block of msg.content) {
+            if (typeof block === "object" && block !== null && (block as Record<string, unknown>).type === "tool_use") {
+              const name = (block as Record<string, unknown>).name;
+              if (typeof name === "string") tools.add(name);
+            }
+          }
+        }
+      }
+    } catch {
+      // skip
+    }
+  }
+  return Array.from(tools);
+}
+
+function RunSummaryView({ run, touchedIssues, adapterType: _adapterType }: {
+  run: HeartbeatRun;
+  touchedIssues: IssueForRun[];
+  adapterType: string;
+}) {
+  const status = summarizeRunStatus(run);
+  const metrics = runMetrics(run);
+  const assistantMessages = useMemo(() => extractAssistantMessages(run), [run]);
+  const toolNames = useMemo(() => extractToolNames(run), [run]);
+
+  const wakeReason = (() => {
+    const ctx = run.contextSnapshot as Record<string, unknown> | null;
+    if (!ctx) return null;
+    const reason = ctx.wakeReason as string | undefined;
+    if (!reason) return null;
+    const reasonMap: Record<string, string> = {
+      issue_assigned: "A new task was assigned",
+      issue_comment_mentioned: "Someone mentioned this agent in a comment",
+      resume_process_lost_run: "Resuming a lost run",
+      retry_failed_run: "Retrying after a failure",
+    };
+    return reasonMap[reason] ?? reason.replace(/_/g, " ");
+  })();
+
+  const taskContext = (() => {
+    const ctx = run.contextSnapshot as Record<string, unknown> | null;
+    if (!ctx) return null;
+    return (ctx.taskKey as string) ?? (ctx.issueId as string) ?? null;
+  })();
+
+  const durationSec = run.startedAt && run.finishedAt
+    ? Math.round((new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime()) / 1000)
+    : null;
+
+  const formatDuration = (sec: number) => {
+    if (sec < 60) return `${sec} seconds`;
+    if (sec < 3600) return `${Math.floor(sec / 60)} min ${sec % 60}s`;
+    return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* What happened */}
+      <div className="border border-border rounded-lg p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="text-lg font-semibold">{status.label}</span>
+        </div>
+        <p className="text-sm text-muted-foreground">{status.description}</p>
+
+        {wakeReason && (
+          <div className="text-sm">
+            <span className="text-muted-foreground">Triggered because: </span>
+            <span>{wakeReason}</span>
+          </div>
+        )}
+
+        {durationSec !== null && (
+          <div className="text-sm">
+            <span className="text-muted-foreground">Duration: </span>
+            <span>{formatDuration(durationSec)}</span>
+          </div>
+        )}
+
+        {metrics.cost > 0 && (
+          <div className="text-sm">
+            <span className="text-muted-foreground">Cost: </span>
+            <span>${metrics.cost.toFixed(4)}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Tasks worked on */}
+      {touchedIssues.length > 0 && (
+        <div className="border border-border rounded-lg p-4 space-y-3">
+          <h4 className="text-sm font-semibold">Tasks worked on</h4>
+          <div className="space-y-2">
             {touchedIssues.map((issue) => (
               <Link
                 key={issue.issueId}
                 to={`/issues/${issue.identifier ?? issue.issueId}`}
-                className="flex items-center justify-between w-full px-3 py-2 text-xs hover:bg-accent/20 transition-colors text-left no-underline text-inherit"
+                className="flex items-center gap-2 text-sm hover:bg-accent/30 rounded px-2 py-1.5 -mx-2 transition-colors no-underline text-inherit"
               >
-                <div className="flex items-center gap-2 min-w-0">
-                  <StatusBadge status={issue.status} />
-                  <span className="truncate">{issue.title}</span>
-                </div>
-                <span className="font-mono text-muted-foreground shrink-0 ml-2">{issue.identifier ?? issue.issueId.slice(0, 8)}</span>
+                <StatusBadge status={issue.status} />
+                <span className="text-muted-foreground font-mono text-xs">{issue.identifier}</span>
+                <span className="truncate">{issue.title}</span>
               </Link>
             ))}
           </div>
         </div>
       )}
 
-      {/* stderr excerpt for failed runs */}
-      {run.stderrExcerpt && (
-        <div className="space-y-1">
-          <span className="text-xs font-medium text-red-600 dark:text-red-400">stderr</span>
-          <pre className="bg-neutral-100 dark:bg-neutral-950 rounded-md p-3 text-xs font-mono text-red-700 dark:text-red-300 overflow-x-auto whitespace-pre-wrap">{run.stderrExcerpt}</pre>
+      {taskContext && touchedIssues.length === 0 && (
+        <div className="border border-border rounded-lg p-4 space-y-2">
+          <h4 className="text-sm font-semibold">Task context</h4>
+          <p className="text-sm text-muted-foreground font-mono">{taskContext}</p>
         </div>
       )}
 
-      {/* stdout excerpt when no log is available */}
-      {run.stdoutExcerpt && !run.logRef && (
-        <div className="space-y-1">
-          <span className="text-xs font-medium text-muted-foreground">stdout</span>
-          <pre className="bg-neutral-100 dark:bg-neutral-950 rounded-md p-3 text-xs font-mono text-foreground overflow-x-auto whitespace-pre-wrap">{run.stdoutExcerpt}</pre>
+      {/* What the agent said */}
+      {assistantMessages.length > 0 && (
+        <div className="border border-border rounded-lg p-4 space-y-3">
+          <h4 className="text-sm font-semibold">Agent's response</h4>
+          <div className="space-y-3">
+            {assistantMessages.slice(-5).map((msg, i) => (
+              <div key={i} className="text-sm whitespace-pre-wrap bg-accent/20 rounded-lg p-3">
+                {msg}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Log viewer */}
-      <LogViewer run={run} adapterType={adapterType} />
+      {/* Tools used */}
+      {toolNames.length > 0 && (
+        <div className="border border-border rounded-lg p-4 space-y-3">
+          <h4 className="text-sm font-semibold">Tools used</h4>
+          <div className="flex flex-wrap gap-1.5">
+            {toolNames.map((name) => (
+              <span key={name} className="px-2 py-0.5 text-xs font-mono bg-accent/30 rounded">
+                {name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Error details for failed runs - human friendly */}
+      {(run.status === "failed" || run.status === "timed_out") && run.error && (
+        <div className="border border-red-200 dark:border-red-500/20 rounded-lg p-4 bg-red-50/50 dark:bg-red-950/20 space-y-2">
+          <h4 className="text-sm font-semibold text-red-700 dark:text-red-300">What went wrong</h4>
+          <p className="text-sm text-red-600 dark:text-red-200">{run.error}</p>
+          {run.errorCode && (
+            <p className="text-xs text-muted-foreground">Error code: {run.errorCode}</p>
+          )}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {assistantMessages.length === 0 && touchedIssues.length === 0 && !taskContext && (
+        <div className="border border-border rounded-lg p-4">
+          <p className="text-sm text-muted-foreground">
+            No detailed summary available for this run. Switch to the Technical tab to see the full transcript.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

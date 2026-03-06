@@ -35,6 +35,7 @@ import { listCodexModels } from "./codex-models.js";
 import { listCursorModels } from "./cursor-models.js";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
+import { acpAdapter } from "./acp/index.js";
 
 const claudeLocalAdapter: ServerAdapterModule = {
   type: "claude_local",
@@ -88,7 +89,7 @@ const openclawAdapter: ServerAdapterModule = {
 };
 
 const adaptersByType = new Map<string, ServerAdapterModule>(
-  [claudeLocalAdapter, codexLocalAdapter, opencodeLocalAdapter, cursorLocalAdapter, openclawAdapter, processAdapter, httpAdapter].map((a) => [a.type, a]),
+  [claudeLocalAdapter, codexLocalAdapter, opencodeLocalAdapter, cursorLocalAdapter, openclawAdapter, processAdapter, httpAdapter, acpAdapter].map((a) => [a.type, a]),
 );
 
 export function getServerAdapter(type: string): ServerAdapterModule {

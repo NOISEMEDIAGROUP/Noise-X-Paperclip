@@ -21,6 +21,8 @@ import {
   Maximize2,
   Shield,
   User,
+  ArrowLeft,
+  FileText,
 } from "lucide-react";
 import { cn, agentUrl } from "../lib/utils";
 import { roleLabels } from "./agent-config-primitives";
@@ -28,6 +30,7 @@ import { AgentConfigForm, type CreateConfigValues } from "./AgentConfigForm";
 import { defaultCreateValues } from "./agent-config-defaults";
 import { getUIAdapter } from "../adapters";
 import { AgentIcon } from "./AgentIconPicker";
+import { agentTemplates, type AgentTemplate } from "./agent-templates";
 
 export function NewAgentDialog() {
   const { newAgentOpen, closeNewAgent } = useDialog();
@@ -35,12 +38,15 @@ export function NewAgentDialog() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(true);
+  const [step, setStep] = useState<"templates" | "form">("templates");
+  const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null);
 
   // Identity
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
   const [role, setRole] = useState("general");
   const [reportsTo, setReportsTo] = useState("");
+  const [capabilities, setCapabilities] = useState("");
 
   // Config values (managed by AgentConfigForm)
   const [configValues, setConfigValues] = useState<CreateConfigValues>(defaultCreateValues);
@@ -89,8 +95,26 @@ export function NewAgentDialog() {
     setTitle("");
     setRole("general");
     setReportsTo("");
+    setCapabilities("");
     setConfigValues(defaultCreateValues);
     setExpanded(true);
+    setStep("templates");
+    setSelectedTemplate(null);
+  }
+
+  function applyTemplate(template: AgentTemplate) {
+    setSelectedTemplate(template);
+    setName(template.name);
+    setTitle(template.title);
+    setRole(template.role);
+    setCapabilities(template.capabilities);
+    setConfigValues((prev) => ({ ...prev, ...template.config }));
+    setStep("form");
+  }
+
+  function startBlank() {
+    setSelectedTemplate(null);
+    setStep("form");
   }
 
   function buildAdapterConfig() {
@@ -104,6 +128,7 @@ export function NewAgentDialog() {
       name: name.trim(),
       role: effectiveRole,
       ...(title.trim() ? { title: title.trim() } : {}),
+      ...(capabilities.trim() ? { capabilities: capabilities.trim() } : {}),
       ...(reportsTo ? { reportsTo } : {}),
       adapterType: configValues.adapterType,
       adapterConfig: buildAdapterConfig(),
@@ -162,133 +187,188 @@ export function NewAgentDialog() {
           </div>
         </div>
 
-        <div className="overflow-y-auto max-h-[70vh]">
-          {/* Name */}
-          <div className="px-4 pt-4 pb-2 shrink-0">
-            <input
-              className="w-full text-lg font-semibold bg-transparent outline-none placeholder:text-muted-foreground/50"
-              placeholder="Agent name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              autoFocus
-            />
-          </div>
-
-          {/* Title */}
-          <div className="px-4 pb-2">
-            <input
-              className="w-full bg-transparent outline-none text-sm text-muted-foreground placeholder:text-muted-foreground/40"
-              placeholder="Title (e.g. VP of Engineering)"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </div>
-
-          {/* Property chips: Role + Reports To */}
-          <div className="flex items-center gap-1.5 px-4 py-2 border-t border-border flex-wrap">
-            {/* Role */}
-            <Popover open={roleOpen} onOpenChange={setRoleOpen}>
-              <PopoverTrigger asChild>
+        {step === "templates" ? (
+          /* ── Template picker ── */
+          <div className="overflow-y-auto max-h-[70vh]">
+            <div className="px-4 pt-4 pb-2">
+              <p className="text-sm text-muted-foreground mb-3">Choose a template or start from scratch.</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {/* Blank card */}
                 <button
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/50 transition-colors",
-                    isFirstAgent && "opacity-60 cursor-not-allowed"
-                  )}
-                  disabled={isFirstAgent}
+                  onClick={startBlank}
+                  className="flex flex-col items-start gap-1.5 rounded-lg border border-dashed border-border p-3 text-left hover:bg-accent/50 transition-colors"
                 >
-                  <Shield className="h-3 w-3 text-muted-foreground" />
-                  {roleLabels[effectiveRole] ?? effectiveRole}
+                  <FileText className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-sm font-medium">Blank</span>
+                  <span className="text-[11px] text-muted-foreground leading-tight">Start from scratch with a custom agent.</span>
                 </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-36 p-1" align="start">
-                {AGENT_ROLES.map((r) => (
+                {/* Template cards */}
+                {(isFirstAgent ? agentTemplates.filter((t) => t.role === "ceo") : agentTemplates.filter((t) => t.role !== "ceo")).map((template) => (
                   <button
-                    key={r}
-                    className={cn(
-                      "flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50",
-                      r === role && "bg-accent"
-                    )}
-                    onClick={() => { setRole(r); setRoleOpen(false); }}
+                    key={template.id}
+                    onClick={() => applyTemplate(template)}
+                    className="flex flex-col items-start gap-1.5 rounded-lg border border-border p-3 text-left hover:bg-accent/50 transition-colors"
                   >
-                    {roleLabels[r] ?? r}
+                    <AgentIcon icon={template.icon} className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-sm font-medium">{template.name}</span>
+                    <span className="text-[11px] text-muted-foreground leading-tight line-clamp-2">{template.description}</span>
                   </button>
                 ))}
-              </PopoverContent>
-            </Popover>
-
-            {/* Reports To */}
-            <Popover open={reportsToOpen} onOpenChange={setReportsToOpen}>
-              <PopoverTrigger asChild>
-                <button
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/50 transition-colors",
-                    isFirstAgent && "opacity-60 cursor-not-allowed"
-                  )}
-                  disabled={isFirstAgent}
-                >
-                  {currentReportsTo ? (
-                    <>
-                      <AgentIcon icon={currentReportsTo.icon} className="h-3 w-3 text-muted-foreground" />
-                      {`Reports to ${currentReportsTo.name}`}
-                    </>
-                  ) : (
-                    <>
-                      <User className="h-3 w-3 text-muted-foreground" />
-                      {isFirstAgent ? "Reports to: N/A (CEO)" : "Reports to..."}
-                    </>
-                  )}
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-48 p-1" align="start">
-                <button
-                  className={cn(
-                    "flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50",
-                    !reportsTo && "bg-accent"
-                  )}
-                  onClick={() => { setReportsTo(""); setReportsToOpen(false); }}
-                >
-                  No manager
-                </button>
-                {(agents ?? []).map((a) => (
-                  <button
-                    key={a.id}
-                    className={cn(
-                      "flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 truncate",
-                      a.id === reportsTo && "bg-accent"
-                    )}
-                    onClick={() => { setReportsTo(a.id); setReportsToOpen(false); }}
-                  >
-                    <AgentIcon icon={a.icon} className="shrink-0 h-3 w-3 text-muted-foreground" />
-                    {a.name}
-                    <span className="text-muted-foreground ml-auto">{roleLabels[a.role] ?? a.role}</span>
-                  </button>
-                ))}
-              </PopoverContent>
-            </Popover>
+              </div>
+            </div>
           </div>
+        ) : (
+          /* ── Agent form ── */
+          <>
+            <div className="overflow-y-auto max-h-[70vh]">
+              {/* Name */}
+              <div className="px-4 pt-4 pb-2 shrink-0">
+                <input
+                  className="w-full text-lg font-semibold bg-transparent outline-none placeholder:text-muted-foreground/50"
+                  placeholder="Agent name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  autoFocus
+                />
+              </div>
 
-          {/* Shared config form (adapter + heartbeat) */}
-          <AgentConfigForm
-            mode="create"
-            values={configValues}
-            onChange={(patch) => setConfigValues((prev) => ({ ...prev, ...patch }))}
-            adapterModels={adapterModels}
-          />
-        </div>
+              {/* Title */}
+              <div className="px-4 pb-2">
+                <input
+                  className="w-full bg-transparent outline-none text-sm text-muted-foreground placeholder:text-muted-foreground/40"
+                  placeholder="Title (e.g. VP of Engineering)"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+              </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-t border-border">
-          <span className="text-xs text-muted-foreground">
-            {isFirstAgent ? "This will be the CEO" : ""}
-          </span>
-          <Button
-            size="sm"
-            disabled={!name.trim() || createAgent.isPending}
-            onClick={handleSubmit}
-          >
-            {createAgent.isPending ? "Creating…" : "Create agent"}
-          </Button>
-        </div>
+              {/* Capabilities */}
+              <div className="px-4 pb-2">
+                <textarea
+                  className="w-full bg-transparent outline-none text-sm text-muted-foreground placeholder:text-muted-foreground/40 resize-none min-h-[44px]"
+                  placeholder="Capabilities — describe what this agent can do..."
+                  value={capabilities}
+                  onChange={(e) => setCapabilities(e.target.value)}
+                  rows={2}
+                />
+              </div>
+
+              {/* Property chips: Role + Reports To */}
+              <div className="flex items-center gap-1.5 px-4 py-2 border-t border-border flex-wrap">
+                {/* Role */}
+                <Popover open={roleOpen} onOpenChange={setRoleOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/50 transition-colors",
+                        isFirstAgent && "opacity-60 cursor-not-allowed"
+                      )}
+                      disabled={isFirstAgent}
+                    >
+                      <Shield className="h-3 w-3 text-muted-foreground" />
+                      {roleLabels[effectiveRole] ?? effectiveRole}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-36 p-1" align="start">
+                    {AGENT_ROLES.map((r) => (
+                      <button
+                        key={r}
+                        className={cn(
+                          "flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50",
+                          r === role && "bg-accent"
+                        )}
+                        onClick={() => { setRole(r); setRoleOpen(false); }}
+                      >
+                        {roleLabels[r] ?? r}
+                      </button>
+                    ))}
+                  </PopoverContent>
+                </Popover>
+
+                {/* Reports To */}
+                <Popover open={reportsToOpen} onOpenChange={setReportsToOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/50 transition-colors",
+                        isFirstAgent && "opacity-60 cursor-not-allowed"
+                      )}
+                      disabled={isFirstAgent}
+                    >
+                      {currentReportsTo ? (
+                        <>
+                          <AgentIcon icon={currentReportsTo.icon} className="h-3 w-3 text-muted-foreground" />
+                          {`Reports to ${currentReportsTo.name}`}
+                        </>
+                      ) : (
+                        <>
+                          <User className="h-3 w-3 text-muted-foreground" />
+                          {isFirstAgent ? "Reports to: N/A (CEO)" : "Reports to..."}
+                        </>
+                      )}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-48 p-1" align="start">
+                    <button
+                      className={cn(
+                        "flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50",
+                        !reportsTo && "bg-accent"
+                      )}
+                      onClick={() => { setReportsTo(""); setReportsToOpen(false); }}
+                    >
+                      No manager
+                    </button>
+                    {(agents ?? []).map((a) => (
+                      <button
+                        key={a.id}
+                        className={cn(
+                          "flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 truncate",
+                          a.id === reportsTo && "bg-accent"
+                        )}
+                        onClick={() => { setReportsTo(a.id); setReportsToOpen(false); }}
+                      >
+                        <AgentIcon icon={a.icon} className="shrink-0 h-3 w-3 text-muted-foreground" />
+                        {a.name}
+                        <span className="text-muted-foreground ml-auto">{roleLabels[a.role] ?? a.role}</span>
+                      </button>
+                    ))}
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Shared config form (adapter + heartbeat) */}
+              <AgentConfigForm
+                mode="create"
+                values={configValues}
+                onChange={(patch) => setConfigValues((prev) => ({ ...prev, ...patch }))}
+                adapterModels={adapterModels}
+              />
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between px-4 py-2.5 border-t border-border">
+              <button
+                onClick={() => { reset(); setStep("templates"); }}
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ArrowLeft className="h-3 w-3" />
+                Templates
+              </button>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {isFirstAgent ? "This will be the CEO" : ""}
+                </span>
+                <Button
+                  size="sm"
+                  disabled={!name.trim() || createAgent.isPending}
+                  onClick={handleSubmit}
+                >
+                  {createAgent.isPending ? "Creating…" : "Create agent"}
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
