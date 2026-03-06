@@ -212,7 +212,28 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
     <div className="space-y-4">
       <div className="space-y-1">
         <PropertyRow label="Status">
-          <StatusBadge status={project.status} />
+          {onUpdate ? (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="cursor-pointer hover:opacity-80 transition-opacity">
+                  <StatusBadge status={project.status} />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-40 p-1" align="start">
+                {(["backlog", "active", "done"] as const).map((s) => (
+                  <button
+                    key={s}
+                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent transition-colors"
+                    onClick={() => onUpdate({ status: s })}
+                  >
+                    <StatusBadge status={s} />
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+          ) : (
+            <StatusBadge status={project.status} />
+          )}
         </PropertyRow>
         {project.leadAgentId && (
           <PropertyRow label="Lead">
