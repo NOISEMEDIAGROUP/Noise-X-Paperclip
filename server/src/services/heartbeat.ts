@@ -23,6 +23,8 @@ import { createLocalAgentJwt } from "../agent-auth-jwt.js";
 import { parseObject, asBoolean, asNumber, appendWithCap, MAX_EXCERPT_BYTES } from "../adapters/utils.js";
 import { secretService } from "./secrets.js";
 import { resolveDefaultAgentWorkspaceDir } from "../home-paths.js";
+import { runEvals, shouldRunEval } from "./evals/index.js";
+import type { EvalPolicyConfig, EvalPreset, EvalStrategy } from "./evals/index.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
@@ -793,6 +795,43 @@ export function heartbeatService(db: Db) {
     });
   }
 
+  function parseEvalPolicy(agent: typeof agents.$inferSelect): EvalPolicyConfig {
+    const runtimeConfig = parseObject(agent.runtimeConfig);
+    const evals = parseObject(runtimeConfig.evals);
+
+    const VALID_PRESETS = ["off", "light", "moderate", "strict", "full", "custom"];
+    const rawPreset = typeof evals.preset === "string" && VALID_PRESETS.includes(evals.preset)
+      ? (evals.preset as EvalPreset)
+      : "custom";
+
+    // If a preset is set (and not "off"), treat as enabled unless explicitly disabled
+    const enabled = rawPreset === "off"
+      ? false
+      : asBoolean(evals.enabled, rawPreset !== "custom");
+
+    const sampling = parseObject(evals.sampling);
+
+    const VALID_STRATEGIES = ["batched", "isolated", "specialized"];
+    const rawStrategy = typeof evals.strategy === "string" && VALID_STRATEGIES.includes(evals.strategy)
+      ? (evals.strategy as EvalStrategy)
+      : "batched";
+
+    return {
+      enabled,
+      preset: rawPreset,
+      strategy: rawStrategy,
+      on: Array.isArray(evals.on) ? evals.on : ["final_response"],
+      sampling: {
+        rate: typeof sampling.rate === "number" ? sampling.rate : undefined,
+        every: typeof sampling.every === "number" ? Math.max(1, Math.floor(sampling.every)) : undefined,
+        perKind: sampling.perKind ? parseObject(sampling.perKind) as EvalPolicyConfig["sampling"]["perKind"] : undefined,
+      },
+      thresholds: parseObject(evals.thresholds) as EvalPolicyConfig["thresholds"],
+      actions: parseObject(evals.actions) as EvalPolicyConfig["actions"],
+      judge: evals.judge ? (parseObject(evals.judge) as EvalPolicyConfig["judge"]) : undefined,
+    };
+  }
+
   function parseHeartbeatPolicy(agent: typeof agents.$inferSelect) {
     const runtimeConfig = parseObject(agent.runtimeConfig);
     const heartbeat = parseObject(runtimeConfig.heartbeat);
@@ -1365,6 +1404,73 @@ export function heartbeatService(db: Db) {
             exitCode: adapterResult.exitCode,
           },
         });
+
+        // --- Response evaluation harness ---
+        const evalConfig = parseEvalPolicy(agent);
+        if (shouldRunEval(evalConfig, seq) && outcome === "succeeded" && stdoutExcerpt) {
+          try {
+            const evalResult = await runEvals({
+              input: {
+                runId: finalizedRun.id,
+                agentId: agent.id,
+                companyId: agent.companyId!,
+                prompt: adapterResult.summary ?? deriveTaskKey(context, null) ?? "agent task",
+                response: stdoutExcerpt,
+                context: context.issueId
+                  ? { messages: [{ role: "system", content: `Issue context: ${JSON.stringify(context)}` }] }
+                  : undefined,
+              },
+              config: evalConfig,
+              runSeq: seq,
+            });
+
+            await appendRunEvent(finalizedRun, seq++, {
+              eventType: "eval",
+              stream: "system",
+              level: evalResult.worstLabel === "fail" ? "error" : evalResult.worstLabel === "warn" ? "warn" : "info",
+              message: evalResult.summaryMessage,
+              payload: evalResult.payload as unknown as Record<string, unknown>,
+            });
+
+            if (evalResult.actions.includes("open_issue") && agent.companyId) {
+              const issueSvc = (await import("./issues.js")).issueService(db);
+              await issueSvc.create(agent.companyId, {
+                title: `Eval ${evalResult.worstLabel}: ${agent.name ?? agent.id} run ${finalizedRun.id.slice(0, 8)}`,
+                description: [
+                  `Automated eval detected **${evalResult.worstLabel}** on run \`${finalizedRun.id}\`.`,
+                  "",
+                  "**Results:**",
+                  ...evalResult.results.map(
+                    (r) => `- ${r.kind}: ${r.label} (${r.score.toFixed(2)})${r.rationale ? ` — ${r.rationale}` : ""}`,
+                  ),
+                ].join("\n"),
+                status: "todo",
+                priority: evalResult.worstLabel === "fail" ? "high" : "medium",
+                createdByAgentId: agent.id,
+              });
+            }
+
+            if (evalResult.actions.includes("require_approval") && agent.companyId) {
+              const approvalSvc = (await import("./approvals.js")).approvalService(db);
+              await approvalSvc.create(agent.companyId, {
+                type: "eval_review",
+                payload: {
+                  ...evalResult.payload as unknown as Record<string, unknown>,
+                  description: `Review required: eval ${evalResult.worstLabel} on run ${finalizedRun.id.slice(0, 8)}`,
+                },
+                requestedByAgentId: agent.id,
+              });
+            }
+
+            logger.info(
+              { runId: finalizedRun.id, worstLabel: evalResult.worstLabel, actions: evalResult.actions },
+              "eval harness completed",
+            );
+          } catch (evalErr) {
+            logger.warn({ err: evalErr, runId: finalizedRun.id }, "eval harness failed (non-fatal)");
+          }
+        }
+
         await releaseIssueExecutionAndPromote(finalizedRun);
       }
 
