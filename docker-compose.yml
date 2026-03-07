@@ -21,6 +21,12 @@ services:
     build: .
     ports:
       - "3100:3100"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3100/api/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
     environment:
       DATABASE_URL: postgres://paperclip:paperclip@db:5432/paperclip
       PORT: "3100"
