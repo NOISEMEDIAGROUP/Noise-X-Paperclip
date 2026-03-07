@@ -148,7 +148,7 @@ export async function createApp(
       appType: "spa",
       server: {
         middlewareMode: true,
-        allowedHosts: privateHostnameGateEnabled ? Array.from(privateHostnameAllowSet) : undefined,
+        allowedHosts: privateHostnameGateEnabled ? Array.from(privateHostnameAllowSet) : true,
       },
     });
 

@@ -372,12 +372,13 @@ if (config.databaseUrl) {
   startupDbInfo = { mode: "embedded-postgres", dataDir, port };
 }
 
-if (config.deploymentMode === "local_trusted" && !isLoopbackHost(config.host)) {
-  throw new Error(
-    `local_trusted mode requires loopback host binding (received: ${config.host}). ` +
-      "Use authenticated mode for non-loopback deployments.",
-  );
-}
+// Patched: allow non-loopback binding in local_trusted mode for exe.dev
+// if (config.deploymentMode === "local_trusted" && !isLoopbackHost(config.host)) {
+//   throw new Error(
+//     `local_trusted mode requires loopback host binding (received: ${config.host}). ` +
+//       "Use authenticated mode for non-loopback deployments.",
+//   );
+// }
 
 if (config.deploymentMode === "local_trusted" && config.deploymentExposure !== "private") {
   throw new Error("local_trusted mode only supports private exposure");
