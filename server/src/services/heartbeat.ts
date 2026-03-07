@@ -2202,6 +2202,17 @@ export function heartbeatService(db: Db) {
 
     tickTimers: async (now = new Date()) => {
       const allAgents = await db.select().from(agents);
+
+      // Fetch busy agents in a single query to avoid N+1 per-agent lookups.
+      const busyAgentIds = new Set(
+        (
+          await db
+            .select({ agentId: heartbeatRuns.agentId })
+            .from(heartbeatRuns)
+            .where(inArray(heartbeatRuns.status, ["queued", "running"]))
+        ).map((r) => r.agentId),
+      );
+
       let checked = 0;
       let enqueued = 0;
       let skipped = 0;
@@ -2220,16 +2231,7 @@ export function heartbeatService(db: Db) {
         // Timer wakes just check for new work — redundant when the agent is busy.
         // On-demand wakes (assignments, comments) bypass this and use enqueueWakeup's
         // coalescing logic directly.
-        const [{ activeCount }] = await db
-          .select({ activeCount: sql<number>`count(*)` })
-          .from(heartbeatRuns)
-          .where(
-            and(
-              eq(heartbeatRuns.agentId, agent.id),
-              inArray(heartbeatRuns.status, ["queued", "running"]),
-            ),
-          );
-        if (Number(activeCount) > 0) {
+        if (busyAgentIds.has(agent.id)) {
           skipped += 1;
           continue;
         }
