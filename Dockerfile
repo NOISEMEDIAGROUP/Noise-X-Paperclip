@@ -18,6 +18,8 @@ COPY packages/adapters/codex-local/package.json packages/adapters/codex-local/
 COPY packages/adapters/cursor-local/package.json packages/adapters/cursor-local/
 COPY packages/adapters/openclaw/package.json packages/adapters/openclaw/
 COPY packages/adapters/opencode-local/package.json packages/adapters/opencode-local/
+COPY packages/slack-bridge/package.json packages/slack-bridge/
+COPY packages/slack-bot/package.json packages/slack-bot/
 RUN pnpm install --frozen-lockfile
 
 FROM base AS build
@@ -26,25 +28,35 @@ COPY --from=deps /app /app
 COPY . .
 RUN pnpm --filter @paperclipai/ui build
 RUN pnpm --filter @paperclipai/server build
+RUN pnpm --filter @paperclipai/slack-bot check
 RUN test -f server/dist/index.js || (echo "ERROR: server build output missing" && exit 1)
 
 FROM base AS production
 WORKDIR /app
 COPY --from=build /app /app
 RUN npm install --global --omit=dev @anthropic-ai/claude-code@latest @openai/codex@latest
+RUN useradd --create-home --home-dir /paperclip --shell /bin/bash paperclip \
+  && mkdir -p /paperclip \
+  && chown -R paperclip:paperclip /paperclip /app
 
 ENV NODE_ENV=production \
   HOME=/paperclip \
   HOST=0.0.0.0 \
   PORT=3100 \
+  SLACK_PORT=3000 \
   SERVE_UI=true \
   PAPERCLIP_HOME=/paperclip \
   PAPERCLIP_INSTANCE_ID=default \
   PAPERCLIP_CONFIG=/paperclip/instances/default/config.json \
   PAPERCLIP_DEPLOYMENT_MODE=authenticated \
-  PAPERCLIP_DEPLOYMENT_EXPOSURE=private
+  PAPERCLIP_DEPLOYMENT_EXPOSURE=private \
+  PAPERCLIP_API_URL=http://127.0.0.1:3100 \
+  PAPERCLIP_SLACK_ENABLED=false \
+  CODEX_WORKDIR=/app \
+  DATA_DIR=/paperclip/slack-bot/data
 
 VOLUME ["/paperclip"]
+USER paperclip
 EXPOSE 3100
 
-CMD ["node", "--import", "./server/node_modules/tsx/dist/loader.mjs", "server/dist/index.js"]
+CMD ["node", "scripts/run-stack.mjs", "production"]

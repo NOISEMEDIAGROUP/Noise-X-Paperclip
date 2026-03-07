@@ -192,6 +192,29 @@ This starts the API server at `http://localhost:3100`. An embedded PostgreSQL da
 
 <br/>
 
+## Slack + Paperclip stack
+
+If you want the Paperclip dashboard and the working Slack + Codex runtime in one project and one image, use the integrated Slack bot workspace under `packages/slack-bot`.
+
+Local stack:
+
+```bash
+PAPERCLIP_SLACK_ENABLED=true pnpm dev:stack
+```
+
+Docker stack:
+
+```bash
+PAPERCLIP_SLACK_ENABLED=true docker compose -f docker-compose.slack.yml up --build
+```
+
+Notes:
+
+- The Docker image starts Paperclip first. Set `PAPERCLIP_SLACK_ENABLED=true` when you also want the Slack bot started; otherwise the compose stack runs Paperclip only.
+- When Slack is enabled, the supervisor waits for `/api/health` and then starts the Slack bot against `http://127.0.0.1:3100`.
+- The image already installs the Codex CLI. To preserve the current Slack assistant behavior, make sure the container has a valid Codex login under `/paperclip/.codex` or run `docker exec -it <container> codex login` after boot.
+- Set `PAPERCLIP_COMPANY_ID` once your company exists if you want the Paperclip bridge enabled immediately.
+
 ## FAQ
 
 **What does a typical setup look like?**

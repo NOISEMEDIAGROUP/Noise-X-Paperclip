@@ -1,0 +1,55 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: paperclip
+      POSTGRES_PASSWORD: paperclip
+      POSTGRES_DB: paperclip
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paperclip -d paperclip"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  paperclip:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PAPERCLIP_PORT:-3100}:3100"
+    environment:
+      HOST: "0.0.0.0"
+      DATABASE_URL: "postgres://paperclip:paperclip@db:5432/paperclip"
+      PAPERCLIP_HOME: "/paperclip"
+      PAPERCLIP_SLACK_ENABLED: "${PAPERCLIP_SLACK_ENABLED:-false}"
+      PAPERCLIP_DEPLOYMENT_MODE: "${PAPERCLIP_DEPLOYMENT_MODE:-authenticated}"
+      PAPERCLIP_DEPLOYMENT_EXPOSURE: "${PAPERCLIP_DEPLOYMENT_EXPOSURE:-private}"
+      PAPERCLIP_PUBLIC_URL: "${PAPERCLIP_PUBLIC_URL:-http://localhost:3100}"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      SLACK_MODE: "${SLACK_MODE:-socket}"
+      SLACK_BOT_TOKEN: "${SLACK_BOT_TOKEN:-}"
+      SLACK_APP_TOKEN: "${SLACK_APP_TOKEN:-}"
+      SLACK_SIGNING_SECRET: "${SLACK_SIGNING_SECRET:-}"
+      SLACK_APP_ID: "${SLACK_APP_ID:-}"
+      PAPERCLIP_COMPANY_ID: "${PAPERCLIP_COMPANY_ID:-}"
+      PAPERCLIP_TRIGGER_MENTIONS: "${PAPERCLIP_TRIGGER_MENTIONS:-@paperclip}"
+      PAPERCLIP_AGENT_MAPPINGS_JSON: "${PAPERCLIP_AGENT_MAPPINGS_JSON:-{}}"
+      PAPERCLIP_PROJECT_MAPPINGS_JSON: "${PAPERCLIP_PROJECT_MAPPINGS_JSON:-{}}"
+      CODEX_MODEL: "${CODEX_MODEL:-gpt-5.3-codex}"
+      CODEX_PROFILE: "${CODEX_PROFILE:-}"
+      CODEX_SANDBOX: "${CODEX_SANDBOX:-workspace-write}"
+      CODEX_ADDITIONAL_WRITABLE_DIRS: "${CODEX_ADDITIONAL_WRITABLE_DIRS:-}"
+      CODEX_TIMEOUT_MS: "${CODEX_TIMEOUT_MS:-1800000}"
+      CODEX_SYSTEM_PROMPT: "${CODEX_SYSTEM_PROMPT:-You are Codex. Reply concisely and helpfully.}"
+    volumes:
+      - "${PAPERCLIP_DATA_DIR:-./data/docker-paperclip-stack}:/paperclip"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

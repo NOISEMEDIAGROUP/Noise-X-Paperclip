@@ -1,0 +1,19 @@
+{
+  "name": "@paperclipai/slack-bot",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Slack + Codex bot with Paperclip task bridge",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "check": "bash -lc 'for f in src/*.js; do node --check \"$f\"; done'",
+    "test": "node --test test/*.test.js",
+    "pairing:list": "node src/pairing-cli.js list",
+    "pairing:approve": "node src/pairing-cli.js approve"
+  },
+  "dependencies": {
+    "@slack/bolt": "^4.6.0",
+    "dotenv": "^17.3.1"
+  }
+}
