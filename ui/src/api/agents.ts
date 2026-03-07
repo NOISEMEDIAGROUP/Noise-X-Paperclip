@@ -40,6 +40,43 @@ export interface OrgNode {
   reports: OrgNode[];
 }
 
+export interface ProcessRuntimeProfile {
+  id: string;
+  label: string;
+  description: string;
+  command: string;
+  args: string[];
+  cwd: string;
+}
+
+export interface AgentReadinessIssue {
+  code: string;
+  severity: "error" | "warning";
+  message: string;
+}
+
+export interface AgentReadinessItem {
+  agentId: string;
+  agentName: string;
+  agentUrlKey: string;
+  adapterType: string;
+  status: string;
+  issues: AgentReadinessIssue[];
+}
+
+export interface AgentReadinessReport {
+  companyId: string;
+  generatedAt: string;
+  pendingApprovals: number;
+  summary: {
+    totalAgents: number;
+    invalidAgents: number;
+    errors: number;
+    warnings: number;
+  };
+  agents: AgentReadinessItem[];
+}
+
 export interface AgentHireResponse {
   agent: Agent;
   approval: Approval | null;
@@ -118,6 +155,8 @@ export const agentsApi = {
   resetSession: (id: string, taskKey?: string | null, companyId?: string) =>
     api.post<void>(agentPath(id, companyId, "/runtime-state/reset-session"), { taskKey: taskKey ?? null }),
   adapterModels: (type: string) => api.get<AdapterModel[]>(`/adapters/${type}/models`),
+  processRuntimeProfiles: () => api.get<ProcessRuntimeProfile[]>("/adapters/process/runtime-profiles"),
+  readiness: (companyId: string) => api.get<AgentReadinessReport>(`/companies/${companyId}/agents/readiness`),
   testEnvironment: (
     companyId: string,
     type: string,

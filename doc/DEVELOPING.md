@@ -210,6 +210,20 @@ pnpm paperclipai dashboard get
 
 See full command reference in `doc/CLI.md`.
 
+## Operating Playbooks and Profiles
+
+Use these docs to run a company continuously with repeatable quality:
+
+- `doc/OPERATING-PLAYBOOK.md`
+- `doc/AGENT-ROLE-TEMPLATES.md`
+- `doc/MODEL-ROUTING-PROFILES.md`
+
+Bulk-apply model routing and provider key env refs to process agents:
+
+```sh
+pnpm ops:configure-model-routing -- --company-id <company-id> --provider alibaba --model qwen3-coder-plus
+```
+
 ## OpenClaw Invite Onboarding Endpoints
 
 Agent-oriented invite onboarding now exposes machine-readable API docs:

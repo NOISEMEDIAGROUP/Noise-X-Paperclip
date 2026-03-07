@@ -174,6 +174,9 @@ export interface CreateConfigValues {
   dangerouslyBypassSandbox: boolean;
   command: string;
   args: string;
+  processRuntimeProfile: string;
+  modelProfileId: string;
+  skillProfileIds: string[];
   extraArgs: string;
   envVars: string;
   envBindings: Record<string, unknown>;

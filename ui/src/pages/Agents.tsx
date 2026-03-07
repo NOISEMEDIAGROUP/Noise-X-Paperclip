@@ -24,7 +24,7 @@ const adapterLabels: Record<string, string> = {
   claude_local: "Claude",
   codex_local: "Codex",
   openclaw: "OpenClaw",
-  process: "Process",
+  process: "Alibaba Cloud",
   http: "HTTP",
 };
 

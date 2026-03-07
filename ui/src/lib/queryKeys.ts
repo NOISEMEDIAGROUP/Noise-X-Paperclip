@@ -57,6 +57,10 @@ export const queryKeys = {
     list: (companyId: string) => ["secrets", companyId] as const,
     providers: (companyId: string) => ["secret-providers", companyId] as const,
   },
+  skills: {
+    list: (companyId: string) => ["skills", companyId] as const,
+    detail: (companyId: string, skillId: string) => ["skills", companyId, skillId] as const,
+  },
   dashboard: (companyId: string) => ["dashboard", companyId] as const,
   sidebarBadges: (companyId: string) => ["sidebar-badges", companyId] as const,
   activity: (companyId: string) => ["activity", companyId] as const,

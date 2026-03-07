@@ -25,6 +25,7 @@ import {
   Inbox,
   DollarSign,
   History,
+  Sparkles,
   SquarePen,
   Plus,
 } from "lucide-react";
@@ -163,6 +164,10 @@ export function CommandPalette() {
           <CommandItem onSelect={() => go("/activity")}>
             <History className="mr-2 h-4 w-4" />
             Activity
+          </CommandItem>
+          <CommandItem onSelect={() => go("/skills")}>
+            <Sparkles className="mr-2 h-4 w-4" />
+            Skills
           </CommandItem>
         </CommandGroup>
 

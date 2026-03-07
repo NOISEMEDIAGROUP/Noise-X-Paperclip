@@ -118,6 +118,12 @@ export {
 } from "./asset.js";
 
 export {
+  createSkillSchema,
+  skillScopeSchema,
+  type CreateSkill,
+} from "./skill.js";
+
+export {
   createCompanyInviteSchema,
   acceptInviteSchema,
   listJoinRequestsQuerySchema,

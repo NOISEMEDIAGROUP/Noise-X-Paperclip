@@ -23,7 +23,7 @@ export const help: Record<string, string> = {
   role: "Organizational role. Determines position and capabilities.",
   reportsTo: "The agent this one reports to in the org hierarchy.",
   capabilities: "Describes what this agent can do. Shown in the org chart and used for task routing.",
-  adapterType: "How this agent runs: local CLI (Claude/Codex), OpenClaw webhook, spawned process, or generic HTTP webhook.",
+  adapterType: "How this agent runs: local CLI (Claude/Codex), Alibaba Cloud process worker, OpenClaw webhook, or generic HTTP webhook.",
   cwd: "Default working directory fallback for local adapters. Use an absolute path on the machine running Paperclip.",
   promptTemplate: "The prompt sent to the agent on each heartbeat. Supports {{ agent.id }}, {{ agent.name }}, {{ agent.role }} variables.",
   model: "Override the default model used by the adapter.",
@@ -54,7 +54,7 @@ export const adapterLabels: Record<string, string> = {
   codex_local: "Codex (local)",
   openclaw: "OpenClaw",
   cursor: "Cursor",
-  process: "Process",
+  process: "Alibaba Cloud",
   http: "HTTP",
 };
 

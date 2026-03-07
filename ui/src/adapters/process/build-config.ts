@@ -14,5 +14,14 @@ export function buildProcessConfig(v: CreateConfigValues): Record<string, unknow
   ac.graceSec = 15;
   if (v.command) ac.command = v.command;
   if (v.args) ac.args = parseCommaArgs(v.args);
+  if (v.processRuntimeProfile) ac.processRuntimeProfile = v.processRuntimeProfile;
+  if (v.modelProfileId) ac.modelProfileId = v.modelProfileId;
+  if (Array.isArray(v.skillProfileIds) && v.skillProfileIds.length > 0) {
+    ac.skillProfileIds = v.skillProfileIds;
+    ac.requiredSkills = v.skillProfileIds;
+  }
+  if (v.envBindings && Object.keys(v.envBindings).length > 0) {
+    ac.env = v.envBindings;
+  }
   return ac;
 }

@@ -56,6 +56,11 @@ function hasNonEmptyEnvValue(env: Record<string, string>, key: string): boolean 
   return typeof raw === "string" && raw.trim().length > 0;
 }
 
+function normalizeProviderConfigKey(input: string): string {
+  const normalized = input.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return normalized.length > 0 ? normalized : "custom";
+}
+
 function resolveCodexBillingType(env: Record<string, string>): "api" | "subscription" {
   // Codex uses API-key auth when OPENAI_API_KEY is present; otherwise rely on local login/session auth.
   return hasNonEmptyEnvValue(env, "OPENAI_API_KEY") ? "api" : "subscription";
@@ -117,6 +122,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     config.modelReasoningEffort,
     asString(config.reasoningEffort, ""),
   );
+  const modelProvider = asString(config.modelProvider, "").trim();
+  const modelBaseUrl = asString(config.modelBaseUrl, "").trim();
+  const modelApiKeyEnv = asString(config.modelApiKeyEnv, "ALIBABA_API_KEY").trim();
   const search = asBoolean(config.search, false);
   const bypass = asBoolean(
     config.dangerouslyBypassApprovalsAndSandbox,
@@ -207,6 +215,19 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   for (const [k, v] of Object.entries(envConfig)) {
     if (typeof v === "string") env[k] = v;
   }
+
+  if (modelBaseUrl && !hasNonEmptyEnvValue(env, "OPENAI_BASE_URL")) {
+    env.OPENAI_BASE_URL = modelBaseUrl;
+  }
+
+  if (
+    modelApiKeyEnv &&
+    hasNonEmptyEnvValue(env, modelApiKeyEnv) &&
+    !hasNonEmptyEnvValue(env, "OPENAI_API_KEY")
+  ) {
+    env.OPENAI_API_KEY = env[modelApiKeyEnv] as string;
+  }
+
   if (!hasExplicitApiKey && authToken) {
     env.PAPERCLIP_API_KEY = authToken;
   }
@@ -269,6 +290,19 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       `Configured instructionsFilePath ${instructionsFilePath}, but file could not be read; continuing without injected instructions.`,
     ];
   })();
+
+  const codexProviderArgs = (() => {
+    if (!modelProvider || !modelBaseUrl) return [] as string[];
+    const providerKey = normalizeProviderConfigKey(modelProvider);
+    const envKey = modelApiKeyEnv || "OPENAI_API_KEY";
+    return [
+      "-c",
+      `model_provider=${JSON.stringify(providerKey)}`,
+      "-c",
+      `model_providers.${providerKey}={ name = ${JSON.stringify(modelProvider)}, base_url = ${JSON.stringify(modelBaseUrl)}, env_key = ${JSON.stringify(envKey)} }`,
+    ];
+  })();
+
   const renderedPrompt = renderTemplate(promptTemplate, {
     agentId: agent.id,
     companyId: agent.companyId,
@@ -284,6 +318,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     const args = ["exec", "--json"];
     if (search) args.unshift("--search");
     if (bypass) args.push("--dangerously-bypass-approvals-and-sandbox");
+    if (codexProviderArgs.length > 0) args.push(...codexProviderArgs);
     if (model) args.push("--model", model);
     if (modelReasoningEffort) args.push("-c", `model_reasoning_effort=${JSON.stringify(modelReasoningEffort)}`);
     if (extraArgs.length > 0) args.push(...extraArgs);

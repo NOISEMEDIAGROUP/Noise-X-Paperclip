@@ -19,7 +19,7 @@ const adapterLabels: Record<string, string> = {
   codex_local: "Codex (local)",
   openclaw: "OpenClaw",
   cursor: "Cursor",
-  process: "Process",
+  process: "Alibaba Cloud",
   http: "HTTP",
 };
 

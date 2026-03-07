@@ -7,10 +7,12 @@ import type {
   CompanySecret,
   EnvBinding,
 } from "@paperclipai/shared";
-import type { AdapterModel } from "../api/agents";
+import type { AdapterModel, ProcessRuntimeProfile } from "../api/agents";
 import { agentsApi } from "../api/agents";
+import { skillsApi } from "../api/skills";
 import { secretsApi } from "../api/secrets";
 import { assetsApi } from "../api/assets";
+import { modelProvidersApi, type DiscoveredModel } from "../api/modelProviders";
 import {
   DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX,
   DEFAULT_CODEX_LOCAL_MODEL,
@@ -25,6 +27,8 @@ import { FolderOpen, Heart, ChevronDown, X } from "lucide-react";
 import { cn } from "../lib/utils";
 import { queryKeys } from "../lib/queryKeys";
 import { useCompany } from "../context/CompanyContext";
+import { ALIBABA_MODEL_PROFILES, SKILL_PROFILES } from "../lib/agent-profiles";
+import { shouldAutoApplyAlibabaProcessConfig } from "../lib/alibaba-process-config";
 import {
   Field,
   ToggleField,
@@ -106,6 +110,78 @@ function isOverlayDirty(o: Overlay): boolean {
 const inputClass =
   "w-full rounded-md border border-border px-2.5 py-1.5 bg-transparent outline-none text-sm font-mono placeholder:text-muted-foreground/40";
 
+const ALIBABA_DEFAULT_BASE_URL = "https://coding-intl.dashscope.aliyuncs.com/v1";
+const ALIBABA_SECRET_NAMES = new Set(["provider-alibaba-api-key", "alibaba-api-key"]);
+const ALIBABA_PROCESS_RUNTIME_PROFILE_ID = "alibaba_worker_python";
+
+function asEnvBindings(value: unknown): Record<string, EnvBinding> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, EnvBinding>;
+}
+
+function readEnvBindingString(binding: EnvBinding | undefined): string {
+  if (typeof binding === "string") return binding;
+  if (!binding || typeof binding !== "object") return "";
+  if ("type" in binding && binding.type === "plain" && typeof binding.value === "string") {
+    return binding.value;
+  }
+  return "";
+}
+
+function readNonEmptyString(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : "";
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function expandLegacySkillProfiles(profileIds: string[]): string[] {
+  return Array.from(
+    new Set(
+      profileIds.flatMap((profileId) => {
+        const profile = SKILL_PROFILES.find((entry) => entry.id === profileId);
+        return profile?.requiredSkills ?? [];
+      }),
+    ),
+  );
+}
+
+function envBindingEqual(a: EnvBinding | undefined, b: EnvBinding | undefined): boolean {
+  if (a === b) return true;
+  if (typeof a === "string" || typeof b === "string") {
+    return a === b;
+  }
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") {
+    return false;
+  }
+  if (a.type !== b.type) return false;
+  if (a.type === "plain" && b.type === "plain") {
+    return a.value === b.value;
+  }
+  if (a.type === "secret_ref" && b.type === "secret_ref") {
+    return a.secretId === b.secretId && (a.version ?? "latest") === (b.version ?? "latest");
+  }
+  return false;
+}
+
+function envBindingsEqual(a: Record<string, EnvBinding>, b: Record<string, EnvBinding>): boolean {
+  const aKeys = Object.keys(a).sort();
+  const bKeys = Object.keys(b).sort();
+  if (aKeys.length !== bKeys.length) return false;
+  for (let i = 0; i < aKeys.length; i += 1) {
+    if (aKeys[i] !== bKeys[i]) return false;
+    if (!envBindingEqual(a[aKeys[i]], b[bKeys[i]])) return false;
+  }
+  return true;
+}
+
 function parseCommaArgs(value: string): string[] {
   return value
     .split(",")
@@ -150,6 +226,12 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
   const { data: availableSecrets = [] } = useQuery({
     queryKey: selectedCompanyId ? queryKeys.secrets.list(selectedCompanyId) : ["secrets", "none"],
     queryFn: () => secretsApi.list(selectedCompanyId!),
+    enabled: Boolean(selectedCompanyId),
+  });
+
+  const { data: availableSkills = [] } = useQuery({
+    queryKey: selectedCompanyId ? queryKeys.skills.list(selectedCompanyId) : ["skills", "none"],
+    queryFn: () => skillsApi.list(selectedCompanyId!),
     enabled: Boolean(selectedCompanyId),
   });
 
@@ -254,7 +336,9 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
   const adapterType = isCreate
     ? props.values.adapterType
     : overlay.adapterType ?? props.agent.adapterType;
+  const isProcess = adapterType === "process";
   const isLocal = adapterType === "claude_local" || adapterType === "codex_local";
+  const supportsRuntimeConfig = isLocal || isProcess;
   const uiAdapter = useMemo(() => getUIAdapter(adapterType), [adapterType]);
 
   // Fetch adapter models for the effective adapter type
@@ -263,6 +347,12 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
     queryFn: () => agentsApi.adapterModels(adapterType),
   });
   const models = fetchedModels ?? externalModels ?? [];
+
+  const { data: processRuntimeProfiles = [] } = useQuery({
+    queryKey: ["adapters", "process", "runtime-profiles"],
+    queryFn: () => agentsApi.processRuntimeProfiles(),
+    enabled: isProcess,
+  });
 
   /** Props passed to adapter-specific config field components */
   const adapterFieldProps = {
@@ -279,8 +369,10 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
 
   // Section toggle state — advanced always starts collapsed
   const [runPolicyAdvancedOpen, setRunPolicyAdvancedOpen] = useState(false);
+  const [processAdvancedEnvOpen, setProcessAdvancedEnvOpen] = useState(false);
   // Popover states
   const [modelOpen, setModelOpen] = useState(false);
+  const [processModelOpen, setProcessModelOpen] = useState(false);
   const [thinkingEffortOpen, setThinkingEffortOpen] = useState(false);
 
   // Create mode helpers
@@ -328,6 +420,281 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
   const codexSearchEnabled = adapterType === "codex_local"
     ? (isCreate ? Boolean(val!.search) : eff("adapterConfig", "search", Boolean(config.search)))
     : false;
+
+  const effectiveEnv = isCreate
+    ? asEnvBindings(val?.envBindings ?? EMPTY_ENV)
+    : asEnvBindings(
+        eff("adapterConfig", "env", (config.env ?? EMPTY_ENV) as Record<string, EnvBinding>),
+      );
+  const effectiveProcessCommand = isCreate
+    ? readNonEmptyString(val?.command)
+    : readNonEmptyString(eff("adapterConfig", "command", String(config.command ?? "")));
+  const effectiveProcessArgs = isCreate
+    ? readNonEmptyString(val?.args)
+    : readNonEmptyString(eff("adapterConfig", "args", formatArgList(config.args)));
+  const effectiveProcessCwd = isCreate
+    ? readNonEmptyString(val?.cwd)
+    : readNonEmptyString(eff("adapterConfig", "cwd", String(config.cwd ?? "")));
+  const effectiveProcessRuntimeProfile = isCreate
+    ? readNonEmptyString(val?.processRuntimeProfile)
+    : readNonEmptyString(eff("adapterConfig", "processRuntimeProfile", String(config.processRuntimeProfile ?? "")));
+  const effectiveModelProfileId = isCreate
+    ? readNonEmptyString(val?.modelProfileId)
+    : readNonEmptyString(eff("adapterConfig", "modelProfileId", String(config.modelProfileId ?? "")));
+  const effectiveSkillProfileIds = isCreate
+    ? readStringArray(val?.skillProfileIds)
+    : readStringArray(eff("adapterConfig", "skillProfileIds", config.skillProfileIds));
+  const effectiveRequiredSkills = isCreate
+    ? readEnvBindingString(effectiveEnv.PAPERCLIP_REQUIRED_SKILLS)
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+    : readStringArray(eff("adapterConfig", "requiredSkills", config.requiredSkills));
+  const selectedSkillNames = effectiveRequiredSkills.length > 0
+    ? effectiveRequiredSkills
+    : expandLegacySkillProfiles(effectiveSkillProfileIds);
+  const effectiveProcessModel = readEnvBindingString(effectiveEnv.MODEL_NAME);
+  const effectiveProcessBaseUrl = readEnvBindingString(effectiveEnv.MODEL_BASE_URL);
+  const effectiveProcessProvider = readNonEmptyString(readEnvBindingString(effectiveEnv.MODEL_PROVIDER)).toLowerCase();
+  const shouldAutoApplyAlibabaConfig = shouldAutoApplyAlibabaProcessConfig({
+    modelProvider: effectiveProcessProvider,
+    processRuntimeProfile: effectiveProcessRuntimeProfile,
+    modelProfileId: effectiveModelProfileId,
+    alibabaModelProfileIds: ALIBABA_MODEL_PROFILES.map((profile) => profile.id),
+    alibabaRuntimeProfileId: ALIBABA_PROCESS_RUNTIME_PROFILE_ID,
+  });
+
+  const selectedRuntimeProfile = useMemo<ProcessRuntimeProfile | null>(
+    () =>
+      processRuntimeProfiles.find((profile) => profile.id === effectiveProcessRuntimeProfile) ?? null,
+    [effectiveProcessRuntimeProfile, processRuntimeProfiles],
+  );
+
+  const alibabaSecret = useMemo(
+    () => availableSecrets.find((secret) => ALIBABA_SECRET_NAMES.has(secret.name)) ?? null,
+    [availableSecrets],
+  );
+
+  const [processAlibabaModels, setProcessAlibabaModels] = useState<DiscoveredModel[]>([]);
+  const [processAlibabaModelId, setProcessAlibabaModelId] = useState("");
+  const [processAlibabaBaseUrl, setProcessAlibabaBaseUrl] = useState(ALIBABA_DEFAULT_BASE_URL);
+  const [processAlibabaDetectedAt, setProcessAlibabaDetectedAt] = useState<string | null>(null);
+  const [processAlibabaDetecting, setProcessAlibabaDetecting] = useState(false);
+  const [processAlibabaStatus, setProcessAlibabaStatus] = useState<string | null>(null);
+  const [processAlibabaError, setProcessAlibabaError] = useState<string | null>(null);
+  const processDetectKeyRef = useRef<string | null>(null);
+
+  const processAlibabaModelOptions = useMemo<AdapterModel[]>(
+    () => processAlibabaModels.map((model) => ({ id: model.id, label: model.label || model.id })),
+    [processAlibabaModels],
+  );
+  const currentAgentRole = !isCreate ? props.agent.role : null;
+  const selectableSkills = useMemo(
+    () =>
+      availableSkills.length > 0
+        ? availableSkills
+          .filter((skill) => {
+            if (!currentAgentRole) return true;
+            const scope = Array.isArray(skill.scope) ? skill.scope : [];
+            return scope.includes("all") || scope.includes(currentAgentRole);
+          })
+          .map((skill) => ({
+            id: skill.name,
+            label: skill.label || skill.name,
+            description: skill.description || `Scope: ${(skill.scope ?? []).join(", ") || "all"}`,
+          }))
+        : Array.from(new Set(SKILL_PROFILES.flatMap((profile) => profile.requiredSkills))).map((name) => ({
+            id: name,
+            label: name,
+            description: "Built-in fallback skill",
+          })),
+    [availableSkills, currentAgentRole],
+  );
+
+  useEffect(() => {
+    if (adapterType !== "process") return;
+    setProcessAlibabaModelId(effectiveProcessModel || "");
+    setProcessAlibabaBaseUrl(effectiveProcessBaseUrl || ALIBABA_DEFAULT_BASE_URL);
+  }, [adapterType, effectiveProcessBaseUrl, effectiveProcessModel]);
+
+  useEffect(() => {
+    if (isProcess) return;
+    processDetectKeyRef.current = null;
+    setProcessAlibabaDetecting(false);
+  }, [isProcess]);
+
+  function applyProcessRuntimeProfile(profileId: string) {
+    const nextProfile = processRuntimeProfiles.find((profile) => profile.id === profileId) ?? null;
+
+    if (isCreate) {
+      const patch: Partial<CreateConfigValues> = { processRuntimeProfile: profileId };
+      if (nextProfile) {
+        patch.command = nextProfile.command;
+        patch.args = nextProfile.args.join(", ");
+        patch.cwd = nextProfile.cwd;
+      }
+      set!(patch);
+    } else {
+      mark("adapterConfig", "processRuntimeProfile", profileId || undefined);
+      if (nextProfile) {
+        mark("adapterConfig", "command", nextProfile.command);
+        mark("adapterConfig", "args", nextProfile.args);
+        mark("adapterConfig", "cwd", nextProfile.cwd);
+      }
+    }
+
+    if (nextProfile) {
+      setProcessAlibabaStatus(`Applied runtime profile ${nextProfile.label}.`);
+      setProcessAlibabaError(null);
+    }
+  }
+
+  function applySkillProfiles(skillNames: string[]) {
+    const requiredSkills = Array.from(
+      new Set(skillNames.map((entry) => entry.trim()).filter(Boolean)),
+    );
+
+    const nextEnv: Record<string, EnvBinding> = { ...effectiveEnv };
+    if (requiredSkills.length > 0) {
+      nextEnv.PAPERCLIP_REQUIRED_SKILLS = { type: "plain", value: requiredSkills.join(",") };
+    } else {
+      delete nextEnv.PAPERCLIP_REQUIRED_SKILLS;
+    }
+    commitProcessEnv(nextEnv);
+
+    if (isCreate) {
+      set!({ skillProfileIds: requiredSkills });
+    } else {
+      mark("adapterConfig", "skillProfileIds", requiredSkills.length > 0 ? requiredSkills : undefined);
+      mark("adapterConfig", "requiredSkills", requiredSkills.length > 0 ? requiredSkills : undefined);
+    }
+  }
+
+  function commitProcessEnv(nextEnv: Record<string, EnvBinding>) {
+    if (isCreate) {
+      set!({ envBindings: nextEnv, envVars: "" });
+      return;
+    }
+    mark("adapterConfig", "env", nextEnv);
+  }
+
+  function applyAlibabaProcessConfig(modelId: string, baseUrl: string) {
+    if (!modelId.trim()) {
+      setProcessAlibabaError("Select a model before applying Alibaba config.");
+      setProcessAlibabaStatus(null);
+      return;
+    }
+
+    const nextEnv: Record<string, EnvBinding> = {
+      ...effectiveEnv,
+      MODEL_PROVIDER: { type: "plain", value: "alibaba" },
+      MODEL_BASE_URL: { type: "plain", value: baseUrl.trim() || ALIBABA_DEFAULT_BASE_URL },
+      MODEL_NAME: { type: "plain", value: modelId.trim() },
+    };
+
+    if (alibabaSecret) {
+      const secretRef: EnvBinding = {
+        type: "secret_ref",
+        secretId: alibabaSecret.id,
+        version: "latest",
+      };
+      nextEnv.ALIBABA_API_KEY = secretRef;
+      nextEnv.DASHSCOPE_API_KEY = secretRef;
+    }
+
+    if (envBindingsEqual(nextEnv, effectiveEnv)) {
+      setProcessAlibabaError(null);
+      setProcessAlibabaStatus(`Alibaba model ${modelId} is already configured.`);
+      return;
+    }
+
+    commitProcessEnv(nextEnv);
+    setProcessAlibabaError(null);
+    setProcessAlibabaStatus(
+      alibabaSecret
+        ? `Applied Alibaba model ${modelId}. ${isCreate ? "Create the agent" : "Click Save"} to persist this configuration.`
+        : `Applied Alibaba model ${modelId}. Save provider-alibaba-api-key in Company Settings to auto-sync key refs.`,
+    );
+  }
+
+  function applyAlibabaModelProfile(profileId: string) {
+    const profile = ALIBABA_MODEL_PROFILES.find((entry) => entry.id === profileId) ?? null;
+    if (isCreate) {
+      set!({ modelProfileId: profileId });
+    } else {
+      mark("adapterConfig", "modelProfileId", profileId || undefined);
+    }
+    if (!profile) return;
+    setProcessAlibabaModelId(profile.modelId);
+    applyAlibabaProcessConfig(profile.modelId, processAlibabaBaseUrl);
+    setProcessAlibabaStatus(`Applied model profile ${profile.label}.`);
+    setProcessAlibabaError(null);
+  }
+
+  const detectAlibabaModels = useMutation({
+    mutationFn: async (options?: { applyRecommended?: boolean; preferredModel?: string }) => {
+      if (!selectedCompanyId) throw new Error("Select a company to detect models");
+      return modelProvidersApi.discoverModels(selectedCompanyId, "alibaba", {
+        model: options?.preferredModel || processAlibabaModelId || effectiveProcessModel || undefined,
+      });
+    },
+    onSuccess: (result, options) => {
+      setProcessAlibabaDetecting(false);
+      setProcessAlibabaModels(result.models);
+      setProcessAlibabaDetectedAt(result.detectedAt);
+      const detectedBaseUrl =
+        (typeof result.baseUrl === "string" && result.baseUrl.trim().length > 0
+          ? result.baseUrl.trim()
+          : ALIBABA_DEFAULT_BASE_URL);
+      const selectedModel =
+        options?.preferredModel ||
+        processAlibabaModelId ||
+        effectiveProcessModel ||
+        result.validatedModel ||
+        result.models[0]?.id ||
+        "";
+      setProcessAlibabaBaseUrl(detectedBaseUrl);
+      setProcessAlibabaModelId(selectedModel);
+      if (options?.applyRecommended && adapterType === "process" && shouldAutoApplyAlibabaConfig && selectedModel) {
+        applyAlibabaProcessConfig(selectedModel, detectedBaseUrl);
+        return;
+      }
+      setProcessAlibabaError(null);
+      setProcessAlibabaStatus(
+        `Detected ${result.models.length} Alibaba model${result.models.length === 1 ? "" : "s"}.`,
+      );
+    },
+    onError: (err) => {
+      setProcessAlibabaDetecting(false);
+      if (effectiveProcessModel) {
+        setProcessAlibabaModels([{ id: effectiveProcessModel, label: effectiveProcessModel }]);
+      }
+      setProcessAlibabaStatus(null);
+      setProcessAlibabaError(err instanceof Error ? err.message : "Failed to detect Alibaba models");
+    },
+  });
+
+  useEffect(() => {
+    if (!isProcess || !selectedCompanyId) return;
+    if (processAlibabaDetecting) return;
+    const preferredModel = effectiveProcessModel || undefined;
+    const detectKey = `${selectedCompanyId}:${alibabaSecret?.id ?? "none"}:${alibabaSecret?.latestVersion ?? 0}:${preferredModel ?? ""}:${shouldAutoApplyAlibabaConfig ? "auto" : "observe"}`;
+    if (processDetectKeyRef.current === detectKey) return;
+    processDetectKeyRef.current = detectKey;
+    setProcessAlibabaDetecting(true);
+    detectAlibabaModels.mutate({
+      applyRecommended: shouldAutoApplyAlibabaConfig && !effectiveProcessModel,
+      preferredModel,
+    });
+  }, [
+    isProcess,
+    processAlibabaDetecting,
+    selectedCompanyId,
+    alibabaSecret?.id,
+    alibabaSecret?.latestVersion,
+    effectiveProcessModel,
+    shouldAutoApplyAlibabaConfig,
+  ]);
 
   return (
     <div className={cn("relative", cards && "space-y-6")}>
@@ -522,19 +889,124 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
           )}
 
           {/* Adapter-specific fields */}
-          <uiAdapter.ConfigFields {...adapterFieldProps} />
+          {!isProcess && <uiAdapter.ConfigFields {...adapterFieldProps} />}
         </div>
 
       </div>
 
       {/* ---- Permissions & Configuration ---- */}
-      {isLocal && (
+      {supportsRuntimeConfig && (
         <div className={cn(!cards && "border-b border-border")}>
           {cards
             ? <h3 className="text-sm font-medium mb-3">Permissions &amp; Configuration</h3>
             : <div className="px-4 py-2 text-xs font-medium text-muted-foreground">Permissions &amp; Configuration</div>
           }
           <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
+            {isProcess && (
+              <div className="rounded-md border border-border p-3 space-y-2">
+                <div className="text-xs font-medium">Alibaba Coding Plan</div>
+                <p className="text-[11px] text-muted-foreground">
+                  Model list loads automatically from Company Settings key. Changing model updates this agent config immediately.
+                </p>
+                <Field label="Model profile" hint="Recommended role-based model preset.">
+                  <select
+                    className={cn(inputClass, "bg-background")}
+                    value={effectiveModelProfileId}
+                    onChange={(e) => applyAlibabaModelProfile(e.target.value)}
+                  >
+                    <option value="">Custom model</option>
+                    {ALIBABA_MODEL_PROFILES.map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.label} ({profile.modelId})
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <ModelDropdown
+                  label="Model ID"
+                  models={processAlibabaModelOptions}
+                  value={processAlibabaModelId}
+                  onChange={(v) => {
+                    setProcessAlibabaModelId(v);
+                    if (isCreate) {
+                      set!({ modelProfileId: "" });
+                    } else {
+                      mark("adapterConfig", "modelProfileId", undefined);
+                    }
+                    if (v) applyAlibabaProcessConfig(v, processAlibabaBaseUrl);
+                  }}
+                  open={processModelOpen}
+                  onOpenChange={setProcessModelOpen}
+                  allowDefault={false}
+                  placeholder={processAlibabaDetecting ? "Detecting models..." : "Select Alibaba model"}
+                  disabled={processAlibabaDetecting || processAlibabaModelOptions.length === 0}
+                />
+                {processAlibabaDetecting && (
+                  <p className="text-[11px] text-muted-foreground">Detecting Alibaba models...</p>
+                )}
+                <p className="text-[11px] text-muted-foreground">
+                  {processAlibabaModels.length > 0
+                    ? `Detected ${processAlibabaModels.length} model${processAlibabaModels.length === 1 ? "" : "s"}.`
+                    : "No models detected yet."}
+                  {processAlibabaDetectedAt
+                    ? ` Last checked ${new Date(processAlibabaDetectedAt).toLocaleTimeString()}.`
+                    : ""}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {alibabaSecret
+                    ? `Using secret ${alibabaSecret.name} for ALIBABA_API_KEY and DASHSCOPE_API_KEY.`
+                    : "Save secret provider-alibaba-api-key in Company Settings to auto-wire key refs."}
+                </p>
+                {!effectiveProcessCommand && (
+                  <p className="text-[11px] text-destructive">
+                    Runtime command is missing. Open Advanced process settings and set Command.
+                  </p>
+                )}
+                {effectiveProcessModel && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Active runtime model in env: <span className="font-mono">{effectiveProcessModel}</span>
+                  </p>
+                )}
+                <Field label="Skills" hint="Select all skills this agent should load.">
+                  <div className="space-y-1.5 rounded-md border border-border/70 p-2">
+                    {selectableSkills.map((skill) => {
+                      const checked = selectedSkillNames.includes(skill.id);
+                      return (
+                        <label key={skill.id} className="flex items-start gap-2 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              const next = e.target.checked
+                                ? [...selectedSkillNames, skill.id]
+                                : selectedSkillNames.filter((id) => id !== skill.id);
+                              applySkillProfiles(next);
+                            }}
+                          />
+                          <span>
+                            <span className="font-medium">{skill.label}</span>
+                            <span className="text-muted-foreground"> - {skill.description}</span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                    {selectableSkills.length === 0 && (
+                      <p className="text-[11px] text-muted-foreground">
+                        No skills found for this company. Add skills in Company → Skills.
+                      </p>
+                    )}
+                  </div>
+                </Field>
+                {processAlibabaStatus && (
+                  <p className="text-[11px] text-emerald-500">{processAlibabaStatus}</p>
+                )}
+                {processAlibabaError && (
+                  <p className="text-[11px] text-destructive">{processAlibabaError}</p>
+                )}
+              </div>
+            )}
+
+            {isLocal && (
               <Field label="Command" hint={help.localCommand}>
                 <DraftInput
                   value={
@@ -552,7 +1024,9 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                   placeholder={adapterType === "codex_local" ? "codex" : "claude"}
                 />
               </Field>
+            )}
 
+            {isLocal && (
               <ModelDropdown
                 models={models}
                 value={currentModelId}
@@ -564,7 +1038,9 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                 open={modelOpen}
                 onOpenChange={setModelOpen}
               />
+            )}
 
+            {isLocal && (
               <ThinkingEffortDropdown
                 value={currentThinkingEffort}
                 options={thinkingEffortOptions}
@@ -576,13 +1052,15 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                 open={thinkingEffortOpen}
                 onOpenChange={setThinkingEffortOpen}
               />
-              {adapterType === "codex_local" &&
-                codexSearchEnabled &&
-                currentThinkingEffort === "minimal" && (
-                  <p className="text-xs text-amber-400">
-                    Codex may reject `minimal` thinking when search is enabled.
-                  </p>
-                )}
+            )}
+            {adapterType === "codex_local" &&
+              codexSearchEnabled &&
+              currentThinkingEffort === "minimal" && (
+                <p className="text-xs text-amber-400">
+                  Codex may reject `minimal` thinking when search is enabled.
+                </p>
+              )}
+            {isLocal && (
               <Field label="Bootstrap prompt (first run)" hint={help.bootstrapPrompt}>
                 <MarkdownEditor
                   value={
@@ -610,10 +1088,12 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                   }}
                 />
               </Field>
-              {adapterType === "claude_local" && (
-                <ClaudeLocalAdvancedFields {...adapterFieldProps} />
-              )}
+            )}
+            {adapterType === "claude_local" && (
+              <ClaudeLocalAdvancedFields {...adapterFieldProps} />
+            )}
 
+            {isLocal && (
               <Field label="Extra args (comma-separated)" hint={help.extraArgs}>
                 <DraftInput
                   value={
@@ -631,7 +1111,131 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                   placeholder="e.g. --verbose, --foo=bar"
                 />
               </Field>
+            )}
 
+            {isProcess ? (
+              <CollapsibleSection
+                title="Advanced process settings"
+                bordered={cards}
+                open={processAdvancedEnvOpen}
+                onToggle={() => setProcessAdvancedEnvOpen((prev) => !prev)}
+              >
+                <div className="space-y-3">
+                  <Field label="Runtime profile" hint="Named worker command template for process agents.">
+                    <select
+                      className={cn(inputClass, "bg-background")}
+                      value={effectiveProcessRuntimeProfile}
+                      onChange={(e) => applyProcessRuntimeProfile(e.target.value)}
+                    >
+                      <option value="">Custom runtime</option>
+                      {processRuntimeProfiles.map((profile) => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.label}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedRuntimeProfile && (
+                      <p className="mt-1 text-[11px] text-muted-foreground">{selectedRuntimeProfile.description}</p>
+                    )}
+                  </Field>
+                  <Field label="Base URL" hint="Override only if your company uses a different Alibaba gateway URL.">
+                    <DraftInput
+                      value={processAlibabaBaseUrl}
+                      onCommit={(v) => {
+                        const nextBaseUrl = v.trim() || ALIBABA_DEFAULT_BASE_URL;
+                        setProcessAlibabaBaseUrl(nextBaseUrl);
+                        if (processAlibabaModelId.trim()) {
+                          applyAlibabaProcessConfig(processAlibabaModelId, nextBaseUrl);
+                        }
+                      }}
+                      immediate
+                      className={inputClass}
+                      placeholder={ALIBABA_DEFAULT_BASE_URL}
+                    />
+                  </Field>
+                  <Field label="Command" hint={help.command}>
+                    <DraftInput
+                      value={
+                        isCreate
+                          ? val!.command
+                          : eff("adapterConfig", "command", String(config.command ?? ""))
+                      }
+                      onCommit={(v) =>
+                        isCreate
+                          ? set!({ command: v, processRuntimeProfile: "" })
+                          : (() => {
+                              mark("adapterConfig", "command", v || undefined);
+                              mark("adapterConfig", "processRuntimeProfile", undefined);
+                            })()
+                      }
+                      immediate
+                      className={inputClass}
+                      placeholder="e.g. node, python"
+                    />
+                  </Field>
+                  <Field label="Args (comma-separated)" hint={help.args}>
+                    <DraftInput
+                      value={
+                        isCreate
+                          ? val!.args
+                          : eff("adapterConfig", "args", formatArgList(config.args))
+                      }
+                      onCommit={(v) =>
+                        isCreate
+                          ? set!({ args: v, processRuntimeProfile: "" })
+                          : (() => {
+                              mark("adapterConfig", "args", v ? parseCommaArgs(v) : undefined);
+                              mark("adapterConfig", "processRuntimeProfile", undefined);
+                            })()
+                      }
+                      immediate
+                      className={inputClass}
+                      placeholder="e.g. script.js, --flag"
+                    />
+                  </Field>
+                  <Field label="Working directory" hint={help.cwd}>
+                    <DraftInput
+                      value={
+                        isCreate
+                          ? val!.cwd
+                          : eff("adapterConfig", "cwd", String(config.cwd ?? ""))
+                      }
+                      onCommit={(v) =>
+                        isCreate
+                          ? set!({ cwd: v, processRuntimeProfile: "" })
+                          : (() => {
+                              mark("adapterConfig", "cwd", v || undefined);
+                              mark("adapterConfig", "processRuntimeProfile", undefined);
+                            })()
+                      }
+                      immediate
+                      className={inputClass}
+                      placeholder="/path/to/project"
+                    />
+                  </Field>
+                <Field label="Environment variables" hint={help.envVars}>
+                  <EnvVarEditor
+                    value={
+                      isCreate
+                        ? ((val!.envBindings ?? EMPTY_ENV) as Record<string, EnvBinding>)
+                        : ((eff("adapterConfig", "env", (config.env ?? EMPTY_ENV) as Record<string, EnvBinding>))
+                        )
+                    }
+                    secrets={availableSecrets}
+                    onCreateSecret={async (name, value) => {
+                      const created = await createSecret.mutateAsync({ name, value });
+                      return created;
+                    }}
+                    onChange={(env) =>
+                      isCreate
+                        ? set!({ envBindings: env ?? {}, envVars: "" })
+                        : mark("adapterConfig", "env", env)
+                    }
+                  />
+                </Field>
+                </div>
+              </CollapsibleSection>
+            ) : (
               <Field label="Environment variables" hint={help.envVars}>
                 <EnvVarEditor
                   value={
@@ -652,6 +1256,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                   }
                 />
               </Field>
+            )}
 
               {/* Edit-only: timeout + grace period */}
               {!isCreate && (
@@ -817,7 +1422,7 @@ function AdapterEnvironmentResult({ result }: { result: AdapterEnvironmentTestRe
 
 /* ---- Internal sub-components ---- */
 
-const ENABLED_ADAPTER_TYPES = new Set(["claude_local", "codex_local"]);
+const ENABLED_ADAPTER_TYPES = new Set(["claude_local", "codex_local", "process"]);
 
 /** Display list includes all real adapter types plus UI-only coming-soon entries. */
 const ADAPTER_DISPLAY_LIST: { value: string; label: string; comingSoon: boolean }[] = [
@@ -1126,12 +1731,20 @@ function ModelDropdown({
   onChange,
   open,
   onOpenChange,
+  label = "Model",
+  allowDefault = true,
+  placeholder,
+  disabled = false,
 }: {
   models: AdapterModel[];
   value: string;
   onChange: (id: string) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  label?: string;
+  allowDefault?: boolean;
+  placeholder?: string;
+  disabled?: boolean;
 }) {
   const [modelSearch, setModelSearch] = useState("");
   const selected = models.find((m) => m.id === value);
@@ -1142,18 +1755,25 @@ function ModelDropdown({
   });
 
   return (
-    <Field label="Model" hint={help.model}>
+    <Field label={label} hint={help.model}>
       <Popover
-        open={open}
+        open={disabled ? false : open}
         onOpenChange={(nextOpen) => {
+          if (disabled) return;
           onOpenChange(nextOpen);
           if (!nextOpen) setModelSearch("");
         }}
       >
         <PopoverTrigger asChild>
-          <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent/50 transition-colors w-full justify-between">
+          <button
+            disabled={disabled}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm transition-colors w-full justify-between",
+              disabled ? "opacity-60 cursor-not-allowed" : "hover:bg-accent/50",
+            )}
+          >
             <span className={cn(!value && "text-muted-foreground")}>
-              {selected ? selected.label : value || "Default"}
+              {selected ? selected.label : value || placeholder || (allowDefault ? "Default" : "Select model")}
             </span>
             <ChevronDown className="h-3 w-3 text-muted-foreground" />
           </button>
@@ -1167,18 +1787,20 @@ function ModelDropdown({
             autoFocus
           />
           <div className="max-h-[240px] overflow-y-auto">
-            <button
-              className={cn(
-                "flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded hover:bg-accent/50",
-                !value && "bg-accent",
-              )}
-              onClick={() => {
-                onChange("");
-                onOpenChange(false);
-              }}
-            >
-              Default
-            </button>
+            {allowDefault && (
+              <button
+                className={cn(
+                  "flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded hover:bg-accent/50",
+                  !value && "bg-accent",
+                )}
+                onClick={() => {
+                  onChange("");
+                  onOpenChange(false);
+                }}
+              >
+                Default
+              </button>
+            )}
             {filteredModels.map((m) => (
               <button
                 key={m.id}

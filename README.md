@@ -229,6 +229,12 @@ pnpm db:migrate       # Apply migrations
 
 See [doc/DEVELOPING.md](doc/DEVELOPING.md) for the full development guide.
 
+For production-style autonomous operation, see:
+
+- [doc/OPERATING-PLAYBOOK.md](doc/OPERATING-PLAYBOOK.md)
+- [doc/AGENT-ROLE-TEMPLATES.md](doc/AGENT-ROLE-TEMPLATES.md)
+- [doc/MODEL-ROUTING-PROFILES.md](doc/MODEL-ROUTING-PROFILES.md)
+
 <br/>
 
 ## Roadmap

@@ -25,6 +25,8 @@ import {
 import { logger } from "../middleware/logger.js";
 import { forbidden, HttpError, unauthorized } from "../errors.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
+import { authorizeIssueComment } from "./issue-comment-authorization.js";
+import { authorizeIssueMutation } from "./issue-mutation-authorization.js";
 
 const MAX_ATTACHMENT_BYTES = Number(process.env.PAPERCLIP_ATTACHMENT_MAX_BYTES) || 10 * 1024 * 1024;
 const ALLOWED_ATTACHMENT_CONTENT_TYPES = new Set([
@@ -115,20 +117,31 @@ export function issueRoutes(db: Db, storage: StorageService) {
     return null;
   }
 
-  async function assertAgentRunCheckoutOwnership(
+  async function assertAgentIssueMutationOwnership(
     req: Request,
     res: Response,
     issue: { id: string; companyId: string; status: string; assigneeAgentId: string | null },
   ) {
-    if (req.actor.type !== "agent") return true;
+    const decision = authorizeIssueMutation({
+      actorType: req.actor.type,
+      actorAgentId: req.actor.type === "agent" ? (req.actor.agentId ?? null) : null,
+      issueStatus: issue.status,
+      assigneeAgentId: issue.assigneeAgentId,
+    });
+    if (!decision.allowed) {
+      res.status(403).json({ error: decision.error ?? "Forbidden" });
+      return false;
+    }
+    if (!decision.requiresRunOwnership) {
+      return true;
+    }
+
     const actorAgentId = req.actor.agentId;
     if (!actorAgentId) {
       res.status(403).json({ error: "Agent authentication required" });
       return false;
     }
-    if (issue.status !== "in_progress" || issue.assigneeAgentId !== actorAgentId) {
-      return true;
-    }
+
     const runId = requireAgentRunId(req, res);
     if (!runId) return false;
     const ownership = await svc.assertCheckoutOwner(issue.id, actorAgentId, runId);
@@ -151,6 +164,28 @@ export function issueRoutes(db: Db, storage: StorageService) {
       });
     }
     return true;
+  }
+
+  async function assertAgentIssueCommentAuthorization(
+    req: Request,
+    res: Response,
+    issue: { id: string; companyId: string; status: string; assigneeAgentId: string | null },
+    reopenRequested: boolean,
+  ) {
+    const decision = authorizeIssueComment({
+      actorType: req.actor.type,
+      actorAgentId: req.actor.type === "agent" ? (req.actor.agentId ?? null) : null,
+      assigneeAgentId: issue.assigneeAgentId,
+      issueStatus: issue.status,
+      reopenRequested,
+    });
+    if (!decision.allowed) {
+      res.status(403).json({ error: decision.error ?? "Forbidden" });
+      return false;
+    }
+
+    if (!decision.requiresRunOwnership) return true;
+    return assertAgentIssueMutationOwnership(req, res, issue);
   }
 
   async function normalizeIssueIdentifier(rawId: string): Promise<string> {
@@ -422,7 +457,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
         await assertCanAssignTasks(req, existing.companyId);
       }
     }
-    if (!(await assertAgentRunCheckoutOwnership(req, res, existing))) return;
+    if (!(await assertAgentIssueMutationOwnership(req, res, existing))) return;
 
     const { comment: commentBody, hiddenAt: hiddenAtRaw, ...updateFields } = req.body;
     if (hiddenAtRaw !== undefined) {
@@ -657,7 +692,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       return;
     }
     assertCompanyAccess(req, existing.companyId);
-    if (!(await assertAgentRunCheckoutOwnership(req, res, existing))) return;
+    if (!(await assertAgentIssueMutationOwnership(req, res, existing))) return;
     const actorRunId = requireAgentRunId(req, res);
     if (req.actor.type === "agent" && !actorRunId) return;
 
@@ -706,11 +741,11 @@ export function issueRoutes(db: Db, storage: StorageService) {
       return;
     }
     assertCompanyAccess(req, issue.companyId);
-    if (!(await assertAgentRunCheckoutOwnership(req, res, issue))) return;
-
-    const actor = getActorInfo(req);
     const reopenRequested = req.body.reopen === true;
     const interruptRequested = req.body.interrupt === true;
+    if (!(await assertAgentIssueCommentAuthorization(req, res, issue, reopenRequested))) return;
+
+    const actor = getActorInfo(req);
     const isClosed = issue.status === "done" || issue.status === "cancelled";
     let reopened = false;
     let reopenFromStatus: string | null = null;
@@ -820,8 +855,12 @@ export function issueRoutes(db: Db, storage: StorageService) {
     void (async () => {
       const wakeups = new Map<string, Parameters<typeof heartbeat.wakeup>[1]>();
       const assigneeId = currentIssue.assigneeAgentId;
+      const isSelfAssigneeComment =
+        assigneeId != null && actor.actorType === "agent" && actor.agentId === assigneeId;
       if (assigneeId) {
-        if (reopened) {
+        if (isSelfAssigneeComment && !reopened && !interruptedRunId) {
+          // Prevent comment-driven self-wakeup loops when an assignee agent comments on its own issue.
+        } else if (reopened) {
           wakeups.set(assigneeId, {
             source: "automation",
             triggerDetail: "system",

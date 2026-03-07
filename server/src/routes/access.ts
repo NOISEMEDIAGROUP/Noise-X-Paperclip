@@ -1,7 +1,4 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { Router } from "express";
 import type { Request } from "express";
 import { and, eq, isNull, desc } from "drizzle-orm";
@@ -11,6 +8,7 @@ import {
   authUsers,
   invites,
   joinRequests,
+  skills,
 } from "@paperclipai/db";
 import {
   acceptInviteSchema,
@@ -27,6 +25,11 @@ import { validate } from "../middleware/validate.js";
 import { accessService, agentService, logActivity } from "../services/index.js";
 import { assertCompanyAccess } from "./authz.js";
 import { claimBoardOwnership, inspectBoardClaimChallenge } from "../board-claim.js";
+import {
+  listBuiltinSkillNames,
+  normalizeSkillName,
+  readBuiltinSkillMarkdown,
+} from "../lib/skills.js";
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -54,21 +57,15 @@ function requestBaseUrl(req: Request) {
   return `${proto}://${host}`;
 }
 
-function readSkillMarkdown(skillName: string): string | null {
-  const normalized = skillName.trim().toLowerCase();
-  if (normalized !== "paperclip" && normalized !== "paperclip-create-agent") return null;
-  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-  const candidates = [
-    path.resolve(moduleDir, "../../skills", normalized, "SKILL.md"),  // published: dist/routes/ -> <pkg>/skills/
-    path.resolve(process.cwd(), "skills", normalized, "SKILL.md"),    // cwd (e.g. monorepo root)
-    path.resolve(moduleDir, "../../../skills", normalized, "SKILL.md"), // dev: src/routes/ -> repo root/skills/
-  ];
-  for (const skillPath of candidates) {
-    try {
-      return fs.readFileSync(skillPath, "utf8");
-    } catch {
-      // Continue to next candidate.
-    }
+function resolveSkillCompanyId(req: Request): string | null {
+  if (req.actor.type === "agent" && req.actor.companyId) {
+    return req.actor.companyId;
+  }
+  const queryCompanyId = req.query.companyId;
+  if (typeof queryCompanyId === "string" && queryCompanyId.trim().length > 0) {
+    const companyId = queryCompanyId.trim();
+    assertCompanyAccess(req, companyId);
+    return companyId;
   }
   return null;
 }
@@ -496,20 +493,45 @@ export function accessRoutes(
     if (!allowed) throw forbidden("Permission denied");
   }
 
-  router.get("/skills/index", (_req, res) => {
-    res.json({
-      skills: [
-        { name: "paperclip", path: "/api/skills/paperclip" },
-        { name: "paperclip-create-agent", path: "/api/skills/paperclip-create-agent" },
-      ],
-    });
+  router.get("/skills/index", async (req, res) => {
+    const names = new Set(listBuiltinSkillNames());
+    const companyId = resolveSkillCompanyId(req);
+    if (companyId) {
+      const custom = await db
+        .select({ name: skills.name })
+        .from(skills)
+        .where(eq(skills.companyId, companyId));
+      for (const skill of custom) {
+        names.add(skill.name);
+      }
+    }
+
+    const skillsList = Array.from(names)
+      .sort()
+      .map((name) => ({ name, path: `/api/skills/${name}` }));
+    res.json({ skills: skillsList });
   });
 
-  router.get("/skills/:skillName", (req, res) => {
-    const skillName = (req.params.skillName as string).trim().toLowerCase();
-    const markdown = readSkillMarkdown(skillName);
-    if (!markdown) throw notFound("Skill not found");
-    res.type("text/markdown").send(markdown);
+  router.get("/skills/:skillName", async (req, res) => {
+    const skillName = normalizeSkillName(req.params.skillName as string);
+    if (!skillName) throw notFound("Skill not found");
+
+    const builtinMarkdown = readBuiltinSkillMarkdown(skillName);
+    if (builtinMarkdown) {
+      res.type("text/markdown").send(builtinMarkdown);
+      return;
+    }
+
+    const companyId = resolveSkillCompanyId(req);
+    if (!companyId) throw notFound("Skill not found");
+    const [customSkill] = await db
+      .select({ content: skills.content })
+      .from(skills)
+      .where(and(eq(skills.companyId, companyId), eq(skills.name, skillName)))
+      .limit(1);
+    if (!customSkill) throw notFound("Skill not found");
+
+    res.type("text/markdown").send(customSkill.content);
   });
 
   router.post(

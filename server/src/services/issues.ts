@@ -45,6 +45,18 @@ function applyStatusSideEffects(
   return patch;
 }
 
+export function buildIssueReleasePatch(updatedAt: Date) {
+  return {
+    status: "todo" as const,
+    assigneeAgentId: null,
+    checkoutRunId: null,
+    executionRunId: null,
+    executionAgentNameKey: null,
+    executionLockedAt: null,
+    updatedAt,
+  };
+}
+
 export interface IssueFilters {
   status?: string;
   assigneeAgentId?: string;
@@ -727,14 +739,10 @@ export function issueService(db: Db) {
         });
       }
 
+      const updatedAt = new Date();
       const updated = await db
         .update(issues)
-        .set({
-          status: "todo",
-          assigneeAgentId: null,
-          checkoutRunId: null,
-          updatedAt: new Date(),
-        })
+        .set(buildIssueReleasePatch(updatedAt))
         .where(eq(issues.id, id))
         .returning()
         .then((rows) => rows[0] ?? null);

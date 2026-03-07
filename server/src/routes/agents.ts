@@ -2,7 +2,7 @@ import { Router, type Request } from "express";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { Db } from "@paperclipai/db";
-import { agents as agentsTable, companies, heartbeatRuns } from "@paperclipai/db";
+import { agents as agentsTable, approvals, companies, heartbeatRuns } from "@paperclipai/db";
 import { and, desc, eq, inArray, not, sql } from "drizzle-orm";
 import {
   createAgentKeySchema,
@@ -36,6 +36,11 @@ import {
   DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX,
   DEFAULT_CODEX_LOCAL_MODEL,
 } from "@paperclipai/adapter-codex-local";
+import {
+  listProcessRuntimeProfiles,
+  applyProcessRuntimeProfileDefaults,
+} from "../adapters/process/runtime-profiles.js";
+import { buildAgentReadinessReport } from "./agent-readiness.js";
 
 export function agentRoutes(db: Db) {
   const DEFAULT_INSTRUCTIONS_PATH_KEYS: Record<string, string> = {
@@ -193,6 +198,27 @@ export function agentRoutes(db: Db) {
     return next;
   }
 
+  function applyProcessRuntimeProfileDefaultsOrThrowUnprocessable(
+    adapterType: string | null | undefined,
+    adapterConfig: Record<string, unknown>,
+  ): Record<string, unknown> {
+    try {
+      return applyProcessRuntimeProfileDefaults(adapterType, adapterConfig);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown process runtime profile";
+      throw unprocessable(message);
+    }
+  }
+
+  function validateProcessRuntimeConfig(
+    adapterType: string | null | undefined,
+    adapterConfig: Record<string, unknown>,
+  ): string | null {
+    if (adapterType !== "process") return null;
+    if (asNonEmptyString(adapterConfig.command)) return null;
+    return "Alibaba Cloud runtime command is required. Set adapterConfig.command in Advanced process settings, or select a process runtime profile.";
+  }
+
   function resolveInstructionsFilePath(candidatePath: string, adapterConfig: Record<string, unknown>) {
     const trimmed = candidatePath.trim();
     if (path.isAbsolute(trimmed)) return trimmed;
@@ -330,6 +356,10 @@ export function agentRoutes(db: Db) {
     res.json(models);
   });
 
+  router.get("/adapters/process/runtime-profiles", (_req, res) => {
+    res.json(listProcessRuntimeProfiles());
+  });
+
   router.post(
     "/companies/:companyId/adapters/:type/test-environment",
     validate(testAdapterEnvironmentSchema),
@@ -376,6 +406,39 @@ export function agentRoutes(db: Db) {
       return;
     }
     res.json(result.map((agent) => redactForRestrictedAgentView(agent)));
+  });
+
+  router.get("/companies/:companyId/agents/readiness", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    await assertCanReadConfigurations(req, companyId);
+
+    const rows = await svc.list(companyId);
+    const recentRuns = await db
+      .select({
+        agentId: heartbeatRuns.agentId,
+        status: heartbeatRuns.status,
+        error: heartbeatRuns.error,
+        createdAt: heartbeatRuns.createdAt,
+      })
+      .from(heartbeatRuns)
+      .where(eq(heartbeatRuns.companyId, companyId))
+      .orderBy(desc(heartbeatRuns.createdAt))
+      .limit(500);
+
+    const pendingApprovals = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(approvals)
+      .where(and(eq(approvals.companyId, companyId), eq(approvals.status, "pending")))
+      .then((items) => Number(items[0]?.count ?? 0));
+
+    res.json(
+      buildAgentReadinessReport({
+        companyId,
+        agents: rows,
+        recentRuns,
+        pendingApprovals,
+      }),
+    );
   });
 
   router.get("/companies/:companyId/org", async (req, res) => {
@@ -704,10 +767,22 @@ export function agentRoutes(db: Db) {
       assertBoard(req);
     }
 
-    const requestedAdapterConfig = applyCreateDefaultsByAdapterType(
+    let requestedAdapterConfig = applyCreateDefaultsByAdapterType(
       req.body.adapterType,
       ((req.body.adapterConfig ?? {}) as Record<string, unknown>),
     );
+    requestedAdapterConfig = applyProcessRuntimeProfileDefaultsOrThrowUnprocessable(
+      req.body.adapterType,
+      requestedAdapterConfig,
+    );
+    const processRuntimeError = validateProcessRuntimeConfig(
+      req.body.adapterType,
+      requestedAdapterConfig,
+    );
+    if (processRuntimeError) {
+      res.status(422).json({ error: processRuntimeError });
+      return;
+    }
     const normalizedAdapterConfig = await secretsSvc.normalizeAdapterConfigForPersistence(
       companyId,
       requestedAdapterConfig,
@@ -873,6 +948,11 @@ export function agentRoutes(db: Db) {
     }
 
     const patchData = { ...(req.body as Record<string, unknown>) };
+    const requestedAdapterType = asNonEmptyString(patchData.adapterType);
+    const nextAdapterType = requestedAdapterType ?? existing.adapterType;
+    const touchesAdapterConfig = Object.prototype.hasOwnProperty.call(patchData, "adapterConfig");
+    const touchesAdapterType = Object.prototype.hasOwnProperty.call(patchData, "adapterType");
+
     if (Object.prototype.hasOwnProperty.call(patchData, "adapterConfig")) {
       const adapterConfig = asRecord(patchData.adapterConfig);
       if (!adapterConfig) {
@@ -885,11 +965,34 @@ export function agentRoutes(db: Db) {
       if (changingInstructionsPath) {
         await assertCanManageInstructionsPath(req, existing);
       }
-      patchData.adapterConfig = await secretsSvc.normalizeAdapterConfigForPersistence(
+      let normalizedAdapterConfig = await secretsSvc.normalizeAdapterConfigForPersistence(
         existing.companyId,
         adapterConfig,
         { strictMode: strictSecretsMode },
       );
+      normalizedAdapterConfig = applyProcessRuntimeProfileDefaultsOrThrowUnprocessable(
+        nextAdapterType,
+        normalizedAdapterConfig,
+      );
+      patchData.adapterConfig = normalizedAdapterConfig;
+    }
+
+    if (touchesAdapterType && !touchesAdapterConfig) {
+      const existingAdapterConfig = asRecord(existing.adapterConfig) ?? {};
+      const withDefaults = applyProcessRuntimeProfileDefaultsOrThrowUnprocessable(
+        nextAdapterType,
+        existingAdapterConfig,
+      );
+      patchData.adapterConfig = withDefaults;
+    }
+
+    if (touchesAdapterType || touchesAdapterConfig) {
+      const effectiveAdapterConfig = asRecord(patchData.adapterConfig) ?? {};
+      const processRuntimeError = validateProcessRuntimeConfig(nextAdapterType, effectiveAdapterConfig);
+      if (processRuntimeError) {
+        res.status(422).json({ error: processRuntimeError });
+        return;
+      }
     }
 
     const actor = getActorInfo(req);

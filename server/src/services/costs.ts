@@ -1,7 +1,8 @@
 import { and, desc, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { activityLog, agents, companies, costEvents, heartbeatRuns, issues, projects } from "@paperclipai/db";
+import { activityLog, agentRuntimeState, agents, companies, costEvents, heartbeatRuns, issues, projects } from "@paperclipai/db";
 import { notFound, unprocessable } from "../errors.js";
+import { calculateCost } from "./pricing.js";
 
 export interface CostDateRange {
   from?: Date;
@@ -22,9 +23,29 @@ export function costService(db: Db) {
         throw unprocessable("Agent does not belong to company");
       }
 
+      // Server-side cost calculation: if caller sent 0 cents but has tokens + provider/model
+      let resolvedCostCents = data.costCents ?? 0;
+      if (resolvedCostCents === 0 && data.provider && data.model) {
+        const inputTokens = data.inputTokens ?? 0;
+        const outputTokens = data.outputTokens ?? 0;
+        const cachedInputTokens = data.cachedInputTokens ?? 0;
+        if (inputTokens > 0 || outputTokens > 0) {
+          const calculated = calculateCost({
+            provider: data.provider,
+            model: data.model,
+            inputTokens,
+            outputTokens,
+            cachedInputTokens,
+          });
+          if (calculated !== null) {
+            resolvedCostCents = Math.max(0, Math.round(calculated * 100));
+          }
+        }
+      }
+
       const event = await db
         .insert(costEvents)
-        .values({ ...data, companyId })
+        .values({ ...data, companyId, costCents: resolvedCostCents })
         .returning()
         .then((rows) => rows[0]);
 
@@ -61,6 +82,21 @@ export function costService(db: Db) {
           .update(agents)
           .set({ status: "paused", updatedAt: new Date() })
           .where(eq(agents.id, updatedAgent.id));
+      }
+
+      // Roll up token counts into agentRuntimeState if it exists
+      const hasTokens = (event.inputTokens ?? 0) > 0 || (event.outputTokens ?? 0) > 0 || (event.cachedInputTokens ?? 0) > 0;
+      if (hasTokens || event.costCents > 0) {
+        await db
+          .update(agentRuntimeState)
+          .set({
+            totalInputTokens: sql`${agentRuntimeState.totalInputTokens} + ${event.inputTokens ?? 0}`,
+            totalOutputTokens: sql`${agentRuntimeState.totalOutputTokens} + ${event.outputTokens ?? 0}`,
+            totalCachedInputTokens: sql`${agentRuntimeState.totalCachedInputTokens} + ${event.cachedInputTokens ?? 0}`,
+            totalCostCents: sql`${agentRuntimeState.totalCostCents} + ${event.costCents}`,
+            updatedAt: new Date(),
+          })
+          .where(eq(agentRuntimeState.agentId, event.agentId));
       }
 
       return event;

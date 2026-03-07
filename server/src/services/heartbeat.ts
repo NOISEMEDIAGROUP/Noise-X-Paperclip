@@ -18,10 +18,12 @@ import { publishLiveEvent } from "./live-events.js";
 import { getRunLogStore, type RunLogHandle } from "./run-log-store.js";
 import { getServerAdapter, runningProcesses } from "../adapters/index.js";
 import type { AdapterExecutionResult, AdapterInvocationMeta, AdapterSessionCodec } from "../adapters/index.js";
+import { calculateCost } from "./pricing.js";
 import { createLocalAgentJwt } from "../agent-auth-jwt.js";
 import { parseObject, asBoolean, asNumber, appendWithCap, MAX_EXCERPT_BYTES } from "../adapters/utils.js";
 import { secretService } from "./secrets.js";
 import { resolveDefaultAgentWorkspaceDir } from "../home-paths.js";
+import { shouldBypassIssueExecutionLock } from "./issue-execution-lock-policy.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
@@ -807,8 +809,23 @@ export function heartbeatService(db: Db) {
     const inputTokens = usage?.inputTokens ?? 0;
     const outputTokens = usage?.outputTokens ?? 0;
     const cachedInputTokens = usage?.cachedInputTokens ?? 0;
-    const additionalCostCents = Math.max(0, Math.round((result.costUsd ?? 0) * 100));
     const hasTokenUsage = inputTokens > 0 || outputTokens > 0 || cachedInputTokens > 0;
+
+    let costUsd = result.costUsd ?? null;
+    if (costUsd === null && hasTokenUsage && result.provider && result.model) {
+      const calculated = calculateCost({
+        provider: result.provider,
+        model: result.model,
+        inputTokens,
+        outputTokens,
+        cachedInputTokens,
+      });
+      if (calculated !== null) {
+        costUsd = calculated;
+      }
+    }
+
+    const additionalCostCents = Math.max(0, Math.round((costUsd ?? 0) * 100));
 
     await db
       .update(agentRuntimeState)
@@ -834,6 +851,7 @@ export function heartbeatService(db: Db) {
         model: result.model ?? "unknown",
         inputTokens,
         outputTokens,
+        cachedInputTokens,
         costCents: additionalCostCents,
         occurredAt: new Date(),
       });
@@ -1495,9 +1513,10 @@ export function heartbeatService(db: Db) {
       return null;
     }
 
-    const bypassIssueExecutionLock =
-      reason === "issue_comment_mentioned" ||
-      readNonEmptyString(enrichedContextSnapshot.wakeReason) === "issue_comment_mentioned";
+    const bypassIssueExecutionLock = shouldBypassIssueExecutionLock(
+      reason,
+      readNonEmptyString(enrichedContextSnapshot.wakeReason),
+    );
 
     if (issueId && !bypassIssueExecutionLock) {
       const agentNameKey = normalizeAgentNameKey(agent.name);

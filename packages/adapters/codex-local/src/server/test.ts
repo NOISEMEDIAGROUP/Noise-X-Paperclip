@@ -97,23 +97,45 @@ export async function testEnvironment(
     });
   }
 
-  const configOpenAiKey = env.OPENAI_API_KEY;
-  const hostOpenAiKey = process.env.OPENAI_API_KEY;
-  if (isNonEmpty(configOpenAiKey) || isNonEmpty(hostOpenAiKey)) {
-    const source = isNonEmpty(configOpenAiKey) ? "adapter config env" : "server environment";
+  const configuredModelApiKeyEnv = asString(config.modelApiKeyEnv, "").trim();
+  const expectedApiKeyEnv = configuredModelApiKeyEnv || "OPENAI_API_KEY";
+  const configApiKey = env[expectedApiKeyEnv];
+  const hostApiKey = process.env[expectedApiKeyEnv];
+  if (isNonEmpty(configApiKey) || isNonEmpty(hostApiKey)) {
+    const source = isNonEmpty(configApiKey) ? "adapter config env" : "server environment";
     checks.push({
       code: "codex_openai_api_key_present",
       level: "info",
-      message: "OPENAI_API_KEY is set for Codex authentication.",
+      message: `${expectedApiKeyEnv} is set for Codex authentication.`,
       detail: `Detected in ${source}.`,
     });
   } else {
     checks.push({
       code: "codex_openai_api_key_missing",
       level: "warn",
-      message: "OPENAI_API_KEY is not set. Codex runs may fail until authentication is configured.",
-      hint: "Set OPENAI_API_KEY in adapter env, shell environment, or Codex auth configuration.",
+      message: `${expectedApiKeyEnv} is not set. Codex runs may fail until authentication is configured.`,
+      hint: `Set ${expectedApiKeyEnv} in adapter env, shell environment, or Codex auth configuration.`,
     });
+  }
+
+  const modelProvider = asString(config.modelProvider, "").trim();
+  const modelBaseUrl = asString(config.modelBaseUrl, "").trim();
+  if (modelProvider) {
+    if (modelBaseUrl) {
+      checks.push({
+        code: "codex_model_provider_configured",
+        level: "info",
+        message: `Codex custom model provider '${modelProvider}' configured.`,
+        detail: modelBaseUrl,
+      });
+    } else {
+      checks.push({
+        code: "codex_model_provider_missing_base_url",
+        level: "warn",
+        message: `Codex model provider '${modelProvider}' is set without modelBaseUrl.`,
+        hint: "Set modelBaseUrl to the provider's OpenAI-compatible endpoint.",
+      });
+    }
   }
 
   const canRunProbe =

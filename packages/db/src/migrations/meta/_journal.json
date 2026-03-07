@@ -169,6 +169,20 @@
       "when": 1772139727599,
       "tag": "0023_fair_lethal_legion",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1772778412647,
+      "tag": "0024_next_kree",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1772814536132,
+      "tag": "0025_long_caretaker",
+      "breakpoints": true
     }
   ]
 }
