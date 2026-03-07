@@ -184,6 +184,13 @@ export function issueRoutes(db: Db, storage: StorageService) {
     }
   });
 
+  // Common malformed path when companyId is empty in "/api/companies/{companyId}/issues".
+  router.get("/issues", (_req, res) => {
+    res.status(400).json({
+      error: "Missing companyId in path. Use /api/companies/{companyId}/issues.",
+    });
+  });
+
   router.get("/companies/:companyId/issues", async (req, res) => {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
@@ -432,7 +439,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       details: { title: issue.title, identifier: issue.identifier },
     });
 
-    if (issue.assigneeAgentId) {
+    if (issue.assigneeAgentId && issue.status !== "backlog") {
       void heartbeat
         .wakeup(issue.assigneeAgentId, {
           source: "assignment",
@@ -522,6 +529,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
     }
 
     const actor = getActorInfo(req);
+    const hasFieldChanges = Object.keys(previous).length > 0;
     await logActivity(db, {
       companyId: issue.companyId,
       actorType: actor.actorType,
@@ -531,7 +539,12 @@ export function issueRoutes(db: Db, storage: StorageService) {
       action: "issue.updated",
       entityType: "issue",
       entityId: issue.id,
-      details: { ...updateFields, identifier: issue.identifier, _previous: Object.keys(previous).length > 0 ? previous : undefined },
+      details: {
+        ...updateFields,
+        identifier: issue.identifier,
+        ...(commentBody ? { source: "comment" } : {}),
+        _previous: hasFieldChanges ? previous : undefined,
+      },
     });
 
     let comment = null;
@@ -555,6 +568,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
           bodySnippet: comment.body.slice(0, 120),
           identifier: issue.identifier,
           issueTitle: issue.title,
+          ...(hasFieldChanges ? { updated: true } : {}),
         },
       });
 
@@ -566,7 +580,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
     void (async () => {
       const wakeups = new Map<string, Parameters<typeof heartbeat.wakeup>[1]>();
 
-      if (assigneeChanged && issue.assigneeAgentId) {
+      if (assigneeChanged && issue.assigneeAgentId && issue.status !== "backlog") {
         wakeups.set(issue.assigneeAgentId, {
           source: "assignment",
           triggerDetail: "system",
@@ -588,6 +602,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
 
         for (const mentionedId of mentionedIds) {
           if (wakeups.has(mentionedId)) continue;
+          if (actor.actorType === "agent" && actor.actorId === mentionedId) continue;
           wakeups.set(mentionedId, {
             source: "automation",
             triggerDetail: "system",
@@ -899,7 +914,10 @@ export function issueRoutes(db: Db, storage: StorageService) {
     void (async () => {
       const wakeups = new Map<string, Parameters<typeof heartbeat.wakeup>[1]>();
       const assigneeId = currentIssue.assigneeAgentId;
-      if (assigneeId) {
+      const actorIsAgent = actor.actorType === "agent";
+      const selfComment = actorIsAgent && actor.actorId === assigneeId;
+      const skipWake = selfComment || isClosed;
+      if (assigneeId && (reopened || !skipWake)) {
         if (reopened) {
           wakeups.set(assigneeId, {
             source: "automation",
@@ -958,6 +976,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
 
       for (const mentionedId of mentionedIds) {
         if (wakeups.has(mentionedId)) continue;
+        if (actorIsAgent && actor.actorId === mentionedId) continue;
         wakeups.set(mentionedId, {
           source: "automation",
           triggerDetail: "system",

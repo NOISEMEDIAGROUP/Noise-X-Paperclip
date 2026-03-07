@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { isValidElement, useEffect, useId, useState, type CSSProperties, type ReactNode } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { parseProjectMentionHref } from "@paperclipai/shared";
@@ -8,6 +8,30 @@ import { useTheme } from "../context/ThemeContext";
 interface MarkdownBodyProps {
   children: string;
   className?: string;
+}
+
+let mermaidLoaderPromise: Promise<typeof import("mermaid").default> | null = null;
+
+function loadMermaid() {
+  if (!mermaidLoaderPromise) {
+    mermaidLoaderPromise = import("mermaid").then((module) => module.default);
+  }
+  return mermaidLoaderPromise;
+}
+
+function flattenText(value: ReactNode): string {
+  if (value == null) return "";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) return value.map((item) => flattenText(item)).join("");
+  return "";
+}
+
+function extractMermaidSource(children: ReactNode): string | null {
+  if (!isValidElement(children)) return null;
+  const childProps = children.props as { className?: unknown; children?: ReactNode };
+  if (typeof childProps.className !== "string") return null;
+  if (!/\blanguage-mermaid\b/i.test(childProps.className)) return null;
+  return flattenText(childProps.children).replace(/\n$/, "");
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
@@ -41,10 +65,64 @@ const FILE_REF_RE = /\/api\/(?:assets|attachments)\/[^/]+\/content/;
  */
 function linkifyFileReferences(md: string): string {
   // Match bare file paths that are NOT already inside markdown link syntax [text](url)
-  // Negative lookbehind for ]( and negative lookbehind for ![ prevents double-wrapping
   return md.replace(
     /(?<!\]\()(?<!\()(?<!")(?:^|(?<=\s))(\/api\/(?:assets|attachments)\/[^\s)]+\/content)(?=[\s),.]|$)/gm,
     "[$1]($1)",
+  );
+}
+
+function MermaidDiagramBlock({ source, darkMode }: { source: string; darkMode: boolean }) {
+  const renderId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const [svg, setSvg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setSvg(null);
+    setError(null);
+
+    loadMermaid()
+      .then(async (mermaid) => {
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: "strict",
+          theme: darkMode ? "dark" : "default",
+          fontFamily: "inherit",
+          suppressErrorRendering: true,
+        });
+        const rendered = await mermaid.render(`paperclip-mermaid-${renderId}`, source);
+        if (!active) return;
+        setSvg(rendered.svg);
+      })
+      .catch((err) => {
+        if (!active) return;
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : "Failed to render Mermaid diagram.";
+        setError(message);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [darkMode, renderId, source]);
+
+  return (
+    <div className="paperclip-mermaid">
+      {svg ? (
+        <div dangerouslySetInnerHTML={{ __html: svg }} />
+      ) : (
+        <>
+          <p className={cn("paperclip-mermaid-status", error && "paperclip-mermaid-status-error")}>
+            {error ? `Unable to render Mermaid diagram: ${error}` : "Rendering Mermaid diagram..."}
+          </p>
+          <pre className="paperclip-mermaid-source">
+            <code className="language-mermaid">{source}</code>
+          </pre>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -61,6 +139,13 @@ export function MarkdownBody({ children, className }: MarkdownBodyProps) {
       <Markdown
         remarkPlugins={[remarkGfm]}
         components={{
+          pre: ({ node: _node, children: preChildren, ...preProps }) => {
+            const mermaidSource = extractMermaidSource(preChildren);
+            if (mermaidSource) {
+              return <MermaidDiagramBlock source={mermaidSource} darkMode={theme === "dark"} />;
+            }
+            return <pre {...preProps}>{preChildren}</pre>;
+          },
           a: ({ href, children: linkChildren }) => {
             const parsed = href ? parseProjectMentionHref(href) : null;
             if (parsed) {
@@ -72,13 +157,6 @@ export function MarkdownBody({ children, className }: MarkdownBodyProps) {
                   style={mentionChipStyle(parsed.color)}
                 >
                   {label}
-                </a>
-              );
-            }
-            if (href && FILE_REF_RE.test(href)) {
-              return (
-                <a href={href} target="_blank" rel="noreferrer">
-                  {linkChildren}
                 </a>
               );
             }
