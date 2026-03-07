@@ -41,7 +41,10 @@ export type MigrationState =
     };
 
 export function createDb(url: string) {
-  const sql = postgres(url);
+  // Add client_encoding=UTF8 to handle Windows encoding issues
+  const separator = url.includes("?") ? "&" : "?";
+  const urlWithEncoding = `${url}${separator}options=-c%20client_encoding%3DUTF8`;
+  const sql = postgres(urlWithEncoding);
   return drizzlePg(sql, { schema });
 }
 

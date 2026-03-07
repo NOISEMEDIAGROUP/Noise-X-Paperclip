@@ -28,6 +28,17 @@ const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_MAX = 10;
 const DEFERRED_WAKE_CONTEXT_KEY = "_paperclipWakeContext";
+
+// PostgreSQL integer column max is 2147483647. Windows NTSTATUS codes can exceed this.
+function safeExitCode(code: number | null | undefined): number | null {
+  if (code === null || code === undefined) return null;
+  if (code > 2147483647) {
+    logger.warn({ rawExitCode: code }, "Capping exit code to 2147483647 for database storage");
+    return 2147483647;
+  }
+  return code;
+}
+
 const startLocksByAgent = new Map<string, Promise<void>>();
 const REPO_ONLY_CWD_SENTINEL = "/__paperclip_repo_only__";
 
@@ -1336,7 +1347,7 @@ export function heartbeatService(db: Db) {
               : outcome === "failed"
                 ? (adapterResult.errorCode ?? "adapter_failed")
                 : null,
-        exitCode: adapterResult.exitCode,
+        exitCode: safeExitCode(adapterResult.exitCode),
         signal: adapterResult.signal,
         usageJson,
         resultJson: adapterResult.resultJson ?? null,
@@ -1362,7 +1373,7 @@ export function heartbeatService(db: Db) {
           message: `run ${outcome}`,
           payload: {
             status,
-            exitCode: adapterResult.exitCode,
+            exitCode: safeExitCode(adapterResult.exitCode),
           },
         });
         await releaseIssueExecutionAndPromote(finalizedRun);
