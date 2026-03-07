@@ -88,6 +88,8 @@ export type {
   CostEvent,
   CostSummary,
   CostByAgent,
+  CostByProviderModel,
+  CostWindowSpendRow,
   HeartbeatRun,
   HeartbeatRunEvent,
   AgentRuntimeState,
