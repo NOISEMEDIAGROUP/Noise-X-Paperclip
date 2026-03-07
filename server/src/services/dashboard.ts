@@ -111,15 +111,19 @@ export function dashboardService(db: Db) {
       const runCounts: Record<string, number> = {};
       let totalRuns = 0;
       let failedRuns = 0;
+      let terminalRuns = 0;
       for (const row of runRows) {
         const count = Number(row.count);
         runCounts[row.status] = count;
         totalRuns += count;
         if (row.status === "failed" || row.status === "timed_out") {
           failedRuns += count;
+          terminalRuns += count;
+        } else if (row.status === "succeeded" || row.status === "cancelled") {
+          terminalRuns += count;
         }
       }
-      const failureRate = totalRuns > 0 ? failedRuns / totalRuns : 0;
+      const failureRate = terminalRuns > 0 ? failedRuns / terminalRuns : 0;
 
       return {
         companyId,
@@ -140,6 +144,8 @@ export function dashboardService(db: Db) {
           succeeded: runCounts.succeeded ?? 0,
           failed: failedRuns,
           cancelled: runCounts.cancelled ?? 0,
+          queued: runCounts.queued ?? 0,
+          running: runCounts.running ?? 0,
           failureRatePercent: Number((failureRate * 100).toFixed(2)),
         },
         pendingApprovals,
