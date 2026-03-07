@@ -253,7 +253,7 @@ export function ActiveAgentsPanel({ companyId }: ActiveAgentsPanelProps) {
         pendingByRunRef.current.delete(key);
       }
     }
-  }, [runs, runIdsKey]);
+  }, [runIdsKey]);
 
   useEffect(() => {
     setFeedByRun(new Map());
@@ -415,7 +415,7 @@ export function ActiveAgentsPanel({ companyId }: ActiveAgentsPanelProps) {
         socket.close(1000, "active_agents_panel_unmount");
       }
     };
-  }, [activeRunIdsKey, companyId, activeRuns.length]);
+  }, [activeRunIdsKey, companyId]);
 
   return (
     <div>
