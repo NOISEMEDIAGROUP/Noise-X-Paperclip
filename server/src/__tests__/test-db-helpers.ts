@@ -10,7 +10,6 @@ export const hasTestDatabase = Boolean(process.env.TEST_DATABASE_URL);
 
 export async function createTestDatabase(): Promise<Db> {
   const url = process.env.TEST_DATABASE_URL ?? DEFAULT_TEST_DATABASE_URL;
-  const db = createDb(url);
-  await applyPendingMigrations(db);
-  return db;
+  await applyPendingMigrations(url);
+  return createDb(url);
 }

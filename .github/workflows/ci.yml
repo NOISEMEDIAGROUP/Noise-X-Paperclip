@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint-and-typecheck:
-    name: Lint & Typecheck
+  typecheck:
+    name: Typecheck
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
