@@ -37,6 +37,7 @@ export interface Config {
   allowedHostnames: string[];
   authBaseUrlMode: AuthBaseUrlMode;
   authPublicBaseUrl: string | undefined;
+  authDisableSignUp: boolean;
   databaseMode: DatabaseMode;
   databaseUrl: string | undefined;
   embeddedPostgresDataDir: string;
@@ -53,6 +54,8 @@ export interface Config {
   backupRemoteS3RegionDefault: string;
   backupRemoteS3EndpointDefault: string | undefined;
   backupRemoteS3PrefixDefault: string;
+  backupRemoteS3AccessKeyIdDefault: string | undefined;
+  backupRemoteS3SecretAccessKeyDefault: string | undefined;
   backupRemoteS3ForcePathStyleDefault: boolean;
   backupRemoteS3DeleteOnDeleteDefault: boolean;
   backupRemoteS3ServerSideEncryptionDefault: "none" | "AES256" | "aws:kms";
@@ -154,6 +157,11 @@ export function loadConfig(): Config {
     authBaseUrlModeFromEnv ??
     fileConfig?.auth?.baseUrlMode ??
     (authPublicBaseUrl ? "explicit" : "auto");
+  const disableSignUpFromEnv = process.env.PAPERCLIP_AUTH_DISABLE_SIGN_UP;
+  const authDisableSignUp: boolean =
+    disableSignUpFromEnv !== undefined
+      ? disableSignUpFromEnv === "true"
+      : (fileConfig?.auth?.disableSignUp ?? false);
   const allowedHostnamesFromEnvRaw = process.env.PAPERCLIP_ALLOWED_HOSTNAMES;
   const allowedHostnamesFromEnv = allowedHostnamesFromEnvRaw
     ? allowedHostnamesFromEnvRaw
@@ -217,6 +225,8 @@ export function loadConfig(): Config {
   const backupRemoteS3RegionDefault = process.env.PAPERCLIP_BACKUP_REMOTE_S3_REGION?.trim() ?? "us-east-1";
   const backupRemoteS3EndpointDefault = process.env.PAPERCLIP_BACKUP_REMOTE_S3_ENDPOINT?.trim() || undefined;
   const backupRemoteS3PrefixDefault = process.env.PAPERCLIP_BACKUP_REMOTE_S3_PREFIX?.trim() ?? "";
+  const backupRemoteS3AccessKeyIdDefault = process.env.PAPERCLIP_BACKUP_REMOTE_S3_ACCESS_KEY_ID?.trim() || undefined;
+  const backupRemoteS3SecretAccessKeyDefault = process.env.PAPERCLIP_BACKUP_REMOTE_S3_SECRET_ACCESS_KEY?.trim() || undefined;
   const backupRemoteS3ForcePathStyleDefault = process.env.PAPERCLIP_BACKUP_REMOTE_S3_FORCE_PATH_STYLE === "true";
   const backupRemoteS3DeleteOnDeleteDefault = process.env.PAPERCLIP_BACKUP_REMOTE_S3_DELETE_ON_DELETE === "true";
   const backupRemoteS3ServerSideEncryptionEnv = process.env.PAPERCLIP_BACKUP_REMOTE_S3_SSE?.trim();
@@ -234,6 +244,7 @@ export function loadConfig(): Config {
     allowedHostnames,
     authBaseUrlMode,
     authPublicBaseUrl,
+    authDisableSignUp,
     databaseMode: fileDatabaseMode,
     databaseUrl: process.env.DATABASE_URL ?? fileDbUrl,
     embeddedPostgresDataDir: resolveHomeAwarePath(
@@ -252,6 +263,8 @@ export function loadConfig(): Config {
     backupRemoteS3RegionDefault,
     backupRemoteS3EndpointDefault,
     backupRemoteS3PrefixDefault,
+    backupRemoteS3AccessKeyIdDefault,
+    backupRemoteS3SecretAccessKeyDefault,
     backupRemoteS3ForcePathStyleDefault,
     backupRemoteS3DeleteOnDeleteDefault,
     backupRemoteS3ServerSideEncryptionDefault,

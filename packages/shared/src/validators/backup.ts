@@ -49,6 +49,8 @@ export const backupRemoteS3SettingsSchema = z.object({
   region: z.string().default("us-east-1"),
   endpoint: z.string().nullable().default(null),
   prefix: z.string().default(""),
+  accessKeyId: z.string().nullable().default(null),
+  secretAccessKey: z.string().nullable().default(null),
   forcePathStyle: z.boolean().default(false),
   deleteFromRemoteOnDelete: z.boolean().default(false),
   serverSideEncryption: backupRemoteSseSchema.default("none"),
@@ -63,6 +65,8 @@ export const backupRemoteSettingsSchema = z
       region: "us-east-1",
       endpoint: null,
       prefix: "",
+      accessKeyId: null,
+      secretAccessKey: null,
       forcePathStyle: false,
       deleteFromRemoteOnDelete: false,
       serverSideEncryption: "none",
@@ -83,6 +87,15 @@ export const backupRemoteSettingsSchema = z
         code: z.ZodIssueCode.custom,
         path: ["s3", "region"],
         message: "S3 region is required when remote backup replication is enabled.",
+      });
+    }
+    const accessKeyId = value.s3.accessKeyId?.trim() || null;
+    const secretAccessKey = value.s3.secretAccessKey?.trim() || null;
+    if ((accessKeyId && !secretAccessKey) || (!accessKeyId && secretAccessKey)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["s3", accessKeyId ? "secretAccessKey" : "accessKeyId"],
+        message: "Provide both S3 access key id and secret access key, or leave both empty.",
       });
     }
     if (value.s3.serverSideEncryption === "aws:kms" && !value.s3.kmsKeyId?.trim()) {
@@ -108,6 +121,8 @@ export const backupSettingsSchema = z.object({
       region: "us-east-1",
       endpoint: null,
       prefix: "",
+      accessKeyId: null,
+      secretAccessKey: null,
       forcePathStyle: false,
       deleteFromRemoteOnDelete: false,
       serverSideEncryption: "none",

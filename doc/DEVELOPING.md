@@ -15,6 +15,14 @@ Current implementation status:
 - Node.js 20+
 - pnpm 9+
 
+## Dependency Lockfile Policy
+
+GitHub Actions owns `pnpm-lock.yaml`.
+
+- Do not commit `pnpm-lock.yaml` in pull requests.
+- Pull request CI validates dependency resolution when manifests change.
+- Pushes to `master` regenerate `pnpm-lock.yaml` with `pnpm install --lockfile-only --no-frozen-lockfile`, commit it back if needed, and then run verification with `--frozen-lockfile`.
+
 ## Start Dev
 
 From repo root:
@@ -235,6 +243,8 @@ Environment overrides:
 - `PAPERCLIP_BACKUP_REMOTE_S3_REGION=<region>`
 - `PAPERCLIP_BACKUP_REMOTE_S3_ENDPOINT=http://host:port`
 - `PAPERCLIP_BACKUP_REMOTE_S3_PREFIX=<optional/key/prefix>`
+- `PAPERCLIP_BACKUP_REMOTE_S3_ACCESS_KEY_ID=<optional-access-key>`
+- `PAPERCLIP_BACKUP_REMOTE_S3_SECRET_ACCESS_KEY=<optional-secret-key>`
 - `PAPERCLIP_BACKUP_REMOTE_S3_FORCE_PATH_STYLE=true|false`
 - `PAPERCLIP_BACKUP_REMOTE_S3_DELETE_ON_DELETE=true|false`
 - `PAPERCLIP_BACKUP_REMOTE_S3_SSE=none|AES256|aws:kms`

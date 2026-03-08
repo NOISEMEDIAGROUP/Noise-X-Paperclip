@@ -91,6 +91,7 @@ export async function testEnvironment(
   for (const [key, value] of Object.entries(envConfig)) {
     if (typeof value === "string") env[key] = value;
   }
+
   const runtimeEnv = normalizeEnv(ensurePathInEnv({ ...process.env, ...env }));
 
   const configOpenAiKey = env.OPENAI_API_KEY;
@@ -149,6 +150,8 @@ export async function testEnvironment(
     checks.every((check) => check.code !== "opencode_cwd_invalid" && check.code !== "opencode_command_unresolvable");
 
   let modelValidationPassed = false;
+  const configuredModel = asString(config.model, "").trim();
+
   if (canRunProbe) {
     if (!commandLooksLike(command, "opencode")) {
       checks.push({
@@ -174,7 +177,7 @@ export async function testEnvironment(
           level: "info",
           message: `Discovered ${discovered.length} model(s) from OpenCode providers.`,
         });
-      } else {
+      } else if (configuredModel) {
         checks.push({
           code: "opencode_models_empty",
           level: "error",
@@ -183,24 +186,32 @@ export async function testEnvironment(
         });
       }
     } catch (err) {
-      checks.push({
-        code: "opencode_models_discovery_failed",
-        level: "error",
-        message: err instanceof Error ? err.message : "OpenCode model discovery failed.",
-        hint: "Run `opencode models` manually to verify provider auth and config.",
-      });
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (/ProviderModelNotFoundError/i.test(errMsg)) {
+        checks.push({
+          code: "opencode_hello_probe_model_unavailable",
+          level: "warn",
+          message: "The configured model was not found by the provider.",
+          detail: errMsg,
+          hint: "Run `opencode models` and choose an available provider/model ID.",
+        });
+      } else {
+        checks.push({
+          code: "opencode_models_discovery_failed",
+          level: configuredModel ? "error" : "warn",
+          message: configuredModel
+            ? errMsg || "OpenCode model discovery failed."
+            : errMsg || "OpenCode model discovery failed (best-effort, no model configured).",
+          hint: "Run `opencode models` manually to verify provider auth and config.",
+        });
+      }
     }
   }
 
-  const configuredModel = asString(config.model, "").trim();
-  if (!configuredModel) {
-    checks.push({
-      code: "opencode_model_required",
-      level: "error",
-      message: "OpenCode requires a configured model in provider/model format.",
-      hint: "Set adapterConfig.model using an ID from `opencode models`.",
-    });
-  } else if (canRunProbe) {
+  const modelUnavailable = checks.some((check) => check.code === "opencode_hello_probe_model_unavailable");
+  if (!configuredModel && !modelUnavailable) {
+    // No model configured – skip model requirement if no model-related checks exist
+  } else if (configuredModel && canRunProbe) {
     try {
       await ensureOpenCodeModelConfiguredAndAvailable({
         model: configuredModel,
@@ -279,6 +290,14 @@ export async function testEnvironment(
             : {
                 hint: "Run `opencode run --format json` manually and prompt `Respond with hello` to inspect output.",
               }),
+        });
+      } else if (/ProviderModelNotFoundError/i.test(authEvidence)) {
+        checks.push({
+          code: "opencode_hello_probe_model_unavailable",
+          level: "warn",
+          message: "The configured model was not found by the provider.",
+          ...(detail ? { detail } : {}),
+          hint: "Run `opencode models` and choose an available provider/model ID.",
         });
       } else if (OPENCODE_AUTH_REQUIRED_RE.test(authEvidence)) {
         checks.push({

@@ -78,6 +78,8 @@ function emptySettings(): BackupSettings {
         region: "us-east-1",
         endpoint: null,
         prefix: "",
+        accessKeyId: null,
+        secretAccessKey: null,
         forcePathStyle: false,
         deleteFromRemoteOnDelete: false,
         serverSideEncryption: "none",
@@ -923,11 +925,11 @@ export function Backups() {
                             />
                           </SettingsField>
                         </div>
-                        <div className="grid gap-3 md:grid-cols-2">
-                          <SettingsField label="Prefix" hint="Optional folder/prefix inside the bucket.">
-                            <input
-                              className="h-10 rounded-md border border-border bg-background px-3 text-sm outline-none"
-                              type="text"
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <SettingsField label="Prefix" hint="Optional folder/prefix inside the bucket.">
+                        <input
+                          className="h-10 rounded-md border border-border bg-background px-3 text-sm outline-none"
+                          type="text"
                               value={settingsDraft.remote.s3.prefix}
                               disabled={settingsLocked}
                               onChange={(event) => setSettingsDraft((current) => ({
@@ -958,12 +960,50 @@ export function Backups() {
                                   },
                                 },
                               }))}
-                            />
-                          </SettingsField>
-                        </div>
-                        <div className="grid gap-3 md:grid-cols-2">
-                          <SettingsField label="Server-side encryption">
-                            <select
+                          />
+                        </SettingsField>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <SettingsField label="Access key id" hint="Leave blank to use the ambient AWS credential chain.">
+                          <input
+                            className="h-10 rounded-md border border-border bg-background px-3 text-sm outline-none"
+                            type="text"
+                            value={settingsDraft.remote.s3.accessKeyId ?? ""}
+                            disabled={settingsLocked}
+                            onChange={(event) => setSettingsDraft((current) => ({
+                              ...current,
+                              remote: {
+                                ...current.remote,
+                                s3: {
+                                  ...current.remote.s3,
+                                  accessKeyId: event.target.value || null,
+                                },
+                              },
+                            }))}
+                          />
+                        </SettingsField>
+                        <SettingsField label="Secret access key" hint="Stored only in this instance backup policy.">
+                          <input
+                            className="h-10 rounded-md border border-border bg-background px-3 text-sm outline-none"
+                            type="password"
+                            value={settingsDraft.remote.s3.secretAccessKey ?? ""}
+                            disabled={settingsLocked}
+                            onChange={(event) => setSettingsDraft((current) => ({
+                              ...current,
+                              remote: {
+                                ...current.remote,
+                                s3: {
+                                  ...current.remote.s3,
+                                  secretAccessKey: event.target.value || null,
+                                },
+                              },
+                            }))}
+                          />
+                        </SettingsField>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <SettingsField label="Server-side encryption">
+                          <select
                               className="h-10 rounded-md border border-border bg-background px-3 text-sm outline-none"
                               value={settingsDraft.remote.s3.serverSideEncryption}
                               disabled={settingsLocked}

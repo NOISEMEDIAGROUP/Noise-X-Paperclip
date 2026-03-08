@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createHash, createHmac, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import {
   access,
   cp,
@@ -107,6 +107,8 @@ type RemoteS3ClientConfig = {
   region: string;
   endpoint: string | null;
   prefix: string;
+  accessKeyId: string | null;
+  secretAccessKey: string | null;
   forcePathStyle: boolean;
   serverSideEncryption: "none" | "AES256" | "aws:kms";
   kmsKeyId: string | null;
@@ -230,6 +232,13 @@ function createS3Client(config: RemoteS3ClientConfig): S3Client {
     region: config.region,
     endpoint: config.endpoint ?? undefined,
     forcePathStyle: config.forcePathStyle,
+    credentials:
+      config.accessKeyId && config.secretAccessKey
+        ? {
+            accessKeyId: config.accessKeyId,
+            secretAccessKey: config.secretAccessKey,
+          }
+        : undefined,
   });
 }
 
@@ -312,7 +321,12 @@ function verifyBackupSignature(opts: {
       secret: opts.secret,
       keyId: opts.run.signature.keyId,
     });
-    if (expected.signature !== opts.run.signature.signature) {
+    const expectedBytes = Buffer.from(expected.signature, "hex");
+    const actualBytes = Buffer.from(opts.run.signature.signature, "hex");
+    if (
+      expectedBytes.length !== actualBytes.length ||
+      !timingSafeEqual(expectedBytes, actualBytes)
+    ) {
       return {
         status: "mismatch",
         keyId: opts.run.signature.keyId,
@@ -379,7 +393,7 @@ function inspectImportedArchiveEntries(
     .map((line) => line.trim())
     .filter(Boolean);
   for (const line of verboseLines) {
-    const typeMarker = line[0];
+    const typeMarker = line.match(/^(?:[A-Za-z@+])?([d-])/u)?.[1];
     if (typeMarker !== "d" && typeMarker !== "-") {
       throw new Error("Backup archive may only contain regular files and directories.");
     }
@@ -566,6 +580,8 @@ export function createBackupManager(opts: {
           region: opts.config.backupRemoteS3RegionDefault,
           endpoint: opts.config.backupRemoteS3EndpointDefault ?? null,
           prefix: opts.config.backupRemoteS3PrefixDefault,
+          accessKeyId: opts.config.backupRemoteS3AccessKeyIdDefault ?? null,
+          secretAccessKey: opts.config.backupRemoteS3SecretAccessKeyDefault ?? null,
           forcePathStyle: opts.config.backupRemoteS3ForcePathStyleDefault,
           deleteFromRemoteOnDelete: opts.config.backupRemoteS3DeleteOnDeleteDefault,
           serverSideEncryption: opts.config.backupRemoteS3ServerSideEncryptionDefault,
@@ -1030,6 +1046,8 @@ export function createBackupManager(opts: {
       region: settings.remote.s3.region.trim(),
       endpoint: settings.remote.s3.endpoint?.trim() || null,
       prefix: settings.remote.s3.prefix,
+      accessKeyId: settings.remote.s3.accessKeyId?.trim() || null,
+      secretAccessKey: settings.remote.s3.secretAccessKey?.trim() || null,
       forcePathStyle: settings.remote.s3.forcePathStyle,
       serverSideEncryption: settings.remote.s3.serverSideEncryption,
       kmsKeyId: settings.remote.s3.kmsKeyId?.trim() || null,
@@ -2414,7 +2432,7 @@ export function createBackupManager(opts: {
         remoteReplicationConfigured: settings.remote.provider !== "none",
         remoteReplicationHealthy:
           settings.remote.provider === "none"
-            ? false
+            ? true
             : Boolean(latestSuccess?.remoteCopies.some((copy) => copy.status === "uploaded")),
       },
       audit: backupAuditSummarySchema.parse({

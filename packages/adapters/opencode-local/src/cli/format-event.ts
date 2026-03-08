@@ -89,17 +89,21 @@ export function printOpenCodeStreamEvent(raw: string, _debug: boolean): void {
         console.log(pc.gray(String(input)));
       }
     }
-    const summary = [
-      "tool_result",
-      status ? `status=${status}` : "",
-      Number.isFinite(exit) ? `exit=${exit}` : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
-    if (status || Number.isFinite(exit)) {
-      console.log((isError ? pc.red : pc.cyan)(summary));
+
+    const metaParts: string[] = [];
+    if (status) metaParts.push(`status=${status}`);
+    if (Number.isFinite(exit)) metaParts.push(`exit=${exit}`);
+    if (metadata) {
+      for (const [key, value] of Object.entries(metadata)) {
+        if (key === "exit" || value === undefined || value === null) continue;
+        metaParts.push(`${key}=${value}`);
+      }
     }
-    const output = (asString(state?.output) || asString(state?.error)).replace(/\s+$/, "");
+    if (metaParts.length > 0) {
+      console.log((isError ? pc.red : pc.cyan)(`tool_result ${metaParts.join(" ")}`));
+    }
+
+    const output = (asString(state?.output) || asString(state?.error)).trim();
     if (output) console.log((isError ? pc.red : pc.gray)(output));
     return;
   }
