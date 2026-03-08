@@ -262,33 +262,19 @@ export function issueRoutes(db: Db, storage: StorageService) {
     res.status(201).json(label);
   });
 
-  router.delete("/companies/:companyId/labels/:labelId", async (req, res) => {
-    const companyId = req.params.companyId as string;
+  router.delete("/labels/:labelId", async (req, res) => {
     const labelId = req.params.labelId as string;
-    assertCompanyAccess(req, companyId);
-    if (req.actor.type !== "board") {
-      res.status(403).json({ error: "Board authentication required" });
-      return;
-    }
-
     const existing = await svc.getLabelById(labelId);
-    if (!existing || existing.companyId !== companyId) {
+    if (!existing) {
       res.status(404).json({ error: "Label not found" });
       return;
     }
-
-    const issueCount = await svc.countIssuesUsingLabel(labelId);
-    if (issueCount > 0) {
-      res.status(409).json({ error: "Label is in use", issueCount });
-      return;
-    }
-
+    assertCompanyAccess(req, existing.companyId);
     const removed = await svc.deleteLabel(labelId);
     if (!removed) {
       res.status(404).json({ error: "Label not found" });
       return;
     }
-
     const actor = getActorInfo(req);
     await logActivity(db, {
       companyId: removed.companyId,
@@ -301,7 +287,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       entityId: removed.id,
       details: { name: removed.name, color: removed.color },
     });
-    res.status(204).send();
+    res.json(removed);
   });
 
   router.get("/issues/:id", async (req, res) => {
