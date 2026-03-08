@@ -12,6 +12,7 @@ import {
   ensureAbsoluteDirectory,
   ensureCommandResolvable,
   ensurePathInEnv,
+  normalizeEnv,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import path from "node:path";
@@ -47,15 +48,6 @@ function summarizeProbeDetail(stdout: string, stderr: string): string | null {
   const clean = raw.replace(/\s+/g, " ").trim();
   const max = 240;
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
-}
-
-function normalizeEnv(input: unknown): Record<string, string> {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) return {};
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
-    if (typeof value === "string") env[key] = value;
-  }
-  return env;
 }
 
 export async function testEnvironment(
