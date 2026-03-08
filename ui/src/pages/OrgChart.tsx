@@ -218,23 +218,26 @@ function OrgCard({ node, agent, isCeo, isDragging, isDropTarget, isInvalidDrop, 
         cursor: isCeo ? "default" : "grab",
       }}
     >
-      <div className="flex items-center px-4 py-3 gap-3">
-        {/* Drag handle (not for CEO) */}
-        {!isCeo ? (
-          <div
-            {...listeners}
-            {...attributes}
-            className="shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <GripVertical className="h-4 w-4" />
-          </div>
-        ) : (
-          <div className="shrink-0 text-amber-500/60" title="CEO position is locked">
-            <Lock className="h-3.5 w-3.5" />
-          </div>
-        )}
+      {/* Drag handle — top-left absolute overlay */}
+      {!isCeo ? (
+        <div
+          {...listeners}
+          {...attributes}
+          className="absolute -top-2 -left-2 z-10 w-6 h-6 rounded-full bg-background border border-border shadow-sm flex items-center justify-center cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground/80 hover:border-foreground/30 transition-colors"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <GripVertical className="h-3 w-3" />
+        </div>
+      ) : (
+        <div
+          className="absolute -top-2 -left-2 z-10 w-6 h-6 rounded-full bg-background border border-amber-500/40 shadow-sm flex items-center justify-center text-amber-500/60"
+          title="CEO position is locked"
+        >
+          <Lock className="h-3 w-3" />
+        </div>
+      )}
 
+      <div className="flex items-center px-4 py-3 gap-3">
         {/* Agent icon + status dot */}
         <div className="relative shrink-0" onClick={onNavigate}>
           <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center cursor-pointer">
