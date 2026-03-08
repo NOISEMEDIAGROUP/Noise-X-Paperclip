@@ -65,17 +65,9 @@ export function KnowledgeAttachDialog({
 }: KnowledgeAttachDialogProps) {
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const excludedIdsKey = useMemo(
-    () => [...excludedIds].sort().join("|"),
-    [excludedIds]
-  );
-  const initialSelectedIdsKey = useMemo(
-    () => initialSelectedIds.join("|"),
-    [initialSelectedIds]
-  );
   const preparedInitialSelectedIds = useMemo(
     () => initialSelectedIds.filter((id) => !excludedIds.has(id)),
-    [excludedIdsKey, initialSelectedIdsKey]
+    [excludedIds, initialSelectedIds]
   );
 
   useEffect(() => {

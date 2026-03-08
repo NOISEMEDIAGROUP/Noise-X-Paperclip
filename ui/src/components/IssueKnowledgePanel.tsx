@@ -35,11 +35,6 @@ export function IssueKnowledgePanel({
     () => new Set((issueKnowledge ?? []).map((item) => item.knowledgeItemId)),
     [issueKnowledge]
   );
-  const availableKnowledge = useMemo(
-    () => (companyKnowledge ?? []).filter((item) => !attachedIds.has(item.id)),
-    [attachedIds, companyKnowledge]
-  );
-
   const invalidateKnowledge = async () => {
     await Promise.all([
       queryClient.invalidateQueries({
@@ -129,7 +124,7 @@ export function IssueKnowledgePanel({
             onClick={() => setAttachOpen(true)}
             disabled={!companyKnowledge}
           >
-            Attach note
+            Attach knowledge
           </Button>
         </div>
       </div>
