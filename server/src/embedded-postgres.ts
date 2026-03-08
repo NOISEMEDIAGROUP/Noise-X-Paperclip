@@ -25,6 +25,9 @@ async function loadEmbeddedPostgresBinaries(): Promise<EmbeddedPostgresBinarySet
     const packageEntryUrl = await import.meta.resolve("embedded-postgres");
     const binaryModuleUrl = new URL("./binary.js", packageEntryUrl);
     const mod = await import(binaryModuleUrl.href);
+    if (typeof mod.default !== "function") {
+      throw new Error("embedded-postgres binary resolver did not export a default function");
+    }
     const getBinaries = mod.default as () => Promise<EmbeddedPostgresBinarySet>;
     return getBinaries();
   } catch (err) {
@@ -152,6 +155,7 @@ export class EmbeddedPostgres {
     try {
       await waitForPort("127.0.0.1", this.options.port, 15_000, child);
     } catch (err) {
+      child.kill(platform() === "win32" ? undefined : "SIGINT");
       if (this.process === child) {
         this.process = null;
       }
