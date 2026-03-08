@@ -162,7 +162,7 @@ export async function createApp(
         const templatePath = path.resolve(uiRoot, "index.html");
         const template = fs.readFileSync(templatePath, "utf-8");
         const html = await vite.transformIndexHtml(req.originalUrl, template);
-        res.status(200).set("Content-Type", "text/html").end(indexHtml);
+        res.status(200).set("Content-Type", "text/html").end(html);
       } catch (err) {
         next(err);
       }
