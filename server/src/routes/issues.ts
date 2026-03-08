@@ -92,6 +92,85 @@ export function issueRoutes(db: Db, storage: StorageService) {
     return agents.find((agent) => agent.role === "ceo") ?? null;
   }
 
+  async function resolveSilverGunDelegationTarget(input: {
+    companyId: string;
+    title: string;
+    description: string | null;
+    ceoAgentId: string;
+  }) {
+    const { companyId, title, description, ceoAgentId } = input;
+    const agents = await agentsSvc.list(companyId);
+    const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, "_");
+    const byName = new Map(agents.map((agent) => [normalize(agent.name), agent]));
+    const text = `${title}\n${description ?? ""}`.toLowerCase();
+
+    const roleRules: Array<{ agentName: string; patterns: RegExp[]; reason: string }> = [
+      {
+        agentName: "backend",
+        patterns: [/\bapi\b/, /backend/, /database/, /schema/, /migration/, /server/],
+        reason: "backend-domain",
+      },
+      {
+        agentName: "frontend",
+        patterns: [/frontend/, /\bui\b/, /\bux\b/, /react/, /screen/, /component/],
+        reason: "frontend-domain",
+      },
+      {
+        agentName: "ai_ml",
+        patterns: [/\bai\b/, /\bml\b/, /model/, /추천/, /matching/, /ranking/],
+        reason: "ai-domain",
+      },
+      {
+        agentName: "chatbot_dev",
+        patterns: [/chatbot/, /conversation/, /intent/, /faq/, /dialog/],
+        reason: "chatbot-domain",
+      },
+      {
+        agentName: "founding_engineer",
+        patterns: [/integration/, /deploy/, /release/, /handoff/, /demo/],
+        reason: "integration-domain",
+      },
+      {
+        agentName: "cto",
+        patterns: [/architecture/, /tech spec/, /design doc/, /system design/, /infra/],
+        reason: "cto-domain",
+      },
+    ];
+
+    for (const rule of roleRules) {
+      if (!rule.patterns.some((pattern) => pattern.test(text))) continue;
+      const target = byName.get(normalize(rule.agentName));
+      if (target) {
+        return {
+          assigneeAgentId: target.id,
+          assigneeUserId: null,
+          reason: rule.reason,
+          assigneeName: target.name,
+          delegatedByCeo: target.id !== ceoAgentId,
+        };
+      }
+    }
+
+    const cto = byName.get("cto");
+    if (cto) {
+      return {
+        assigneeAgentId: cto.id,
+        assigneeUserId: null,
+        reason: "fallback-cto-triage",
+        assigneeName: cto.name,
+        delegatedByCeo: cto.id !== ceoAgentId,
+      };
+    }
+
+    return {
+      assigneeAgentId: ceoAgentId,
+      assigneeUserId: null,
+      reason: "fallback-ceo",
+      assigneeName: "CEO",
+      delegatedByCeo: false,
+    };
+  }
+
   async function applySilverGunIssuePolicy(input: { issue: CreatedIssue; actor: ReturnType<typeof getActorInfo> }) {
     const { issue, actor } = input;
 
@@ -155,14 +234,21 @@ export function issueRoutes(db: Db, storage: StorageService) {
       return issue;
     }
 
+    const delegation = await resolveSilverGunDelegationTarget({
+      companyId: issue.companyId,
+      title: issue.title,
+      description: issue.description,
+      ceoAgentId: ceo.id,
+    });
+
     const patch: {
       assigneeAgentId?: string | null;
       assigneeUserId?: string | null;
       title?: string;
       status?: string;
     } = {
-      assigneeAgentId: ceo.id,
-      assigneeUserId: null,
+      assigneeAgentId: delegation.assigneeAgentId,
+      assigneeUserId: delegation.assigneeUserId,
     };
     if (!issue.title.startsWith("[USER] ")) {
       patch.title = `[USER] ${issue.title}`;
@@ -177,6 +263,31 @@ export function issueRoutes(db: Db, storage: StorageService) {
 
     const updated = await svc.update(issue.id, patch);
     if (!updated) return issue;
+
+    if (delegation.delegatedByCeo) {
+      const delegationComment = await svc.addComment(
+        issue.id,
+        `[CEO 자동분배] 이슈를 ${delegation.assigneeName} 에이전트로 배정했습니다. (reason: ${delegation.reason})`,
+        { agentId: ceo.id },
+      );
+
+      await logActivity(db, {
+        companyId: issue.companyId,
+        actorType: "agent",
+        actorId: ceo.id,
+        agentId: ceo.id,
+        runId: null,
+        action: "issue.comment_added",
+        entityType: "issue",
+        entityId: issue.id,
+        details: {
+          source: "silvergun_policy",
+          commentId: delegationComment.id,
+          bodySnippet: delegationComment.body.slice(0, 120),
+          identifier: issue.identifier,
+        },
+      });
+    }
 
     await logActivity(db, {
       companyId: issue.companyId,
