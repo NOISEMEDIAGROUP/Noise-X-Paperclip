@@ -411,16 +411,63 @@ export function issueRoutes(db: Db, storage: StorageService) {
   router.post("/companies/:companyId/issues", validate(createIssueSchema), async (req, res) => {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
-    if (req.body.assigneeAgentId || req.body.assigneeUserId) {
-      await assertCanAssignTasks(req, companyId, { allowSelfAssignOnCreate: true });
-    }
 
     const actor = getActorInfo(req);
+    const isSelfAssignment = req.body.assigneeAgentId && actor.agentId && req.body.assigneeAgentId === actor.agentId;
+    let autoRoutedToManager = false;
+
+    if (req.body.assigneeAgentId || req.body.assigneeUserId) {
+      try {
+        await assertCanAssignTasks(req, companyId, { allowSelfAssignOnCreate: isSelfAssignment });
+      } catch (err) {
+        // Permission denied: check if we can auto-route to manager
+        if (err instanceof Error && err.message.includes("Missing permission: tasks:assign")) {
+          const creatorAgent = actor.agentId ? await agentsSvc.getById(actor.agentId) : null;
+          const managerAgent = creatorAgent?.reportsTo ? await agentsSvc.getById(creatorAgent.reportsTo) : null;
+
+          // Auto-route policy: high-priority child issues with a manager fallback
+          const isHighPriority = req.body.priority === "critical" || req.body.priority === "high";
+          const hasParent = Boolean(req.body.parentId);
+          const canAutoRoute = isHighPriority && hasParent && managerAgent;
+
+          if (canAutoRoute) {
+            // Auto-route to manager instead of failing
+            req.body.assigneeAgentId = managerAgent.id;
+            req.body.assigneeUserId = null;
+            autoRoutedToManager = true;
+          } else {
+            // Return structured guidance
+            res.status(403).json({
+              error: "Missing permission: tasks:assign",
+              guidance: {
+                reason: "Agent lacks tasks:assign permission to assign issues to other agents",
+                options: [
+                  "Create the issue without assigneeAgentId (unassigned)",
+                  managerAgent ? `Escalate to your manager (${managerAgent.name}) by setting assigneeAgentId to ${managerAgent.id}` : null,
+                  "Request tasks:assign permission from company admin",
+                ].filter(Boolean),
+                autoRoutePolicy: "High-priority child issues can be auto-routed to manager if policy is enabled",
+              },
+            });
+            return;
+          }
+        } else {
+          throw err;
+        }
+      }
+    }
+
     const issue = await svc.create(companyId, {
       ...req.body,
       createdByAgentId: actor.agentId,
       createdByUserId: actor.actorType === "user" ? actor.actorId : null,
     });
+
+    // Idempotency dedup: return existing issue without side-effects
+    if ("_deduplicated" in issue && issue._deduplicated) {
+      res.status(200).json(issue);
+      return;
+    }
 
     await logActivity(db, {
       companyId,
@@ -448,7 +495,15 @@ export function issueRoutes(db: Db, storage: StorageService) {
         .catch((err) => logger.warn({ err, issueId: issue.id }, "failed to wake assignee on issue create"));
     }
 
-    res.status(201).json(issue);
+    if (autoRoutedToManager) {
+      res.status(201).json({
+        ...issue,
+        _autoRouted: true,
+        _autoRouteReason: "High-priority child issue auto-routed to manager due to tasks:assign permission",
+      });
+    } else {
+      res.status(201).json(issue);
+    }
   });
 
   router.patch("/issues/:id", validate(updateIssueSchema), async (req, res) => {
