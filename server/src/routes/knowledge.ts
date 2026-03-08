@@ -112,7 +112,9 @@ export function knowledgeRoutes(db: Db) {
       action: "knowledge_item.updated",
       entityType: "knowledge_item",
       entityId: updated.id,
-      details: req.body,
+      details: {
+        updatedFields: Object.keys(req.body).sort(),
+      },
     });
 
     res.json(updated);

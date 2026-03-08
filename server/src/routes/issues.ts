@@ -433,10 +433,21 @@ export function issueRoutes(db: Db, storage: StorageService) {
       }
     }
 
-    const issue = await svc.create(companyId, {
-      ...issueFields,
-      createdByAgentId: actor.agentId,
-      createdByUserId: actor.actorType === "user" ? actor.actorId : null,
+    const issue = await db.transaction(async (tx) => {
+      const created = await svc.createInTx(tx, companyId, {
+        ...issueFields,
+        createdByAgentId: actor.agentId,
+        createdByUserId: actor.actorType === "user" ? actor.actorId : null,
+      });
+
+      for (const knowledgeItemId of knowledgeItemIds) {
+        await knowledgeSvc.attachToIssueInTx(tx, created.id, knowledgeItemId, {
+          agentId: actor.agentId,
+          userId: actor.actorType === "user" ? actor.actorId : null,
+        });
+      }
+
+      return created;
     });
 
     await logActivity(db, {
@@ -452,11 +463,6 @@ export function issueRoutes(db: Db, storage: StorageService) {
     });
 
     for (const knowledgeItemId of knowledgeItemIds) {
-      await knowledgeSvc.attachToIssue(issue.id, knowledgeItemId, {
-        agentId: actor.agentId,
-        userId: actor.actorType === "user" ? actor.actorId : null,
-      });
-
       await logActivity(db, {
         companyId,
         actorType: actor.actorType,

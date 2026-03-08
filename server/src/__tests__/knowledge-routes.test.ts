@@ -322,6 +322,15 @@ describe("knowledge routes", () => {
       }),
       { agentId: "agent-editor", userId: null },
     );
+    expect(logActivityMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: "knowledge_item.updated",
+        details: {
+          updatedFields: ["body", "summary", "title"],
+        },
+      }),
+    );
   });
 
   it("rejects deleting another agent's knowledge item for a non-ceo agent", async () => {

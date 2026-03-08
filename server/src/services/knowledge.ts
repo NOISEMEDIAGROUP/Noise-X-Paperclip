@@ -3,7 +3,6 @@ import type { Db } from "@paperclipai/db";
 import { assets, issueKnowledgeItems, issues, knowledgeItems } from "@paperclipai/db";
 import type {
   AssetImage,
-  AttachIssueKnowledgeItem,
   CreateKnowledgeItem,
   IssueKnowledgeAttachment,
   KnowledgeItem,
@@ -88,6 +87,23 @@ function isIssueKnowledgeConflict(error: unknown) {
     && constraint === "issue_knowledge_items_issue_knowledge_uq";
 }
 
+type DbLike = Pick<Db, "select" | "insert" | "update" | "delete">;
+
+async function assertAssetBelongsToCompanyWithDb(dbOrTx: DbLike, companyId: string, assetId: string) {
+  const asset = await dbOrTx
+    .select({
+      id: assets.id,
+      companyId: assets.companyId,
+    })
+    .from(assets)
+    .where(eq(assets.id, assetId))
+    .then((rows) => rows[0] ?? null);
+
+  if (!asset || asset.companyId !== companyId) {
+    throw unprocessable("Asset must belong to same company");
+  }
+}
+
 function assertPatchCompatibleWithKind(kind: KnowledgeItem["kind"], patch: UpdateKnowledgeItem) {
   if (kind === "note" && (patch.assetId !== undefined || patch.sourceUrl !== undefined)) {
     throw unprocessable("Note knowledge items cannot set assetId or sourceUrl");
@@ -132,7 +148,7 @@ export function buildKnowledgePayloadForUpdate(
   return parsed.data;
 }
 
-async function resolveKnowledgeItem(db: Db, knowledgeItemId: string): Promise<KnowledgeItem | null> {
+async function resolveKnowledgeItem(db: DbLike, knowledgeItemId: string): Promise<KnowledgeItem | null> {
   const row = await db
     .select({
       knowledgeItem: knowledgeItems,
@@ -148,18 +164,60 @@ async function resolveKnowledgeItem(db: Db, knowledgeItemId: string): Promise<Kn
 }
 
 export function knowledgeService(db: Db) {
-  async function assertAssetBelongsToCompany(companyId: string, assetId: string) {
-    const asset = await db
+  async function attachToIssueInTx(
+    dbOrTx: DbLike,
+    issueId: string,
+    knowledgeItemId: string,
+    actor: { agentId?: string | null; userId?: string | null } = {},
+  ) {
+    const issue = await dbOrTx
       .select({
-        id: assets.id,
-        companyId: assets.companyId,
+        id: issues.id,
+        companyId: issues.companyId,
       })
-      .from(assets)
-      .where(eq(assets.id, assetId))
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .then((rows) => rows[0] ?? null);
+    if (!issue) throw notFound("Issue not found");
+
+    const knowledgeItem = await dbOrTx
+      .select()
+      .from(knowledgeItems)
+      .where(eq(knowledgeItems.id, knowledgeItemId))
+      .then((rows) => rows[0] ?? null);
+    if (!knowledgeItem) throw notFound("Knowledge item not found");
+
+    if (knowledgeItem.companyId !== issue.companyId) {
+      throw unprocessable("Knowledge item must belong to same company as issue");
+    }
+
+    const existingAttachments = await dbOrTx
+      .select({ sortOrder: issueKnowledgeItems.sortOrder })
+      .from(issueKnowledgeItems)
+      .where(eq(issueKnowledgeItems.issueId, issueId))
+      .orderBy(desc(issueKnowledgeItems.sortOrder))
       .then((rows) => rows[0] ?? null);
 
-    if (!asset || asset.companyId !== companyId) {
-      throw unprocessable("Asset must belong to same company");
+    try {
+      const rows = await dbOrTx
+        .insert(issueKnowledgeItems)
+        .values({
+          companyId: issue.companyId,
+          issueId,
+          knowledgeItemId,
+          sortOrder: (existingAttachments?.sortOrder ?? -1) + 1,
+          createdByAgentId: actor.agentId ?? null,
+          createdByUserId: actor.userId ?? null,
+        })
+        .returning();
+
+      const created = rows[0];
+      return toIssueKnowledgeAttachment(created, knowledgeItem);
+    } catch (error) {
+      if (isIssueKnowledgeConflict(error)) {
+        throw conflict("Knowledge item already attached to issue");
+      }
+      throw error;
     }
   }
 
@@ -186,7 +244,7 @@ export function knowledgeService(db: Db) {
       actor: { agentId?: string | null; userId?: string | null } = {},
     ) => {
       if (input.kind === "asset") {
-        await assertAssetBelongsToCompany(companyId, input.assetId);
+        await assertAssetBelongsToCompanyWithDb(db, companyId, input.assetId);
       }
 
       const rows = await db
@@ -226,7 +284,7 @@ export function knowledgeService(db: Db) {
       assertPatchCompatibleWithKind(existing.kind as KnowledgeItem["kind"], patch);
       const payload = buildKnowledgePayloadForUpdate(existing, patch);
       if (payload.kind === "asset") {
-        await assertAssetBelongsToCompany(existing.companyId, payload.assetId);
+        await assertAssetBelongsToCompanyWithDb(db, existing.companyId, payload.assetId);
       }
 
       await db
@@ -284,60 +342,16 @@ export function knowledgeService(db: Db) {
 
     attachToIssue: async (
       issueId: string,
-      input: AttachIssueKnowledgeItem | string,
+      knowledgeItemId: string,
       actor: { agentId?: string | null; userId?: string | null } = {},
-    ) => {
-      const knowledgeItemId = typeof input === "string" ? input : input.knowledgeItemId;
-      const issue = await db
-        .select({
-          id: issues.id,
-          companyId: issues.companyId,
-        })
-        .from(issues)
-        .where(eq(issues.id, issueId))
-        .then((rows) => rows[0] ?? null);
-      if (!issue) throw notFound("Issue not found");
+    ) => attachToIssueInTx(db, issueId, knowledgeItemId, actor),
 
-      const knowledgeItem = await db
-        .select()
-        .from(knowledgeItems)
-        .where(eq(knowledgeItems.id, knowledgeItemId))
-        .then((rows) => rows[0] ?? null);
-      if (!knowledgeItem) throw notFound("Knowledge item not found");
-
-      if (knowledgeItem.companyId !== issue.companyId) {
-        throw unprocessable("Knowledge item must belong to same company as issue");
-      }
-
-      const existingAttachments = await db
-        .select({ sortOrder: issueKnowledgeItems.sortOrder })
-        .from(issueKnowledgeItems)
-        .where(eq(issueKnowledgeItems.issueId, issueId))
-        .orderBy(desc(issueKnowledgeItems.sortOrder))
-        .then((rows) => rows[0] ?? null);
-
-      try {
-        const rows = await db
-          .insert(issueKnowledgeItems)
-          .values({
-            companyId: issue.companyId,
-            issueId,
-            knowledgeItemId,
-            sortOrder: (existingAttachments?.sortOrder ?? -1) + 1,
-            createdByAgentId: actor.agentId ?? null,
-            createdByUserId: actor.userId ?? null,
-          })
-          .returning();
-
-        const created = rows[0];
-        return toIssueKnowledgeAttachment(created, knowledgeItem);
-      } catch (error) {
-        if (isIssueKnowledgeConflict(error)) {
-          throw conflict("Knowledge item already attached to issue");
-        }
-        throw error;
-      }
-    },
+    attachToIssueInTx: async (
+      tx: DbLike,
+      issueId: string,
+      knowledgeItemId: string,
+      actor: { agentId?: string | null; userId?: string | null } = {},
+    ) => attachToIssueInTx(tx, issueId, knowledgeItemId, actor),
 
     detachFromIssue: async (issueId: string, knowledgeItemId: string) => {
       const existing = await db
