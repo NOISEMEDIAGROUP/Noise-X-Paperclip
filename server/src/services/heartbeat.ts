@@ -917,9 +917,11 @@ export function heartbeatService(db: Db) {
       });
       
       // Auto-requeue on failure if under retry limit
+      // Use source: "timer" to bypass wakeOnDemand policy check
+      // This ensures auto-retry works even when wakeOnDemand is disabled
       if (nextStatus === "idle" && shouldRetry && taskKey) {
         await enqueueWakeup(agentId, {
-          source: "automation",
+          source: "timer",
           reason: "auto_retry_after_failure",
           triggerDetail: "auto_retry",
           payload: { taskKey },
