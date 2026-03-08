@@ -1048,6 +1048,7 @@ function AgentConfigurePage({
   updatePermissions: { mutate: (canCreate: boolean) => void; isPending: boolean };
 }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [revisionsOpen, setRevisionsOpen] = useState(false);
 
   const { data: configRevisions } = useQuery({
@@ -1061,6 +1062,14 @@ function AgentConfigurePage({
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.urlKey) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.configRevisions(agent.id) });
+    },
+  });
+
+  const deleteAgent = useMutation({
+    mutationFn: () => agentsApi.remove(agentId, companyId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(companyId) });
+      navigate("/agents");
     },
   });
 
@@ -1129,6 +1138,29 @@ function AgentConfigurePage({
             )}
           </div>
         )}
+      </div>
+
+      {/* Danger Zone */}
+      <div className="border border-red-500/30 rounded-lg p-4 space-y-3">
+        <h3 className="text-sm font-medium text-red-500">Danger Zone</h3>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm">Delete this agent</p>
+            <p className="text-xs text-muted-foreground">This action cannot be undone.</p>
+          </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={deleteAgent.isPending}
+            onClick={() => {
+              if (!window.confirm(`Delete agent "${agent.name}"? This cannot be undone.`)) return;
+              deleteAgent.mutate();
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+            {deleteAgent.isPending ? "Deleting…" : "Delete Agent"}
+          </Button>
+        </div>
       </div>
     </div>
   );
