@@ -124,6 +124,8 @@ export type {
   AgentEnvConfig,
   CompanySecret,
   SecretProviderDescriptor,
+  QuotaWindow,
+  ProviderQuotaResult,
 } from "./types/index.js";
 
 export {
