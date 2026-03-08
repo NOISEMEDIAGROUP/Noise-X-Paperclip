@@ -2,6 +2,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+process.stdout.setDefaultEncoding("utf8");
+process.stderr.setDefaultEncoding("utf8");
+
 import type { AdapterExecutionContext, AdapterExecutionResult } from "@paperclipai/adapter-utils";
 import type { RunProcessResult } from "@paperclipai/adapter-utils/server-utils";
 import {
@@ -270,7 +274,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   const promptTemplate = asString(
     config.promptTemplate,
-    "You are agent {{agent.id}} ({{agent.name}}). Continue your Paperclip work.",
+    "You are agent {{agent.id}} ({{agent.name}}). FIRST ACTION: Invoke the Skill tool with skill='paperclip' immediately. Do not respond with text before calling the skill.",
   );
   const model = asString(config.model, "");
   const effort = asString(config.effort, "");

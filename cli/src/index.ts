@@ -17,6 +17,9 @@ import { registerActivityCommands } from "./commands/client/activity.js";
 import { registerDashboardCommands } from "./commands/client/dashboard.js";
 import { applyDataDirOverride, type DataDirOptionLike } from "./config/data-dir.js";
 
+process.stdout.setDefaultEncoding("utf8");
+process.stderr.setDefaultEncoding("utf8");
+
 const program = new Command();
 const DATA_DIR_OPTION_HELP =
   "Paperclip data directory root (isolates state from ~/.paperclip)";

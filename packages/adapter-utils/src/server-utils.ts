@@ -131,6 +131,89 @@ export function ensurePathInEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return { ...env, PATH: defaultPathForPlatform() };
 }
 
+function getWindowsExecutableExtensions(env: NodeJS.ProcessEnv): string[] {
+  const raw = env.PATHEXT ?? env.Pathext ?? ".EXE;.CMD;.BAT;.COM";
+  const parsed = raw
+    .split(";")
+    .map((ext) => ext.trim())
+    .filter(Boolean)
+    .map((ext) => (ext.startsWith(".") ? ext.toLowerCase() : `.${ext.toLowerCase()}`));
+  return parsed.length > 0 ? parsed : [".exe", ".cmd", ".bat", ".com"];
+}
+
+function getResolvableCommandCandidates(
+  command: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): string[] {
+  const hasPathSeparator = command.includes("/") || command.includes("\\");
+  const basePaths = (() => {
+    if (hasPathSeparator) {
+      return [path.isAbsolute(command) ? command : path.resolve(cwd, command)];
+    }
+    const pathValue = env.PATH ?? env.Path ?? "";
+    const delimiter = process.platform === "win32" ? ";" : ":";
+    return pathValue
+      .split(delimiter)
+      .filter(Boolean)
+      .map((dir) => path.join(dir, command));
+  })();
+
+  if (process.platform !== "win32") {
+    return basePaths;
+  }
+
+  const ext = path.extname(command).toLowerCase();
+  const suffixes = ext ? [""] : ["", ...getWindowsExecutableExtensions(env)];
+  return [...new Set(basePaths.flatMap((base) => suffixes.map((suffix) => `${base}${suffix}`)))];
+}
+
+async function resolveCommandExecutable(
+  command: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): Promise<string> {
+  for (const candidate of getResolvableCommandCandidates(command, cwd, env)) {
+    try {
+      await fs.access(candidate, fsConstants.X_OK);
+      return candidate;
+    } catch {
+      // keep scanning candidates
+    }
+  }
+
+  throw new Error(`Command not found in PATH: "${command}"`);
+}
+
+function isWindowsBatchScript(commandPath: string): boolean {
+  if (process.platform !== "win32") return false;
+  const ext = path.extname(commandPath).toLowerCase();
+  return ext === ".cmd" || ext === ".bat";
+}
+
+async function getSpawnPlan(
+  command: string,
+  args: string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): Promise<{ command: string; args: string[]; shell: boolean }> {
+  if (process.platform !== "win32") {
+    return { command, args, shell: false };
+  }
+
+  const resolvedCommand = await resolveCommandExecutable(command, cwd, env);
+  if (!isWindowsBatchScript(resolvedCommand)) {
+    return { command: resolvedCommand, args, shell: false };
+  }
+
+  const commandProcessor = env.ComSpec ?? env.COMSPEC ?? "cmd.exe";
+  return {
+    command: commandProcessor,
+    args: ["/d", "/s", "/c", resolvedCommand, ...args],
+    shell: false,
+  };
+}
+
 export async function ensureAbsoluteDirectory(
   cwd: string,
   opts: { createIfMissing?: boolean } = {},
@@ -170,36 +253,15 @@ export async function ensureAbsoluteDirectory(
 
 export async function ensureCommandResolvable(command: string, cwd: string, env: NodeJS.ProcessEnv) {
   const hasPathSeparator = command.includes("/") || command.includes("\\");
-  if (hasPathSeparator) {
-    const absolute = path.isAbsolute(command) ? command : path.resolve(cwd, command);
-    try {
-      await fs.access(absolute, fsConstants.X_OK);
-    } catch {
+  try {
+    await resolveCommandExecutable(command, cwd, env);
+  } catch {
+    if (hasPathSeparator) {
+      const absolute = path.isAbsolute(command) ? command : path.resolve(cwd, command);
       throw new Error(`Command is not executable: "${command}" (resolved: "${absolute}")`);
     }
-    return;
+    throw new Error(`Command not found in PATH: "${command}"`);
   }
-
-  const pathValue = env.PATH ?? env.Path ?? "";
-  const delimiter = process.platform === "win32" ? ";" : ":";
-  const dirs = pathValue.split(delimiter).filter(Boolean);
-  const windowsExt = process.platform === "win32"
-    ? (env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";")
-    : [""];
-
-  for (const dir of dirs) {
-    for (const ext of windowsExt) {
-      const candidate = path.join(dir, process.platform === "win32" ? `${command}${ext}` : command);
-      try {
-        await fs.access(candidate, fsConstants.X_OK);
-        return;
-      } catch {
-        // continue scanning PATH
-      }
-    }
-  }
-
-  throw new Error(`Command not found in PATH: "${command}"`);
 }
 
 export async function runChildProcess(
@@ -217,13 +279,22 @@ export async function runChildProcess(
   },
 ): Promise<RunProcessResult> {
   const onLogError = opts.onLogError ?? ((err, id, msg) => console.warn({ err, runId: id }, msg));
+  const mergedEnv = ensurePathInEnv({ ...process.env, ...opts.env });
+  let spawnPlan: { command: string; args: string[]; shell: boolean };
+  try {
+    spawnPlan = await getSpawnPlan(command, args, opts.cwd, mergedEnv);
+  } catch {
+    const pathValue = mergedEnv.PATH ?? mergedEnv.Path ?? "";
+    throw new Error(
+      `Failed to start command "${command}" in "${opts.cwd}". Verify adapter command, working directory, and PATH (${pathValue}).`,
+    );
+  }
 
   return new Promise<RunProcessResult>((resolve, reject) => {
-    const mergedEnv = ensurePathInEnv({ ...process.env, ...opts.env });
-    const child = spawn(command, args, {
+    const child = spawn(spawnPlan.command, spawnPlan.args, {
       cwd: opts.cwd,
       env: mergedEnv,
-      shell: false,
+      shell: spawnPlan.shell,
       stdio: [opts.stdin != null ? "pipe" : "ignore", "pipe", "pipe"],
     }) as ChildProcessWithEvents;
 
