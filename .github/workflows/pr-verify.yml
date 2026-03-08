@@ -47,6 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
+      contents: read
       pull-requests: write
 
     steps:
@@ -81,6 +82,9 @@ jobs:
           fi
           echo "js_bytes=$js_bytes" >> "$GITHUB_OUTPUT"
           echo "css_bytes=$css_bytes" >> "$GITHUB_OUTPUT"
+
+      - name: Clear PR dist artifacts
+        run: rm -rf ui/dist
 
       - name: Checkout base
         uses: actions/checkout@v4
