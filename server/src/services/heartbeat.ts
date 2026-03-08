@@ -35,13 +35,16 @@ function appendExcerpt(prev: string, chunk: string) {
   return appendWithCap(prev, chunk, MAX_EXCERPT_BYTES);
 }
 
+export function isNonBillableBillingType(billingType: string | null | undefined): boolean {
+  const normalizedBillingType = (billingType ?? "").trim().toLowerCase();
+  return normalizedBillingType === "subscription" || normalizedBillingType === "oauth";
+}
+
 export function computeRunBillableCostCents(input: {
   costUsd: number | null | undefined;
   billingType: string | null | undefined;
 }): number {
-  const normalizedBillingType = (input.billingType ?? "").trim().toLowerCase();
-  const isNonBillable = normalizedBillingType === "subscription" || normalizedBillingType === "oauth";
-  if (isNonBillable) return 0;
+  if (isNonBillableBillingType(input.billingType)) return 0;
   return Math.max(0, Math.round((input.costUsd ?? 0) * 100));
 }
 

@@ -1,5 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { computeRunBillableCostCents } from "../services/heartbeat.js";
+import { computeRunBillableCostCents, isNonBillableBillingType } from "../services/heartbeat.js";
+
+describe("isNonBillableBillingType", () => {
+  it("matches subscription/oauth billing types", () => {
+    expect(isNonBillableBillingType("subscription")).toBe(true);
+    expect(isNonBillableBillingType(" oauth ")).toBe(true);
+    expect(isNonBillableBillingType("SUBSCRIPTION")).toBe(true);
+  });
+
+  it("returns false for api/unknown/empty values", () => {
+    expect(isNonBillableBillingType("api")).toBe(false);
+    expect(isNonBillableBillingType("unknown")).toBe(false);
+    expect(isNonBillableBillingType("")).toBe(false);
+    expect(isNonBillableBillingType(null)).toBe(false);
+    expect(isNonBillableBillingType(undefined)).toBe(false);
+  });
+});
 
 describe("computeRunBillableCostCents", () => {
   it("returns $0 for subscription and oauth runs", () => {
