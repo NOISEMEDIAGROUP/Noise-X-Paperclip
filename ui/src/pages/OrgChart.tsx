@@ -131,6 +131,7 @@ const statusDotColor: Record<string, string> = {
   paused: "#facc15",
   idle: "#facc15",
   error: "#f87171",
+  pending_approval: "#fb923c",
   terminated: "#a3a3a3",
 };
 const defaultDotColor = "#a3a3a3";
@@ -384,6 +385,8 @@ export function OrgChart() {
                 top: node.y,
                 width: CARD_W,
                 minHeight: CARD_H,
+                borderLeftColor: dotColor,
+                borderLeftWidth: "3px",
               }}
               onClick={() => navigate(agent ? agentUrl(agent) : `/agents/${node.id}`)}
             >
