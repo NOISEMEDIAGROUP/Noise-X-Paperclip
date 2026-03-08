@@ -59,7 +59,7 @@ describe("Issue Search", () => {
     await db.insert(issues).values([
       {
         companyId,
-        identifier: "ZERA-87",
+        identifier: "TEST-87",
         issueNumber: 87,
         title: "Test issue with discord lowercase in title",
         description: "This is a test issue",
@@ -69,7 +69,7 @@ describe("Issue Search", () => {
       },
       {
         companyId,
-        identifier: "ZERA-41",
+        identifier: "TEST-41",
         issueNumber: 41,
         title: "Discord Community Setup",
         description: "Set up Discord server for community",
@@ -79,7 +79,7 @@ describe("Issue Search", () => {
       },
       {
         companyId,
-        identifier: "ZERA-100",
+        identifier: "TEST-100",
         issueNumber: 100,
         title: "Pricing page updates",
         description: "Update the pricing information",
@@ -90,7 +90,7 @@ describe("Issue Search", () => {
       },
       {
         companyId,
-        identifier: "ZERA-101",
+        identifier: "TEST-101",
         issueNumber: 101,
         title: "Critical onboarding fix",
         description: "Critical priority issue",
@@ -105,14 +105,14 @@ describe("Issue Search", () => {
     // Search for "discord" (lowercase)
     const lowercaseResults = await svc.list(companyId, { q: "discord" });
     expect(lowercaseResults.length).toBeGreaterThan(0);
-    expect(lowercaseResults.some((issue) => issue.identifier === "ZERA-87")).toBe(true);
-    expect(lowercaseResults.some((issue) => issue.identifier === "ZERA-41")).toBe(true);
+    expect(lowercaseResults.some((issue) => issue.identifier === "TEST-87")).toBe(true);
+    expect(lowercaseResults.some((issue) => issue.identifier === "TEST-41")).toBe(true);
 
     // Search for "Discord" (capitalized)
     const capitalizedResults = await svc.list(companyId, { q: "Discord" });
     expect(capitalizedResults.length).toBeGreaterThan(0);
-    expect(capitalizedResults.some((issue) => issue.identifier === "ZERA-87")).toBe(true);
-    expect(capitalizedResults.some((issue) => issue.identifier === "ZERA-41")).toBe(true);
+    expect(capitalizedResults.some((issue) => issue.identifier === "TEST-87")).toBe(true);
+    expect(capitalizedResults.some((issue) => issue.identifier === "TEST-41")).toBe(true);
 
     // Results should be the same
     expect(lowercaseResults.length).toBe(capitalizedResults.length);
@@ -120,25 +120,25 @@ describe("Issue Search", () => {
 
   test("search should match identifiers", async () => {
     // Search for full identifier
-    const fullIdentifierResults = await svc.list(companyId, { q: "ZERA-87" });
+    const fullIdentifierResults = await svc.list(companyId, { q: "TEST-87" });
     expect(fullIdentifierResults.length).toBeGreaterThan(0);
-    expect(fullIdentifierResults[0].identifier).toBe("ZERA-87");
+    expect(fullIdentifierResults[0].identifier).toBe("TEST-87");
 
     // Search for lowercase identifier
-    const lowercaseIdentifierResults = await svc.list(companyId, { q: "zera-87" });
+    const lowercaseIdentifierResults = await svc.list(companyId, { q: "test-87" });
     expect(lowercaseIdentifierResults.length).toBeGreaterThan(0);
-    expect(lowercaseIdentifierResults[0].identifier).toBe("ZERA-87");
+    expect(lowercaseIdentifierResults[0].identifier).toBe("TEST-87");
 
     // Search for partial identifier (number only)
     const partialResults = await svc.list(companyId, { q: "87" });
     expect(partialResults.length).toBeGreaterThan(0);
-    expect(partialResults.some((issue) => issue.identifier === "ZERA-87")).toBe(true);
+    expect(partialResults.some((issue) => issue.identifier === "TEST-87")).toBe(true);
   });
 
   test("search should match across title, description, and identifier", async () => {
     const pricingResults = await svc.list(companyId, { q: "pricing" });
     expect(pricingResults.length).toBeGreaterThan(0);
-    expect(pricingResults.some((issue) => issue.identifier === "ZERA-100")).toBe(true);
+    expect(pricingResults.some((issue) => issue.identifier === "TEST-100")).toBe(true);
   });
 
   test("search results should be ranked by relevance", async () => {
@@ -164,13 +164,13 @@ describe("Issue Search", () => {
   test("filters issues by goalId", async () => {
     const results = await svc.list(companyId, { goalId });
     expect(results).toHaveLength(1);
-    expect(results[0]?.identifier).toBe("ZERA-100");
+    expect(results[0]?.identifier).toBe("TEST-100");
   });
 
   test("filters issues by priority", async () => {
     const results = await svc.list(companyId, { priority: "high" });
     expect(results).toHaveLength(1);
-    expect(results[0]?.identifier).toBe("ZERA-41");
+    expect(results[0]?.identifier).toBe("TEST-41");
   });
 
   test("applies limit to issue list", async () => {
