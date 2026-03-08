@@ -180,12 +180,12 @@ interface OrgCardProps {
 }
 
 function OrgCard({ node, agent, isCeo, isDragging, isDropTarget, isInvalidDrop, onNavigate }: OrgCardProps) {
-  const { attributes, listeners, setNodeRef: setDragRef, transform } = useDraggable({
+  const { attributes, listeners, setNodeRef: setDragRef } = useDraggable({
     id: node.id,
     disabled: isCeo,
   });
 
-  const { setNodeRef: setDropRef, isOver } = useDroppable({
+  const { setNodeRef: setDropRef } = useDroppable({
     id: `drop-${node.id}`,
     data: { agentId: node.id, role: node.role },
   });
