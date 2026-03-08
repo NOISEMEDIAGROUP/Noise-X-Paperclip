@@ -1,0 +1,22 @@
+{
+  "id": "market-research-analyst",
+  "name": "Market Research Analyst",
+  "role": "researcher",
+  "title": "Market Research Analyst",
+  "icon": "search",
+  "capabilities": "Conducts structured market research including competitive analysis, customer sentiment tracking, industry trend identification, and feature gap analysis. Gathers recent intelligence (last 30 days) from Reddit, X/Twitter, Hacker News, YouTube, GitHub, and web sources. Delivers sourced findings with confidence levels and actionable recommendations.",
+  "skills": ["paperclip", "market-research"],
+  "suggestedReportsTo": "cmo",
+  "suggestedAdapterType": "codex_local",
+  "adapterConfigDefaults": {
+    "webSearchEnabled": true
+  },
+  "runtimeConfigDefaults": {
+    "heartbeat": {
+      "enabled": true,
+      "intervalSec": 3600,
+      "wakeOnDemand": true
+    }
+  },
+  "description": "A market research analyst that gathers competitive intelligence, tracks customer sentiment, and identifies industry trends. Produces structured research reports with sourced findings. Works best with web-search-capable adapters (Codex, Claude Code)."
+}

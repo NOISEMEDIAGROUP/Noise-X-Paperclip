@@ -1613,6 +1613,10 @@ export function accessRoutes(
         {
           name: "paperclip-create-agent",
           path: "/api/skills/paperclip-create-agent"
+        },
+        {
+          name: "market-research",
+          path: "/api/skills/market-research"
         }
       ]
     });
