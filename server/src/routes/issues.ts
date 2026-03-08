@@ -837,7 +837,9 @@ export function issueRoutes(db: Db, storage: StorageService) {
     void (async () => {
       const wakeups = new Map<string, Parameters<typeof heartbeat.wakeup>[1]>();
       const assigneeId = currentIssue.assigneeAgentId;
-      if (assigneeId) {
+      // Suppress wake-on-self-comment: don't wake assignee if they authored the comment
+      const isSelfComment = assigneeId && actor.agentId && assigneeId === actor.agentId;
+      if (assigneeId && !isSelfComment) {
         if (reopened) {
           wakeups.set(assigneeId, {
             source: "automation",
