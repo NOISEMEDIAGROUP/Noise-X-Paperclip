@@ -89,6 +89,12 @@ export function issueRoutes(db: Db, storage: StorageService) {
     return Boolean((agent.permissions as Record<string, unknown>).canCreateAgents);
   }
 
+  function canCreateTasksPermission(agent: { permissions: Record<string, unknown> | null | undefined; role: string }) {
+    if (agent.role === "ceo") return true;
+    if (!agent.permissions || typeof agent.permissions !== "object") return false;
+    return Boolean((agent.permissions as Record<string, unknown>).canCreateTasks);
+  }
+
   async function assertCanAssignTasks(req: Request, companyId: string) {
     assertCompanyAccess(req, companyId);
     if (req.actor.type === "board") {
@@ -418,6 +424,18 @@ export function issueRoutes(db: Db, storage: StorageService) {
     assertCompanyAccess(req, companyId);
     if (req.body.assigneeAgentId || req.body.assigneeUserId) {
       await assertCanAssignTasks(req, companyId);
+    }
+
+    // Agents creating top-level tasks (no parentId) need canCreateTasks permission
+    if (req.actor.type === "agent" && !req.body.parentId) {
+      if (!req.actor.agentId) throw forbidden("Agent authentication required");
+      const allowedByGrant = await access.hasPermission(companyId, "agent", req.actor.agentId, "tasks:create");
+      if (!allowedByGrant) {
+        const actorAgent = await agentsSvc.getById(req.actor.agentId);
+        if (!actorAgent || actorAgent.companyId !== companyId || !canCreateTasksPermission(actorAgent)) {
+          throw forbidden("Missing permission: can create tasks");
+        }
+      }
     }
 
     const actor = getActorInfo(req);
