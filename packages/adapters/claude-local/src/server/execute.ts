@@ -274,7 +274,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   const promptTemplate = asString(
     config.promptTemplate,
-    "You are agent {{agent.id}} ({{agent.name}}). FIRST ACTION: Invoke the Skill tool with skill='paperclip' immediately. Do not respond with text before calling the skill.",
+    "You are agent {{agent.id}} ({{agent.name}}). Continue your Paperclip work.",
   );
   const model = asString(config.model, "");
   const effort = asString(config.effort, "");

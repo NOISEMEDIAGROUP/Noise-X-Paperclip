@@ -146,7 +146,7 @@ export async function promptServer(opts?: {
     auth = {
       baseUrlMode: "explicit",
       publicBaseUrl: currentAuth.publicBaseUrl,
-      disableSignUp: false,
+      disableSignUp: currentAuth.disableSignUp ?? false,
     };
   }
 
