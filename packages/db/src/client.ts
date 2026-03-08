@@ -8,9 +8,7 @@ import * as schema from "./schema/index.js";
 
 const MIGRATIONS_FOLDER = fileURLToPath(new URL("./migrations", import.meta.url));
 const DRIZZLE_MIGRATIONS_TABLE = "__drizzle_migrations";
-const MIGRATIONS_JOURNAL_JSON = fileURLToPath(
-  new URL("./migrations/meta/_journal.json", import.meta.url),
-);
+const MIGRATIONS_JOURNAL_JSON = fileURLToPath(new URL("./migrations/meta/_journal.json", import.meta.url));
 
 function isSafeIdentifier(value: string): boolean {
   return /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
@@ -705,8 +703,7 @@ export async function migratePostgresIfEmpty(url: string): Promise<MigrationBoot
     }
 
     const db = drizzlePg(sql);
-    const migrationsFolder = fileURLToPath(new URL("./migrations", import.meta.url));
-    await migratePg(db, { migrationsFolder });
+    await migratePg(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
     return { migrated: true, reason: "migrated-empty-db", tableCount: 0 };
   } finally {
