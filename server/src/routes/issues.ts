@@ -472,8 +472,14 @@ export function issueRoutes(db: Db, storage: StorageService) {
       !!existing.createdByUserId &&
       req.body.assigneeUserId === existing.createdByUserId;
 
+    // Allow agents to delegate tasks they currently own without requiring tasks:assign permission
+    const isAgentDelegatingOwnedTask =
+      req.actor.type === "agent" &&
+      !!req.actor.agentId &&
+      existing.assigneeAgentId === req.actor.agentId;
+
     if (assigneeWillChange) {
-      if (!isAgentReturningIssueToCreator) {
+      if (!isAgentReturningIssueToCreator && !isAgentDelegatingOwnedTask) {
         await assertCanAssignTasks(req, existing.companyId);
       }
     }
