@@ -27,7 +27,6 @@ import {
   DollarSign,
   Calendar,
   FolderOpen,
-  ArrowRight,
 } from "lucide-react";
 
 function systemStatusClasses(status?: string): string {
@@ -351,10 +350,7 @@ export function Companies() {
                   />
                   <span>{selected ? "Current board context" : "Click to make active"}</span>
                 </div>
-                <div className="inline-flex items-center gap-1 text-foreground">
-                  <span>Open dashboard</span>
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </div>
+                <span className="text-foreground">{selected ? "Active system" : "Make active"}</span>
               </div>
 
               {isConfirmingDelete && (

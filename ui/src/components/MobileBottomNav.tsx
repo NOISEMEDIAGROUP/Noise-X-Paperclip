@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { NavLink, useLocation } from "@/lib/router";
-import { useQuery } from "@tanstack/react-query";
 import {
   House,
   LayoutGrid,
@@ -8,10 +7,7 @@ import {
   Users,
   FolderOpen,
 } from "lucide-react";
-import { sidebarBadgesApi } from "../api/sidebarBadges";
-import { useCompany } from "../context/CompanyContext";
 import { useDialog } from "../context/DialogContext";
-import { queryKeys } from "../lib/queryKeys";
 import { cn } from "../lib/utils";
 
 interface MobileBottomNavProps {
@@ -37,14 +33,7 @@ type MobileNavItem = MobileNavLinkItem | MobileNavActionItem;
 
 export function MobileBottomNav({ visible }: MobileBottomNavProps) {
   const location = useLocation();
-  const { selectedCompanyId } = useCompany();
   const { openNewIssue } = useDialog();
-
-  const { data: sidebarBadges } = useQuery({
-    queryKey: queryKeys.sidebarBadges(selectedCompanyId!),
-    queryFn: () => sidebarBadgesApi.get(selectedCompanyId!),
-    enabled: !!selectedCompanyId,
-  });
 
   const items = useMemo<MobileNavItem[]>(
     () => [
@@ -52,15 +41,9 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
       { type: "link", to: "/projects", label: "Projects", icon: LayoutGrid },
       { type: "action", label: "Create", icon: SquarePen, onClick: () => openNewIssue() },
       { type: "link", to: "/agents/all", label: "Agents", icon: Users },
-      {
-        type: "link",
-        to: "/folders",
-        label: "Folders",
-        icon: FolderOpen,
-        badge: sidebarBadges?.inbox,
-      },
+      { type: "link", to: "/folders", label: "Folders", icon: FolderOpen },
     ],
-    [openNewIssue, sidebarBadges?.inbox],
+    [openNewIssue],
   );
 
   return (
