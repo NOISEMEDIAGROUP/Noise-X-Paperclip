@@ -52,6 +52,8 @@ type EmbeddedPostgresCtor = new (opts: {
   password: string;
   port: number;
   persistent: boolean;
+  initdbFlags?: string[];
+  postgresFlags?: string[];
   onLog?: (message: unknown) => void;
   onError?: (message: unknown) => void;
 }) => EmbeddedPostgresInstance;
@@ -251,6 +253,9 @@ if (config.databaseUrl) {
   const embeddedPostgresLogBuffer: string[] = [];
   const EMBEDDED_POSTGRES_LOG_BUFFER_LIMIT = 120;
   const verboseEmbeddedPostgresLogs = process.env.PAPERCLIP_EMBEDDED_POSTGRES_VERBOSE === "true";
+  const embeddedPostgresInitdbFlags =
+    process.platform === "win32" ? ["--locale=en-US", "--encoding=UTF8", "--lc-messages=C"] : [];
+  const embeddedPostgresPostgresFlags = process.platform === "win32" ? ["-c", "lc_messages=C"] : [];
   const appendEmbeddedPostgresLog = (message: unknown) => {
     const text = typeof message === "string" ? message : message instanceof Error ? message.message : String(message ?? "");
     for (const lineRaw of text.split(/\r?\n/)) {
@@ -323,6 +328,8 @@ if (config.databaseUrl) {
       password: "paperclip",
       port,
       persistent: true,
+      initdbFlags: embeddedPostgresInitdbFlags,
+      postgresFlags: embeddedPostgresPostgresFlags,
       onLog: appendEmbeddedPostgresLog,
       onError: appendEmbeddedPostgresLog,
     });
