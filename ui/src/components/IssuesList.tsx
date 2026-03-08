@@ -174,13 +174,10 @@ export function IssuesList({
   });
   const [assigneePickerIssueId, setAssigneePickerIssueId] = useState<string | null>(null);
   const [assigneeSearch, setAssigneeSearch] = useState("");
-  const [issueSearch, setIssueSearch] = useState(initialSearch ?? "");
+  const [issueSearchOverride, setIssueSearchOverride] = useState<string | null>(null);
+  const issueSearch = issueSearchOverride ?? (initialSearch ?? "");
   const [debouncedIssueSearch, setDebouncedIssueSearch] = useState(issueSearch);
   const normalizedIssueSearch = debouncedIssueSearch.trim();
-
-  useEffect(() => {
-    setIssueSearch(initialSearch ?? "");
-  }, [initialSearch]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -307,7 +304,7 @@ export function IssuesList({
             <Input
               value={issueSearch}
               onChange={(e) => {
-                setIssueSearch(e.target.value);
+                setIssueSearchOverride(e.target.value);
                 onSearchChange?.(e.target.value);
               }}
               placeholder="Search issues..."
