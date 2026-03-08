@@ -378,36 +378,38 @@ export function CommentThread({
         />
         <div className="flex items-center justify-end gap-3">
           {onAttachImage && (
-            <div className="mr-auto flex items-center gap-3">
-              <input
-                ref={attachInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                className="hidden"
-                onChange={handleAttachFile}
-              />
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => attachInputRef.current?.click()}
-                disabled={attaching}
-                title="Attach image"
-              >
-                <Paperclip className="h-4 w-4" />
-              </Button>
-            </div>
-            {pendingFile && (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded">
-                <span className="truncate max-w-[150px]">{pendingFile.name}</span>
-                <button
-                  type="button"
-                  onClick={() => setPendingFile(null)}
-                  className="hover:text-foreground"
+            <>
+              <div className="mr-auto flex items-center gap-3">
+                <input
+                  ref={attachInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                  onChange={handleAttachFile}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => attachInputRef.current?.click()}
+                  disabled={attaching}
+                  title="Attach image"
                 >
-                  ×
-                </button>
+                  <Paperclip className="h-4 w-4" />
+                </Button>
               </div>
-            )}
+              {pendingFile && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded">
+                  <span className="truncate max-w-[150px]">{pendingFile.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setPendingFile(null)}
+                    className="hover:text-foreground"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </>
           )}
           {isClosed && (
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
