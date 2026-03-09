@@ -1,3 +1,7 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { AdapterExecutionContext, AdapterExecutionResult } from "@paperclipai/adapter-utils";
 import type { RunProcessResult } from "@paperclipai/adapter-utils/server-utils";
 import {
@@ -15,12 +19,15 @@ import {
   renderTemplate,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
+import { DEFAULT_GEMINI_LOCAL_MODEL } from "../index.js";
 import {
   parseGeminiStreamJson,
   describeGeminiFailure,
   detectGeminiAuthRequired,
   isGeminiTurnLimitResult,
+  isGeminiUnknownSessionError,
 } from "./parse.js";
+import { firstNonEmptyLine } from "./utils.js";
 
 interface GeminiExecutionInput {
   runId: string;
@@ -40,6 +47,7 @@ interface GeminiRuntimeConfig {
   timeoutSec: number;
   graceSec: number;
   extraArgs: string[];
+  tmpHome: string | null;
 }
 
 function hasNonEmptyEnvValue(env: Record<string, string>, key: string): boolean {
@@ -51,6 +59,57 @@ function resolveGeminiBillingType(env: Record<string, string>): "api" | "subscri
   return hasNonEmptyEnvValue(env, "GEMINI_API_KEY") || hasNonEmptyEnvValue(env, "GOOGLE_API_KEY")
     ? "api"
     : "subscription";
+}
+
+function renderPaperclipEnvNote(env: Record<string, string>): string {
+  const paperclipKeys = Object.keys(env)
+    .filter((key) => key.startsWith("PAPERCLIP_"))
+    .sort();
+  if (paperclipKeys.length === 0) return "";
+  return [
+    "Paperclip runtime note:",
+    `The following PAPERCLIP_* environment variables are available in this run: ${paperclipKeys.join(", ")}`,
+    "Do not assume these variables are missing without checking your shell environment.",
+    "",
+    "",
+  ].join("\n");
+}
+
+const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const PAPERCLIP_SKILLS_CANDIDATES = [
+  path.resolve(__moduleDir, "../../skills"),
+  path.resolve(__moduleDir, "../../../../../skills"),
+];
+
+async function resolvePaperclipSkillsDir(): Promise<string | null> {
+  for (const candidate of PAPERCLIP_SKILLS_CANDIDATES) {
+    const isDir = await fs.stat(candidate).then((s: { isDirectory(): boolean }) => s.isDirectory()).catch(() => false);
+    if (isDir) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Create a tmpdir with `.gemini/skills/` containing symlinks to skills from
+ * the repo's `skills/` directory, so `GEMINI_CLI_HOME` makes Gemini CLI discover
+ * them as proper registered skills without polluting ~/.gemini/skills.
+ */
+async function buildSkillsDir(): Promise<string> {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-gemini-skills-"));
+  const target = path.join(tmp, ".gemini", "skills");
+  await fs.mkdir(target, { recursive: true });
+  const skillsDir = await resolvePaperclipSkillsDir();
+  if (!skillsDir) return tmp;
+  const entries = await fs.readdir(skillsDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      await fs.symlink(
+        path.join(skillsDir, entry.name),
+        path.join(target, entry.name),
+      );
+    }
+  }
+  return tmp;
 }
 
 async function buildGeminiRuntimeConfig(input: GeminiExecutionInput): Promise<GeminiRuntimeConfig> {
@@ -68,10 +127,12 @@ async function buildGeminiRuntimeConfig(input: GeminiExecutionInput): Promise<Ge
   const effectiveWorkspaceCwd = useConfiguredInsteadOfAgentHome ? "" : workspaceCwd;
   const cwd = effectiveWorkspaceCwd || configuredCwd || process.cwd();
   await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
+  const tmpHome = await buildSkillsDir();
 
   const envConfig = parseObject(config.env);
   const env: Record<string, string> = { ...buildPaperclipEnv(agent) };
   env.PAPERCLIP_RUN_ID = runId;
+  if (tmpHome) env.GEMINI_CLI_HOME = tmpHome;
 
   const wakeTaskId =
     (typeof context.taskId === "string" && context.taskId.trim().length > 0 && context.taskId.trim()) ||
@@ -145,6 +206,7 @@ async function buildGeminiRuntimeConfig(input: GeminiExecutionInput): Promise<Ge
     timeoutSec,
     graceSec,
     extraArgs,
+    tmpHome,
   };
 }
 
@@ -155,9 +217,8 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     config.promptTemplate,
     "You are agent {{agent.id}} ({{agent.name}}). Continue your Paperclip work.",
   );
-  const model = asString(config.model, "");
+  const model = asString(config.model, DEFAULT_GEMINI_LOCAL_MODEL).trim();
   const yolo = asBoolean(config.yolo, false);
-  const sandbox = asBoolean(config.sandbox, false);
 
   const runtimeConfig = await buildGeminiRuntimeConfig({
     runId,
@@ -176,10 +237,57 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     timeoutSec,
     graceSec,
     extraArgs,
+    tmpHome,
   } = runtimeConfig;
   const billingType = resolveGeminiBillingType(env);
 
-  const prompt = renderTemplate(promptTemplate, {
+  const runtimeSessionParams = parseObject(runtime.sessionParams);
+  const runtimeSessionId = asString(runtimeSessionParams.sessionId, runtime.sessionId ?? "");
+  const runtimeSessionCwd = asString(runtimeSessionParams.cwd, "");
+  const canResumeSession =
+    runtimeSessionId.length > 0 &&
+    (runtimeSessionCwd.length === 0 || path.resolve(runtimeSessionCwd) === path.resolve(cwd));
+  const sessionId = canResumeSession ? runtimeSessionId : null;
+  if (runtimeSessionId && !canResumeSession) {
+    await onLog(
+      "stderr",
+      `[paperclip] Gemini session "${runtimeSessionId}" was saved for cwd "${runtimeSessionCwd}" and will not be resumed in "${cwd}".\n`,
+    );
+  }
+
+  const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
+  const instructionsDir = instructionsFilePath ? `${path.dirname(instructionsFilePath)}/` : "";
+  let instructionsPrefix = "";
+  if (instructionsFilePath) {
+    try {
+      const instructionsContents = await fs.readFile(instructionsFilePath, "utf8");
+      instructionsPrefix =
+        `${instructionsContents}\n\n` +
+        `The above agent instructions were loaded from ${instructionsFilePath}. ` +
+        `Resolve any relative file references from ${instructionsDir}.\n\n`;
+      await onLog(
+        "stderr",
+        `[paperclip] Loaded agent instructions file: ${instructionsFilePath}\n`,
+      );
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      await onLog(
+        "stderr",
+        `[paperclip] Warning: could not read agent instructions file "${instructionsFilePath}": ${reason}\n`,
+      );
+    }
+  }
+
+  const commandNotes: string[] = ["Prompt is passed to Gemini as the final positional argument."];
+  if (yolo) commandNotes.push("Added --approval-mode yolo for unattended execution.");
+  if (instructionsFilePath && instructionsPrefix.length > 0) {
+    commandNotes.push(
+      `Loaded agent instructions from ${instructionsFilePath}`,
+      `Prepended instructions + path directive to prompt (relative references from ${instructionsDir}).`,
+    );
+  }
+
+  const renderedPrompt = renderTemplate(promptTemplate, {
     agentId: agent.id,
     companyId: agent.companyId,
     runId,
@@ -188,22 +296,21 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     run: { id: runId, source: "on_demand" },
     context,
   });
+  const paperclipEnvNote = renderPaperclipEnvNote(env);
+  const prompt = `${instructionsPrefix}${paperclipEnvNote}${renderedPrompt}`;
 
-  const buildGeminiArgs = () => {
-    const args = ["-p", prompt, "--output-format", "stream-json"];
-    if (model) args.push("--model", model);
-    if (yolo) args.push("--yolo");
-    if (sandbox) args.push("--sandbox");
+  const buildArgs = (resumeSessionId: string | null) => {
+    const args = ["--output-format", "stream-json"];
+    if (resumeSessionId) args.push("--resume", resumeSessionId);
+    if (model && model !== DEFAULT_GEMINI_LOCAL_MODEL) args.push("--model", model);
+    if (yolo) args.push("--approval-mode", "yolo");
     if (extraArgs.length > 0) args.push(...extraArgs);
+    args.push(prompt);
     return args;
   };
 
   const parseFallbackErrorMessage = (proc: RunProcessResult) => {
-    const stderrLine =
-      proc.stderr
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .find(Boolean) ?? "";
+    const stderrLine = firstNonEmptyLine(proc.stderr);
 
     if ((proc.exitCode ?? 0) === 0) {
       return "Failed to parse Gemini JSON output";
@@ -214,93 +321,141 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       : `Gemini exited with code ${proc.exitCode ?? -1}`;
   };
 
-  const args = buildGeminiArgs();
-  if (onMeta) {
-    await onMeta({
-      adapterType: "gemini_local",
-      command,
+  const runAttempt = async (resumeSessionId: string | null) => {
+    const args = buildArgs(resumeSessionId);
+    if (onMeta) {
+      await onMeta({
+        adapterType: "gemini_local",
+        command,
+        cwd,
+        commandNotes,
+        commandArgs: args.map((value, index) =>
+          index === args.length - 1 ? `<prompt ${prompt.length} chars>` : value,
+        ),
+        env: redactEnvForLogs(env),
+        prompt,
+        context,
+      });
+    }
+
+    const proc = await runChildProcess(runId, command, args, {
       cwd,
-      commandArgs: args,
-      commandNotes: [],
-      env: redactEnvForLogs(env),
-      prompt,
-      context,
+      env,
+      timeoutSec,
+      graceSec,
+      onLog,
     });
-  }
+    return { proc, parsed: parseGeminiStreamJson(proc.stdout) };
+  };
 
-  const proc = await runChildProcess(runId, command, args, {
-    cwd,
-    env,
-    timeoutSec,
-    graceSec,
-    onLog,
-  });
+  const toResult = (
+    attempt: {
+      proc: RunProcessResult;
+      parsed: ReturnType<typeof parseGeminiStreamJson>;
+    },
+    clearSessionOnMissingSession = false,
+  ): AdapterExecutionResult => {
+    const { proc, parsed: parsedStream } = attempt;
+    const fallbackParsed = parsedStream.resultJson ?? parseJson(proc.stdout);
 
-  const parsedStream = parseGeminiStreamJson(proc.stdout);
-  const parsed = parsedStream.resultJson ?? parseJson(proc.stdout);
+    const authMeta = detectGeminiAuthRequired({
+      parsed: fallbackParsed,
+      stdout: proc.stdout,
+      stderr: proc.stderr,
+    });
 
-  const authMeta = detectGeminiAuthRequired({
-    parsed,
-    stdout: proc.stdout,
-    stderr: proc.stderr,
-  });
+    if (proc.timedOut) {
+      return {
+        exitCode: proc.exitCode,
+        signal: proc.signal,
+        timedOut: true,
+        errorMessage: `Timed out after ${timeoutSec}s`,
+        errorCode: "timeout",
+        clearSession: clearSessionOnMissingSession,
+      };
+    }
 
-  if (proc.timedOut) {
-    return {
-      exitCode: proc.exitCode,
-      signal: proc.signal,
-      timedOut: true,
-      errorMessage: `Timed out after ${timeoutSec}s`,
-      errorCode: "timeout",
-    };
-  }
+    if (!fallbackParsed) {
+      return {
+        exitCode: proc.exitCode,
+        signal: proc.signal,
+        timedOut: false,
+        errorMessage: parseFallbackErrorMessage(proc),
+        errorCode: authMeta.requiresAuth ? "gemini_auth_required" : null,
+        resultJson: {
+          stdout: proc.stdout,
+          stderr: proc.stderr,
+        },
+        clearSession: clearSessionOnMissingSession,
+      };
+    }
 
-  if (!parsed) {
+    const usage =
+      parsedStream.usage ??
+      (() => {
+        const stats = parseObject(fallbackParsed.stats);
+        return {
+          inputTokens: asNumber(stats.input_tokens, 0),
+          cachedInputTokens: 0,
+          outputTokens: asNumber(stats.output_tokens, 0),
+        };
+      })();
+
+    const clearSessionForTurnLimit = isGeminiTurnLimitResult(fallbackParsed, proc.exitCode);
+    const resolvedSessionId = parsedStream.sessionId ?? runtimeSessionId ?? runtime.sessionId ?? null;
+    const resolvedSessionParams = resolvedSessionId
+      ? ({
+          sessionId: resolvedSessionId,
+          cwd,
+          ...(workspaceId ? { workspaceId } : {}),
+          ...(workspaceRepoUrl ? { repoUrl: workspaceRepoUrl } : {}),
+          ...(workspaceRepoRef ? { repoRef: workspaceRepoRef } : {}),
+        } as Record<string, unknown>)
+      : null;
+
     return {
       exitCode: proc.exitCode,
       signal: proc.signal,
       timedOut: false,
-      errorMessage: parseFallbackErrorMessage(proc),
+      errorMessage:
+        (proc.exitCode ?? 0) === 0
+          ? null
+          : describeGeminiFailure(fallbackParsed) ?? `Gemini exited with code ${proc.exitCode ?? -1}`,
       errorCode: authMeta.requiresAuth ? "gemini_auth_required" : null,
-      resultJson: {
-        stdout: proc.stdout,
-        stderr: proc.stderr,
-      },
+      usage,
+      sessionId: resolvedSessionId,
+      sessionParams: resolvedSessionParams,
+      sessionDisplayId: resolvedSessionId,
+      provider: "google",
+      model: parsedStream.model || asString(fallbackParsed.model, model),
+      billingType,
+      costUsd: parsedStream.costUsd ?? asNumber(fallbackParsed.cost_usd, 0),
+      resultJson: fallbackParsed,
+      summary: parsedStream.summary || asString(fallbackParsed.result, ""),
+      clearSession: clearSessionForTurnLimit || Boolean(clearSessionOnMissingSession && !resolvedSessionId),
     };
-  }
-
-  const usage =
-    parsedStream.usage ??
-    (() => {
-      const stats = parseObject(parsed.stats);
-      return {
-        inputTokens: asNumber(stats.input_tokens, 0),
-        cachedInputTokens: 0,
-        outputTokens: asNumber(stats.output_tokens, 0),
-      };
-    })();
-
-  const clearSessionForTurnLimit = isGeminiTurnLimitResult(parsed, proc.exitCode);
-
-  return {
-    exitCode: proc.exitCode,
-    signal: proc.signal,
-    timedOut: false,
-    errorMessage:
-      (proc.exitCode ?? 0) === 0
-        ? null
-        : describeGeminiFailure(parsed) ?? `Gemini exited with code ${proc.exitCode ?? -1}`,
-    errorCode: authMeta.requiresAuth ? "gemini_auth_required" : null,
-    usage,
-    sessionId: parsedStream.sessionId,
-    sessionParams: null,
-    sessionDisplayId: parsedStream.sessionId,
-    provider: "google",
-    model: parsedStream.model || asString(parsed.model, model),
-    billingType,
-    costUsd: parsedStream.costUsd ?? asNumber(parsed.cost_usd, 0),
-    resultJson: parsed,
-    summary: parsedStream.summary || asString(parsed.result, ""),
-    clearSession: clearSessionForTurnLimit,
   };
+
+  try {
+    const initial = await runAttempt(sessionId);
+    if (
+      sessionId &&
+      !initial.proc.timedOut &&
+      (initial.proc.exitCode ?? 0) !== 0 &&
+      isGeminiUnknownSessionError(initial.proc.stdout, initial.proc.stderr)
+    ) {
+      await onLog(
+        "stderr",
+        `[paperclip] Gemini resume session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
+      );
+      const retry = await runAttempt(null);
+      return toResult(retry, true);
+    }
+
+    return toResult(initial);
+  } finally {
+    if (tmpHome) {
+      fs.rm(tmpHome, { recursive: true, force: true }).catch(() => {});
+    }
+  }
 }

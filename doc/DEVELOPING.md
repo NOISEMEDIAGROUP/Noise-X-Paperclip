@@ -15,6 +15,14 @@ Current implementation status:
 - Node.js 20+
 - pnpm 9+
 
+## Dependency Lockfile Policy
+
+GitHub Actions owns `pnpm-lock.yaml`.
+
+- Do not commit `pnpm-lock.yaml` in pull requests.
+- Pull request CI validates dependency resolution when manifests change.
+- Pushes to `master` regenerate `pnpm-lock.yaml` with `pnpm install --lockfile-only --no-frozen-lockfile`, commit it back if needed, and then run verification with `--frozen-lockfile`.
+
 ## Start Dev
 
 From repo root:
@@ -28,6 +36,8 @@ This starts:
 
 - API server: `http://localhost:3100`
 - UI: served by the API server in dev middleware mode (same origin as API)
+
+`pnpm dev` runs the server in watch mode and restarts on changes from workspace packages (including adapter packages). Use `pnpm dev:once` to run without file watching.
 
 Tailscale/private-auth dev mode:
 

@@ -1,5 +1,6 @@
 export const type = "gemini_local";
 export const label = "Gemini CLI (local)";
+export const DEFAULT_GEMINI_LOCAL_MODEL = "gemini-2.5-flash";
 
 export const models = [
   { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro Preview" },
@@ -19,8 +20,8 @@ Adapter: gemini_local
 Core fields:
 - cwd (string, optional): default absolute working directory fallback for the agent process (created if missing when possible)
 - model (string, optional): Gemini model id
-- yolo (boolean, optional): pass --yolo to auto-approve all tool calls
-- sandbox (boolean, optional): pass --sandbox to run in Docker/Podman sandbox
+- yolo (boolean, optional): pass --approval-mode yolo to auto-approve all tool calls
+- instructionsFilePath (string, optional): path to agent instructions file prepended to prompt
 - promptTemplate (string, optional): run prompt template
 - command (string, optional): defaults to "gemini"
 - extraArgs (string[], optional): additional CLI args

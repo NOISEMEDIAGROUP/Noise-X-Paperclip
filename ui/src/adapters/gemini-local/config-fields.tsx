@@ -49,7 +49,7 @@ export function GeminiLocalConfigFields({
       </Field>
       <ToggleField
         label="Yolo mode"
-        hint="Auto-approve all tool calls without confirmation (--yolo)"
+        hint="Auto-approve all tool calls without confirmation (--approval-mode yolo)"
         checked={
           isCreate
             ? values!.dangerouslySkipPermissions

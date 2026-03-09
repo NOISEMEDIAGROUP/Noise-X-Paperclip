@@ -15,6 +15,7 @@ import {
 } from "@paperclipai/adapter-utils/server-utils";
 import path from "node:path";
 import { detectGeminiAuthRequired, parseGeminiStreamJson } from "./parse.js";
+import { firstNonEmptyLine } from "./utils.js";
 
 function summarizeStatus(checks: AdapterEnvironmentCheck[]): AdapterEnvironmentTestResult["status"] {
   if (checks.some((check) => check.level === "error")) return "fail";
@@ -24,15 +25,6 @@ function summarizeStatus(checks: AdapterEnvironmentCheck[]): AdapterEnvironmentT
 
 function isNonEmpty(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
-}
-
-function firstNonEmptyLine(text: string): string {
-  return (
-    text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find(Boolean) ?? ""
-  );
 }
 
 function commandLooksLike(command: string, expected: string): boolean {
@@ -142,18 +134,17 @@ export async function testEnvironment(
     } else {
       const model = asString(config.model, "").trim();
       const yolo = asBoolean(config.yolo, false);
-      const sandbox = asBoolean(config.sandbox, false);
       const extraArgs = (() => {
         const fromExtraArgs = asStringArray(config.extraArgs);
         if (fromExtraArgs.length > 0) return fromExtraArgs;
         return asStringArray(config.args);
       })();
 
-      const args = ["-p", "Respond with hello.", "--output-format", "stream-json"];
+      const args = ["--output-format", "stream-json"];
       if (model) args.push("--model", model);
-      if (yolo) args.push("--yolo");
-      if (sandbox) args.push("--sandbox");
+      if (yolo) args.push("--approval-mode", "yolo");
       if (extraArgs.length > 0) args.push(...extraArgs);
+      args.push("Respond with hello.");
 
       const probe = await runChildProcess(
         `gemini-envtest-${Date.now()}-${Math.random().toString(16).slice(2)}`,

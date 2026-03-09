@@ -28,6 +28,36 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CLI_DIR="$REPO_ROOT/cli"
 
+# ── Helper: create GitHub Release ────────────────────────────────────────────
+create_github_release() {
+  local version="$1"
+  local is_dry_run="$2"
+  local release_notes="$REPO_ROOT/releases/v${version}.md"
+
+  if [ "$is_dry_run" = true ]; then
+    echo "  [dry-run] gh release create v$version"
+    return
+  fi
+
+  if ! command -v gh &>/dev/null; then
+    echo "  ⚠ gh CLI not found — skipping GitHub Release"
+    return
+  fi
+
+  local gh_args=(gh release create "v$version" --title "v$version")
+  if [ -f "$release_notes" ]; then
+    gh_args+=(--notes-file "$release_notes")
+  else
+    gh_args+=(--generate-notes)
+  fi
+
+  if "${gh_args[@]}"; then
+    echo "  ✓ Created GitHub Release v$version"
+  else
+    echo "  ⚠ GitHub Release creation failed (non-fatal)"
+  fi
+}
+
 # ── Parse args ────────────────────────────────────────────────────────────────
 
 dry_run=false
@@ -85,7 +115,7 @@ const { readFileSync } = require('fs');
 const { resolve } = require('path');
 const root = '$REPO_ROOT';
 const dirs = ['packages/shared', 'packages/adapter-utils', 'packages/db',
-  'packages/adapters/claude-local', 'packages/adapters/codex-local', 'packages/adapters/openclaw',
+  'packages/adapters/claude-local', 'packages/adapters/codex-local', 'packages/adapters/opencode-local', 'packages/adapters/openclaw-gateway',
   'server', 'cli'];
 const names = [];
 for (const d of dirs) {
@@ -141,11 +171,14 @@ console.log(names.join('\n'));
     echo "  ✓ Committed and tagged v$NEW_VERSION"
   fi
 
+  create_github_release "$NEW_VERSION" "$dry_run"
+
   echo ""
   if [ "$dry_run" = true ]; then
     echo "Dry run complete for promote v$NEW_VERSION."
     echo "  - Would promote all packages to @latest"
     echo "  - Would commit and tag v$NEW_VERSION"
+    echo "  - Would create GitHub Release"
   else
     echo "Promoted all packages to @latest at v$NEW_VERSION"
     echo ""
@@ -188,7 +221,7 @@ const { resolve } = require('path');
 const root = '$REPO_ROOT';
 const wsYaml = readFileSync(resolve(root, 'pnpm-workspace.yaml'), 'utf8');
 const dirs = ['packages/shared', 'packages/adapter-utils', 'packages/db',
-  'packages/adapters/claude-local', 'packages/adapters/codex-local', 'packages/adapters/opencode-local', 'packages/adapters/openclaw',
+  'packages/adapters/claude-local', 'packages/adapters/codex-local', 'packages/adapters/opencode-local', 'packages/adapters/openclaw-gateway',
   'server', 'cli'];
 const names = [];
 for (const d of dirs) {
@@ -246,13 +279,11 @@ pnpm --filter @paperclipai/db build
 pnpm --filter @paperclipai/adapter-claude-local build
 pnpm --filter @paperclipai/adapter-codex-local build
 pnpm --filter @paperclipai/adapter-opencode-local build
-pnpm --filter @paperclipai/adapter-openclaw build
+pnpm --filter @paperclipai/adapter-openclaw-gateway build
 pnpm --filter @paperclipai/server build
 
 # Build UI and bundle into server package for static serving
-pnpm --filter @paperclipai/ui build
-rm -rf "$REPO_ROOT/server/ui-dist"
-cp -r "$REPO_ROOT/ui/dist" "$REPO_ROOT/server/ui-dist"
+bash "$REPO_ROOT/scripts/prepare-server-ui-dist.sh"
 
 # Bundle skills into packages that need them (adapters + server)
 for pkg_dir in server packages/adapters/claude-local packages/adapters/codex-local; do
@@ -281,7 +312,7 @@ if [ "$dry_run" = true ]; then
   echo ""
   echo "  Preview what would be published:"
   for dir in packages/shared packages/adapter-utils packages/db \
-             packages/adapters/claude-local packages/adapters/codex-local packages/adapters/opencode-local packages/adapters/openclaw \
+             packages/adapters/claude-local packages/adapters/codex-local packages/adapters/opencode-local packages/adapters/openclaw-gateway \
              server cli; do
     echo "  --- $dir ---"
     cd "$REPO_ROOT/$dir"
@@ -346,6 +377,10 @@ if [ "$canary" = false ]; then
   echo "  ✓ Committed and tagged v$NEW_VERSION"
 fi
 
+if [ "$canary" = false ]; then
+  create_github_release "$NEW_VERSION" "$dry_run"
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 
 echo ""
@@ -371,6 +406,7 @@ elif [ "$dry_run" = true ]; then
   echo "  - Versions bumped, built, and previewed"
   echo "  - Dev package.json restored"
   echo "  - Commit and tag created (locally)"
+  echo "  - Would create GitHub Release"
   echo ""
   echo "To actually publish, run:"
   echo "  ./scripts/release.sh $bump_type"
@@ -379,4 +415,6 @@ else
   echo ""
   echo "To push:"
   echo "  git push && git push origin v$NEW_VERSION"
+  echo ""
+  echo "GitHub Release: https://github.com/cryppadotta/paperclip/releases/tag/v$NEW_VERSION"
 fi

@@ -128,6 +128,12 @@ export function detectGeminiAuthRequired(input: {
   return { requiresAuth };
 }
 
+const GEMINI_UNKNOWN_SESSION_RE = /(?:unknown\s+session|session\s+not\s+found|invalid\s+session|no\s+such\s+session|session\s+expired)/i;
+
+export function isGeminiUnknownSessionError(stdout: string, stderr: string): boolean {
+  return GEMINI_UNKNOWN_SESSION_RE.test(stdout) || GEMINI_UNKNOWN_SESSION_RE.test(stderr);
+}
+
 export function isGeminiTurnLimitResult(
   parsed: Record<string, unknown> | null | undefined,
   exitCode?: number | null,

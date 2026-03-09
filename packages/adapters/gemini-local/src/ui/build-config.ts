@@ -56,7 +56,6 @@ export function buildGeminiLocalConfig(v: CreateConfigValues): Record<string, un
   if (v.promptTemplate) ac.promptTemplate = v.promptTemplate;
   if (v.model) ac.model = v.model;
   ac.yolo = v.dangerouslySkipPermissions;
-  ac.sandbox = v.dangerouslyBypassSandbox === false;
   ac.timeoutSec = 0;
   ac.graceSec = 15;
   const env = parseEnvBindings(v.envBindings);

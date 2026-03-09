@@ -165,6 +165,22 @@ export function hasAgentShortnameCollision(
   });
 }
 
+export function deduplicateAgentName(
+  candidateName: string,
+  existingAgents: AgentShortnameRow[],
+): string {
+  if (!hasAgentShortnameCollision(candidateName, existingAgents)) {
+    return candidateName;
+  }
+  for (let i = 2; i <= 100; i++) {
+    const suffixed = `${candidateName} ${i}`;
+    if (!hasAgentShortnameCollision(suffixed, existingAgents)) {
+      return suffixed;
+    }
+  }
+  return `${candidateName} ${Date.now()}`;
+}
+
 export function agentService(db: Db) {
   function withUrlKey<T extends { id: string; name: string }>(row: T) {
     return {
@@ -325,13 +341,17 @@ export function agentService(db: Db) {
         await ensureManager(companyId, data.reportsTo);
       }
 
-      await assertCompanyShortnameAvailable(companyId, data.name);
+      const existingAgents = await db
+        .select({ id: agents.id, name: agents.name, status: agents.status })
+        .from(agents)
+        .where(eq(agents.companyId, companyId));
+      const uniqueName = deduplicateAgentName(data.name, existingAgents);
 
       const role = data.role ?? "general";
       const normalizedPermissions = normalizeAgentPermissions(data.permissions, role);
       const created = await db
         .insert(agents)
-        .values({ ...data, companyId, role, permissions: normalizedPermissions })
+        .values({ ...data, name: uniqueName, companyId, role, permissions: normalizedPermissions })
         .returning()
         .then((rows) => rows[0]);
 

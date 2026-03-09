@@ -9,6 +9,10 @@ import {
   sessionCodec as opencodeSessionCodec,
   isOpenCodeUnknownSessionError,
 } from "@paperclipai/adapter-opencode-local/server";
+import {
+  sessionCodec as geminiSessionCodec,
+  isGeminiUnknownSessionError,
+} from "@paperclipai/adapter-gemini-local/server";
 
 describe("adapter session codecs", () => {
   it("normalizes claude session params with cwd", () => {
@@ -124,6 +128,43 @@ describe("opencode resume recovery detection", () => {
   });
 });
 
+describe("gemini session codec", () => {
+  it("normalizes gemini session params with cwd and workspace metadata", () => {
+    const parsed = geminiSessionCodec.deserialize({
+      sessionId: "gemini-session-1",
+      cwd: "/tmp/gemini",
+      workspaceId: "ws-123",
+      repoUrl: "https://github.com/example/repo.git",
+      repoRef: "main",
+    });
+    expect(parsed).toEqual({
+      sessionId: "gemini-session-1",
+      cwd: "/tmp/gemini",
+      workspaceId: "ws-123",
+      repoUrl: "https://github.com/example/repo.git",
+      repoRef: "main",
+    });
+
+    const serialized = geminiSessionCodec.serialize(parsed);
+    expect(serialized).toEqual({
+      sessionId: "gemini-session-1",
+      cwd: "/tmp/gemini",
+      workspaceId: "ws-123",
+      repoUrl: "https://github.com/example/repo.git",
+      repoRef: "main",
+    });
+    expect(geminiSessionCodec.getDisplayId?.(serialized ?? null)).toBe("gemini-session-1");
+  });
+
+  it("returns null for gemini session with missing sessionId", () => {
+    expect(geminiSessionCodec.deserialize({})).toBeNull();
+    expect(geminiSessionCodec.deserialize(null)).toBeNull();
+    expect(geminiSessionCodec.deserialize("not-an-object")).toBeNull();
+    expect(geminiSessionCodec.serialize(null)).toBeNull();
+    expect(geminiSessionCodec.serialize({ cwd: "/tmp" })).toBeNull();
+  });
+});
+
 describe("cursor resume recovery detection", () => {
   it("detects unknown session errors from cursor output", () => {
     expect(
@@ -143,6 +184,29 @@ describe("cursor resume recovery detection", () => {
         "{\"type\":\"result\",\"subtype\":\"success\"}",
         "",
       ),
+    ).toBe(false);
+  });
+});
+
+describe("gemini resume recovery detection", () => {
+  it("detects unknown session errors from gemini output", () => {
+    expect(
+      isGeminiUnknownSessionError("unknown session abc", ""),
+    ).toBe(true);
+    expect(
+      isGeminiUnknownSessionError("", "session not found"),
+    ).toBe(true);
+    expect(
+      isGeminiUnknownSessionError("invalid session", ""),
+    ).toBe(true);
+    expect(
+      isGeminiUnknownSessionError("", "no such session xyz"),
+    ).toBe(true);
+    expect(
+      isGeminiUnknownSessionError("", "session expired"),
+    ).toBe(true);
+    expect(
+      isGeminiUnknownSessionError('{"type":"result","status":"ok"}', ""),
     ).toBe(false);
   });
 });
