@@ -351,11 +351,20 @@ export function registerAgentCommands(program: Command): void {
           if (opts.adapterType !== undefined) body.adapterType = opts.adapterType;
           if (opts.reportsTo !== undefined) body.reportsTo = opts.reportsTo;
           if (opts.capabilities !== undefined) body.capabilities = opts.capabilities;
-          if (opts.budget !== undefined) body.budgetMonthlyCents = Number(opts.budget);
+          if (opts.budget !== undefined) {
+            const parsed = Number(opts.budget);
+            if (!Number.isFinite(parsed) || parsed < 0) {
+              throw new Error(`Invalid budget value '${opts.budget}': must be a non-negative integer (cents).`);
+            }
+            body.budgetMonthlyCents = parsed;
+          }
           if (opts.adapterConfig !== undefined) body.adapterConfig = await parseJsonOption(opts.adapterConfig);
           if (opts.runtimeConfig !== undefined) body.runtimeConfig = await parseJsonOption(opts.runtimeConfig);
 
           const created = await ctx.api.post<Agent>(`/api/companies/${ctx.companyId}/agents`, body);
+          if (!created) {
+            throw new Error("Failed to create agent: server returned no data.");
+          }
 
           if (ctx.json) {
             printOutput(created, { json: true });
@@ -364,10 +373,10 @@ export function registerAgentCommands(program: Command): void {
 
           console.log(
             formatInlineRecord({
-              id: created!.id,
-              name: created!.name,
-              role: created!.role,
-              status: created!.status,
+              id: created.id,
+              name: created.name,
+              role: created.role,
+              status: created.status,
             }),
           );
         } catch (err) {
@@ -404,11 +413,20 @@ export function registerAgentCommands(program: Command): void {
           if (opts.adapterType !== undefined) body.adapterType = opts.adapterType;
           if (opts.reportsTo !== undefined) body.reportsTo = opts.reportsTo;
           if (opts.capabilities !== undefined) body.capabilities = opts.capabilities;
-          if (opts.budget !== undefined) body.budgetMonthlyCents = Number(opts.budget);
+          if (opts.budget !== undefined) {
+            const parsed = Number(opts.budget);
+            if (!Number.isFinite(parsed) || parsed < 0) {
+              throw new Error(`Invalid budget value '${opts.budget}': must be a non-negative integer (cents).`);
+            }
+            body.budgetMonthlyCents = parsed;
+          }
           if (opts.adapterConfig !== undefined) body.adapterConfig = await parseJsonOption(opts.adapterConfig);
           if (opts.runtimeConfig !== undefined) body.runtimeConfig = await parseJsonOption(opts.runtimeConfig);
 
           const updated = await ctx.api.patch<Agent>(`/api/agents/${agentId}`, body);
+          if (!updated) {
+            throw new Error("Failed to update agent: server returned no data.");
+          }
 
           if (ctx.json) {
             printOutput(updated, { json: true });
@@ -417,10 +435,10 @@ export function registerAgentCommands(program: Command): void {
 
           console.log(
             formatInlineRecord({
-              id: updated!.id,
-              name: updated!.name,
-              role: updated!.role,
-              status: updated!.status,
+              id: updated.id,
+              name: updated.name,
+              role: updated.role,
+              status: updated.status,
             }),
           );
         } catch (err) {
