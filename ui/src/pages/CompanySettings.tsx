@@ -105,6 +105,15 @@ export function CompanySettings() {
     },
   });
 
+  const actionApprovalMutation = useMutation({
+    mutationFn: (requireHuman: boolean) =>
+      companiesApi.update(selectedCompanyId!, {
+        requireHumanApprovalForAllActions: requireHuman
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
+    }
+  });
   const inviteMutation = useMutation({
     mutationFn: () =>
       accessApi.createOpenClawInvitePrompt(selectedCompanyId!),
@@ -440,6 +449,21 @@ export function CompanySettings() {
                 : "Failed to update plugin availability"}
             </p>
           )}
+        </div>
+      </div>
+
+      {/* Approvals */}
+      <div className="space-y-4">
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Approvals
+        </div>
+        <div className="rounded-md border border-border px-4 py-3">
+          <ToggleField
+            label="Require human approval for all agent actions"
+            hint="When enabled, agents cannot auto-approve actions even if they have autonomous trust level."
+            checked={!!selectedCompany.requireHumanApprovalForAllActions}
+            onChange={(v) => actionApprovalMutation.mutate(v)}
+          />
         </div>
       </div>
 
