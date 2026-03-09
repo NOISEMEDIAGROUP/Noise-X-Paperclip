@@ -8,6 +8,7 @@ import { goalsApi } from "../api/goals";
 import { projectsApi } from "../api/projects";
 import { useCompany } from "../context/CompanyContext";
 import { queryKeys } from "../lib/queryKeys";
+import { invalidateProjectQueries } from "../lib/projectQueries";
 import { statusBadge, statusBadgeDefault } from "../lib/status-colors";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -108,10 +109,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
   const workspaces = project.workspaces ?? [];
 
   const invalidateProject = () => {
-    queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(project.id) });
-    if (selectedCompanyId) {
-      queryClient.invalidateQueries({ queryKey: queryKeys.projects.list(selectedCompanyId) });
-    }
+    return invalidateProjectQueries(queryClient, project);
   };
 
   const createWorkspace = useMutation({

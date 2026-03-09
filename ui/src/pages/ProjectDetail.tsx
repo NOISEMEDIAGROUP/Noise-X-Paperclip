@@ -17,6 +17,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { IssuesList } from "../components/IssuesList";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { projectRouteRef, cn } from "../lib/utils";
+import { invalidateProjectQueries } from "../lib/projectQueries";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -230,11 +231,8 @@ export function ProjectDetail() {
   }, [project?.companyId, selectedCompanyId, setSelectedCompanyId]);
 
   const invalidateProject = () => {
-    queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(routeProjectRef) });
-    queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(projectLookupRef) });
-    if (resolvedCompanyId) {
-      queryClient.invalidateQueries({ queryKey: queryKeys.projects.list(resolvedCompanyId) });
-    }
+    if (!project) return;
+    return invalidateProjectQueries(queryClient, project, routeProjectRef);
   };
 
   const updateProject = useMutation({
