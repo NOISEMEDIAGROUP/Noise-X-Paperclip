@@ -122,6 +122,7 @@ export function ClaudeLocalAdvancedFields({
       : "default";
 
   const [mode, setMode] = useState<ToolAccessMode>(initialMode);
+  useEffect(() => { setMode(initialMode); }, [initialMode]);
 
   const skipPerms = isCreate
     ? values!.dangerouslySkipPermissions
