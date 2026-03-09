@@ -3,6 +3,7 @@ import { Identity } from "./Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { cn } from "../lib/utils";
 import { deriveProjectUrlKey, type ActivityEvent, type Agent } from "@paperclipai/shared";
+import { getActivityEventAgentDisplay } from "../lib/activityDisplay";
 
 const ACTION_VERBS: Record<string, string> = {
   "issue.created": "created",
@@ -79,13 +80,15 @@ function entityLink(entityType: string, entityId: string, name?: string | null):
 interface ActivityRowProps {
   event: ActivityEvent;
   agentMap: Map<string, Agent>;
+  agentNameMap: Map<string, string>;
   entityNameMap: Map<string, string>;
   entityTitleMap?: Map<string, string>;
   className?: string;
 }
 
-export function ActivityRow({ event, agentMap, entityNameMap, entityTitleMap, className }: ActivityRowProps) {
+export function ActivityRow({ event, agentMap, agentNameMap, entityNameMap, entityTitleMap, className }: ActivityRowProps) {
   const verb = formatVerb(event.action, event.details);
+  const eventAgentDisplay = getActivityEventAgentDisplay(event);
 
   const isHeartbeatEvent = event.entityType === "heartbeat_run";
   const heartbeatAgentId = isHeartbeatEvent
@@ -93,17 +96,21 @@ export function ActivityRow({ event, agentMap, entityNameMap, entityTitleMap, cl
     : undefined;
 
   const name = isHeartbeatEvent
-    ? (heartbeatAgentId ? entityNameMap.get(`agent:${heartbeatAgentId}`) : null)
-    : entityNameMap.get(`${event.entityType}:${event.entityId}`);
+    ? (heartbeatAgentId ? entityNameMap.get(`agent:${heartbeatAgentId}`) ?? agentNameMap.get(heartbeatAgentId) : null)
+    : entityNameMap.get(`${event.entityType}:${event.entityId}`) ?? (event.entityType === "agent" ? eventAgentDisplay.name : null);
 
-  const entityTitle = entityTitleMap?.get(`${event.entityType}:${event.entityId}`);
+  const entityTitle = entityTitleMap?.get(`${event.entityType}:${event.entityId}`) ?? (event.entityType === "agent" ? eventAgentDisplay.title : undefined);
 
   const link = isHeartbeatEvent && heartbeatAgentId
-    ? `/agents/${heartbeatAgentId}/runs/${event.entityId}`
-    : entityLink(event.entityType, event.entityId, name);
+    ? (agentMap.has(heartbeatAgentId) ? `/agents/${heartbeatAgentId}/runs/${event.entityId}` : null)
+    : event.entityType === "agent" && !agentMap.has(event.entityId)
+      ? null
+      : entityLink(event.entityType, event.entityId, name);
 
   const actor = event.actorType === "agent" ? agentMap.get(event.actorId) : null;
-  const actorName = actor?.name ?? (event.actorType === "system" ? "System" : event.actorType === "user" ? "Board" : event.actorId || "Unknown");
+  const actorName = actor?.name
+    ?? (event.actorType === "agent" ? agentNameMap.get(event.actorId) : null)
+    ?? (event.actorType === "system" ? "System" : event.actorType === "user" ? "Board" : event.actorId || "Unknown");
 
   const inner = (
     <div className="flex gap-3">
@@ -115,7 +122,8 @@ export function ActivityRow({ event, agentMap, entityNameMap, entityTitleMap, cl
         />
         <span className="text-muted-foreground ml-1">{verb} </span>
         {name && <span className="font-medium">{name}</span>}
-        {entityTitle && <span className="text-muted-foreground ml-1">— {entityTitle}</span>}
+        {!name && entityTitle && <span className="font-medium">{entityTitle}</span>}
+        {name && entityTitle && <span className="text-muted-foreground ml-1">— {entityTitle}</span>}
       </p>
       <span className="text-xs text-muted-foreground shrink-0 pt-0.5">{timeAgo(event.createdAt)}</span>
     </div>

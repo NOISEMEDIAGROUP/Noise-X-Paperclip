@@ -23,7 +23,8 @@ import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard } from "lucide
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
 import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
 import { PageSkeleton } from "../components/PageSkeleton";
-import type { Agent, Issue } from "@paperclipai/shared";
+import { buildActivityDisplayMaps } from "../lib/activityDisplay";
+import type { Issue } from "@paperclipai/shared";
 
 function getRecentIssues(issues: Issue[]): Issue[] {
   return [...issues]
@@ -40,8 +41,8 @@ export function Dashboard() {
   const activityAnimationTimersRef = useRef<number[]>([]);
 
   const { data: agents } = useQuery({
-    queryKey: queryKeys.agents.list(selectedCompanyId!),
-    queryFn: () => agentsApi.list(selectedCompanyId!),
+    queryKey: queryKeys.agents.listAll(selectedCompanyId!),
+    queryFn: () => agentsApi.list(selectedCompanyId!, { includeTerminated: true }),
     enabled: !!selectedCompanyId,
   });
 
@@ -137,25 +138,10 @@ export function Dashboard() {
     };
   }, []);
 
-  const agentMap = useMemo(() => {
-    const map = new Map<string, Agent>();
-    for (const a of agents ?? []) map.set(a.id, a);
-    return map;
-  }, [agents]);
-
-  const entityNameMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const i of issues ?? []) map.set(`issue:${i.id}`, i.identifier ?? i.id.slice(0, 8));
-    for (const a of agents ?? []) map.set(`agent:${a.id}`, a.name);
-    for (const p of projects ?? []) map.set(`project:${p.id}`, p.name);
-    return map;
-  }, [issues, agents, projects]);
-
-  const entityTitleMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const i of issues ?? []) map.set(`issue:${i.id}`, i.title);
-    return map;
-  }, [issues]);
+  const { agentMap, agentNameMap, entityNameMap, entityTitleMap } = useMemo(
+    () => buildActivityDisplayMaps({ events: activity, agents, issues, projects }),
+    [activity, agents, issues, projects],
+  );
 
   const agentName = (id: string | null) => {
     if (!id || !agents) return null;
@@ -182,7 +168,7 @@ export function Dashboard() {
     return <PageSkeleton variant="dashboard" />;
   }
 
-  const hasNoAgents = agents !== undefined && agents.length === 0;
+  const hasNoAgents = agents !== undefined && agents.every((agent) => agent.status === "terminated");
 
   return (
     <div className="space-y-6">
@@ -289,6 +275,7 @@ export function Dashboard() {
                       key={event.id}
                       event={event}
                       agentMap={agentMap}
+                      agentNameMap={agentNameMap}
                       entityNameMap={entityNameMap}
                       entityTitleMap={entityTitleMap}
                       className={animatedActivityIds.has(event.id) ? "activity-row-enter" : undefined}

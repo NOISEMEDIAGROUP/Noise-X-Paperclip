@@ -45,6 +45,10 @@ export interface AgentHireResponse {
   approval: Approval | null;
 }
 
+export interface ListAgentsOptions {
+  includeTerminated?: boolean;
+}
+
 function withCompanyScope(path: string, companyId?: string) {
   if (!companyId) return path;
   const separator = path.includes("?") ? "&" : "?";
@@ -56,7 +60,12 @@ function agentPath(id: string, companyId?: string, suffix = "") {
 }
 
 export const agentsApi = {
-  list: (companyId: string) => api.get<Agent[]>(`/companies/${companyId}/agents`),
+  list: (companyId: string, options?: ListAgentsOptions) => {
+    const params = new URLSearchParams();
+    if (options?.includeTerminated) params.set("includeTerminated", "true");
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    return api.get<Agent[]>(`/companies/${encodeURIComponent(companyId)}/agents${suffix}`);
+  },
   org: (companyId: string) => api.get<OrgNode[]>(`/companies/${companyId}/org`),
   listConfigurations: (companyId: string) =>
     api.get<Record<string, unknown>[]>(`/companies/${companyId}/agent-configurations`),

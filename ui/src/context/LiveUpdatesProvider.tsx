@@ -336,6 +336,7 @@ function invalidateHeartbeatQueries(
   queryClient.invalidateQueries({ queryKey: queryKeys.liveRuns(companyId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.heartbeats(companyId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(companyId) });
+  queryClient.invalidateQueries({ queryKey: queryKeys.agents.listAll(companyId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(companyId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.costs(companyId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.sidebarBadges(companyId) });
@@ -378,6 +379,7 @@ function invalidateActivityQueries(
 
   if (entityType === "agent") {
     queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(companyId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.agents.listAll(companyId) });
     queryClient.invalidateQueries({ queryKey: queryKeys.org(companyId) });
     if (entityId) {
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(entityId) });
@@ -484,6 +486,7 @@ function handleLiveEvent(
 
   if (event.type === "agent.status") {
     queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(expectedCompanyId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.agents.listAll(expectedCompanyId) });
     queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(expectedCompanyId) });
     queryClient.invalidateQueries({ queryKey: queryKeys.org(expectedCompanyId) });
     const agentId = readString(payload.agentId);

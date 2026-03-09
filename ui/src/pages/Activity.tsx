@@ -8,6 +8,7 @@ import { goalsApi } from "../api/goals";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
+import { buildActivityDisplayMaps } from "../lib/activityDisplay";
 import { EmptyState } from "../components/EmptyState";
 import { ActivityRow } from "../components/ActivityRow";
 import { PageSkeleton } from "../components/PageSkeleton";
@@ -19,7 +20,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { History } from "lucide-react";
-import type { Agent } from "@paperclipai/shared";
 
 export function Activity() {
   const { selectedCompanyId } = useCompany();
@@ -37,8 +37,8 @@ export function Activity() {
   });
 
   const { data: agents } = useQuery({
-    queryKey: queryKeys.agents.list(selectedCompanyId!),
-    queryFn: () => agentsApi.list(selectedCompanyId!),
+    queryKey: queryKeys.agents.listAll(selectedCompanyId!),
+    queryFn: () => agentsApi.list(selectedCompanyId!, { includeTerminated: true }),
     enabled: !!selectedCompanyId,
   });
 
@@ -60,26 +60,10 @@ export function Activity() {
     enabled: !!selectedCompanyId,
   });
 
-  const agentMap = useMemo(() => {
-    const map = new Map<string, Agent>();
-    for (const a of agents ?? []) map.set(a.id, a);
-    return map;
-  }, [agents]);
-
-  const entityNameMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const i of issues ?? []) map.set(`issue:${i.id}`, i.identifier ?? i.id.slice(0, 8));
-    for (const a of agents ?? []) map.set(`agent:${a.id}`, a.name);
-    for (const p of projects ?? []) map.set(`project:${p.id}`, p.name);
-    for (const g of goals ?? []) map.set(`goal:${g.id}`, g.title);
-    return map;
-  }, [issues, agents, projects, goals]);
-
-  const entityTitleMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const i of issues ?? []) map.set(`issue:${i.id}`, i.title);
-    return map;
-  }, [issues]);
+  const { agentMap, agentNameMap, entityNameMap, entityTitleMap } = useMemo(
+    () => buildActivityDisplayMaps({ events: data, agents, issues, projects, goals }),
+    [data, agents, issues, projects, goals],
+  );
 
   if (!selectedCompanyId) {
     return <EmptyState icon={History} message="Select a company to view activity." />;
@@ -129,6 +113,7 @@ export function Activity() {
               key={event.id}
               event={event}
               agentMap={agentMap}
+              agentNameMap={agentNameMap}
               entityNameMap={entityNameMap}
               entityTitleMap={entityTitleMap}
             />

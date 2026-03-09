@@ -438,7 +438,8 @@ export function agentRoutes(db: Db) {
   router.get("/companies/:companyId/agents", async (req, res) => {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
-    const result = await svc.list(companyId);
+    const includeTerminated = parseBooleanLike(req.query.includeTerminated) === true;
+    const result = await svc.list(companyId, { includeTerminated });
     const canReadConfigs = await actorCanReadConfigurationsForCompany(req, companyId);
     if (canReadConfigs || req.actor.type === "board") {
       res.json(result);
@@ -1086,6 +1087,11 @@ export function agentRoutes(db: Db) {
       action: "agent.terminated",
       entityType: "agent",
       entityId: agent.id,
+      details: {
+        name: agent.name,
+        title: agent.title,
+        role: agent.role,
+      },
     });
 
     res.json(agent);
@@ -1107,6 +1113,11 @@ export function agentRoutes(db: Db) {
       action: "agent.deleted",
       entityType: "agent",
       entityId: agent.id,
+      details: {
+        name: agent.name,
+        title: agent.title,
+        role: agent.role,
+      },
     });
 
     res.json({ ok: true });
