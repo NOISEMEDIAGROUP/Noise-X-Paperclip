@@ -190,6 +190,16 @@ function usageNumber(usage: Record<string, unknown> | null, ...keys: string[]) {
   return 0;
 }
 
+function runPricingState(usage: Record<string, unknown> | null) {
+  const tokens =
+    usageNumber(usage, "inputTokens", "input_tokens") +
+    usageNumber(usage, "outputTokens", "output_tokens") +
+    usageNumber(usage, "cachedInputTokens", "cached_input_tokens", "cache_read_input_tokens");
+  const pricedCost = usageNumber(usage, "costUsd", "cost_usd", "total_cost_usd");
+  if (tokens === 0) return "exact" as const;
+  return pricedCost > 0 ? "exact" as const : "unpriced" as const;
+}
+
 function runMetrics(run: HeartbeatRun) {
   const usage = (run.usageJson ?? null) as Record<string, unknown> | null;
   const result = (run.resultJson ?? null) as Record<string, unknown> | null;
@@ -961,7 +971,15 @@ function CostsSection({
   const runsWithCost = runs
     .filter((r) => {
       const u = r.usageJson as Record<string, unknown> | null;
-      return u && (u.cost_usd || u.total_cost_usd || u.input_tokens);
+      return (
+        u &&
+        (
+          usageNumber(u, "costUsd", "cost_usd", "total_cost_usd") > 0 ||
+          usageNumber(u, "inputTokens", "input_tokens") > 0 ||
+          usageNumber(u, "outputTokens", "output_tokens") > 0 ||
+          usageNumber(u, "cachedInputTokens", "cached_input_tokens", "cache_read_input_tokens") > 0
+        )
+      );
     })
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
@@ -1004,17 +1022,19 @@ function CostsSection({
             <tbody>
               {runsWithCost.slice(0, 10).map((run) => {
                 const u = run.usageJson as Record<string, unknown>;
+                const pricingState = runPricingState(u);
+                const costLabel =
+                  pricingState === "unpriced"
+                    ? "Unpriced usage"
+                    : `$${usageNumber(u, "costUsd", "cost_usd", "total_cost_usd").toFixed(4)}`;
                 return (
                   <tr key={run.id} className="border-b border-border last:border-b-0">
                     <td className="px-3 py-2">{formatDate(run.createdAt)}</td>
                     <td className="px-3 py-2 font-mono">{run.id.slice(0, 8)}</td>
-                    <td className="px-3 py-2 text-right">{formatTokens(Number(u.input_tokens ?? 0))}</td>
-                    <td className="px-3 py-2 text-right">{formatTokens(Number(u.output_tokens ?? 0))}</td>
+                    <td className="px-3 py-2 text-right">{formatTokens(usageNumber(u, "inputTokens", "input_tokens"))}</td>
+                    <td className="px-3 py-2 text-right">{formatTokens(usageNumber(u, "outputTokens", "output_tokens"))}</td>
                     <td className="px-3 py-2 text-right">
-                      {(u.cost_usd || u.total_cost_usd)
-                        ? `$${Number(u.cost_usd ?? u.total_cost_usd ?? 0).toFixed(4)}`
-                        : "-"
-                      }
+                      {costLabel}
                     </td>
                   </tr>
                 );

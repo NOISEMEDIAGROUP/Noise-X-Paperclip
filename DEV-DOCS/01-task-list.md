@@ -12,32 +12,47 @@ Last updated: 2026-03-09
 - Harden generic file upload behavior for inert document types and `nosniff`
 - Fix project-health aggregation on the executive board
 - Add baseline DEV-DOCS snapshot for repo state and recent merged changes
-
-## Partial
-
-- Phase 2:
-  - briefing records and manual generation exist
-  - board summary exists
-  - missing: briefing library, schedule system, explicit approval-driven decision context, kind-specific digest generation, polished publish workflow
-- Phase 4:
-  - board includes a lightweight `projectHealth` section
-  - missing: dedicated portfolio/program page and milestone model
-- Phase 5:
-  - `pricingState` exists on the board
-  - missing: project/issue/portfolio propagation, attribution cleanup across new flows, worktree isolation
-
-## Next
-
-- Add DB/shared contracts for:
+- Add the all-phases data model foundation:
   - `briefing_schedules`
   - `knowledge_entries`
   - `project_milestones`
   - `workspace_checkouts`
-- Add briefing library and portfolio routes in the UI
-- Add knowledge routes and publication flow
-- Add briefing scheduler loop and generation-window controls
-- Add milestone CRUD and portfolio aggregation endpoint
-- Add checkout-aware workspace resolution and operator visibility
+- Add backend APIs for:
+  - briefing schedules
+  - knowledge library
+  - portfolio summary
+  - project milestones
+- Add server-side scheduled briefing generation
+- Add UI surfaces for:
+  - briefing library
+  - portfolio board
+  - knowledge library
+  - briefing detail schedule/generation controls
+- Add checkout-aware workspace isolation for repo-backed issue work
+- Improve issue, portfolio, and company cost pricing-truthfulness messaging
+- Complete browser QA across the executive surface and operator drilldowns
+- Fix workspace execution visibility gaps:
+  - persist resolved workspace metadata onto stored runs
+  - run process adapters in the resolved checkout cwd
+  - normalize `knowledge` company routing
+  - avoid misleading schedule defaults while record detail is still loading
+
+## Partial
+
+- Phase 5:
+  - checkout reuse exists for repo-backed workspaces
+  - issue and run UI show workspace metadata
+  - missing: checkout release/cleanup lifecycle and deeper attribution review
+
+## Next
+
+- Tighten checkout lifecycle semantics:
+  - release/archive rules
+  - cleanup policy
+  - operator visibility when a checkout becomes stale
+- Sweep remaining attribution paths to ensure every executive mutation carries consistent actor metadata
+- Extend pricing-state treatment into any remaining historical cost surface that still assumes exact dollars
+- Decide whether briefing delivery stays in-app only or expands into Slack/email/webhook delivery
 
 ## Later
 

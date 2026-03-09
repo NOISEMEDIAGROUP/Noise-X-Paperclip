@@ -2,219 +2,227 @@
 
 Date: 2026-03-09
 
-This file explains the recent commits in product terms so a human looking at the running app can tell what actually changed.
+This file explains the current sprint branch in product terms so a human can look at the running app and understand what is actually new.
 
-## The high-signal merged change
+## Sprint branch summary
 
-### `347aaef Add executive briefings and results layer (#1)`
+Current branch:
 
-This is the meaningful feature commit. It adds a new executive-facing interpretation layer beside the existing operations dashboard.
+- `codex/all-phases-executive-sprint`
 
-What that means in practice:
+Key local commits on this branch:
 
-- The old shape was mostly:
-  - goals/projects for intent
-  - issues/comments/runs/approvals for execution
-  - dashboard for telemetry
-- The new shape is now:
-  - goals
-  - plans
-  - work
-  - results
-  - briefings
+1. `3a609e3 docs(dev-docs): align current state and roadmap`
+2. `007037e feat(briefings): add executive sprint data contracts`
+3. `f38c5c3 feat(briefings): add schedule, knowledge, and portfolio apis`
+4. `8c8f7be feat(briefings): wire scheduled briefing execution`
+5. `0c6072f feat(briefings-ui): add briefing library, portfolio, and knowledge surfaces`
+6. `28ed287 feat(workspaces): add checkout-aware workspace isolation`
+7. `6f079ad fix(workspaces): run process adapter in resolved workspace`
 
-### What was added
+## What changed in the product
 
-1. A new executive surface in the UI
+### 1. Briefings is now a real product surface, not just a board tab
 
-- New sidebar destination: `Briefings`
-- New routes:
-  - `/briefings/board`
-  - `/briefings/results`
-  - `/briefings/plans`
-  - `/briefings/records/:recordId`
+Before this sprint branch:
 
-What you should see:
+- `/briefings/board` existed
+- `/briefings/results` existed
+- `/briefings/plans` existed
+- briefing records were mostly managed through record detail
 
-- `Board`
-  - executive summary view
-  - six sections: landed outcomes, risks/blocks, decisions needed, project health, cost anomalies, executive rollups
-- `Results`
-  - filterable library of durable outcomes
-- `Plans`
-  - filterable library of pre-ticket planning artifacts
-- record detail pages
-  - a shared detail screen for plans, results, and briefings
+Now:
 
-2. First-class durable records
+- `/briefings/board`
+- `/briefings/briefings`
+- `/briefings/results`
+- `/briefings/plans`
+- `/briefings/portfolio`
+- `/briefings/records/:recordId`
 
-The app now has a real record model instead of forcing every meaningful output to stay buried in issue comments or run artifacts.
+What that means:
 
-Supported record categories:
+- `Board` is still the exception-and-decision summary view
+- `Briefings` is now the library of briefing records themselves
+- `Results` is the durable output library
+- `Plans` is the non-ticket planning library
+- `Portfolio` is the project/program board
 
-- `plan`
-- `result`
-- `briefing`
+### 2. Scheduled briefing generation now exists
 
-Supported plan kinds:
+New server-side concept:
 
-- `strategy_memo`
-- `project_brief`
-- `decision_record`
-- `operating_plan`
-- `weekly_objective`
-- `risk_register`
+- `briefing_schedules`
 
-Supported result kinds:
+What it does:
 
-- `deliverable`
-- `finding`
-- `blocker`
-- `decision_outcome`
-- `status_report`
+- briefing records can act as templates
+- schedules can generate child briefing instances on a cadence
+- generated instances can auto-publish
+- the scheduler runs inside the server process
 
-Supported briefing kinds:
+Visible user impact:
 
-- `daily_briefing`
-- `weekly_briefing`
-- `executive_rollup`
-- `project_status_report`
-- `incident_summary`
-- `board_packet`
+- briefing detail pages now expose generation controls
+- briefing detail pages now expose schedule controls
+- generated records carry source/template metadata
 
-3. A new record storage layer in the DB
+### 3. Knowledge publishing now exists
 
-New tables:
+New server-side concept:
 
-- `records`
-- `record_links`
-- `record_attachments`
-- `briefing_view_states`
+- `knowledge_entries`
 
-Why this matters:
+New UI route:
 
-- one result can now roll up many issues/runs/approvals/projects
-- executive summaries can be persisted instead of recomputed only in the UI
-- "since my last visit" is tracked on the server, not just in the browser
+- `/knowledge`
 
-4. New API surface
+What it does:
 
-New company-scoped endpoints:
+- published results and published briefings can be promoted into a knowledge library
+- one source record updates its existing knowledge entry instead of duplicating it
+- the knowledge page is now a durable published-artifact library rather than a future idea
 
-- `/api/companies/:companyId/plans`
-- `/api/companies/:companyId/results`
-- `/api/companies/:companyId/results/promote`
-- `/api/companies/:companyId/briefings`
-- `/api/companies/:companyId/briefings/board`
+### 4. Portfolio board and milestones now exist
 
-New shared record endpoints:
+New server-side concept:
 
-- `/api/records/:recordId`
-- `/api/records/:recordId/links`
-- `/api/records/:recordId/attachments`
-- `/api/records/:recordId/generate`
-- `/api/records/:recordId/publish`
+- `project_milestones`
 
-5. Promotion flows from operational pages
+New API surface:
 
-Existing operational pages still matter, but now they can emit durable outputs:
+- `/api/companies/:companyId/briefings/portfolio`
+- `/api/projects/:id/milestones`
 
-- issue detail can promote to result
-- approval detail can promote to result
-- agent run detail can promote to result
+What it does:
 
-This is one of the most important behavioral changes. It means the app no longer treats execution artifacts as the only place where meaning lives.
+- projects now have milestone records
+- the portfolio board can show:
+  - project health
+  - lead agent
+  - budget burn
+  - pricing truthfulness
+  - milestone status
+  - current blocker
+  - last meaningful result
+  - next board decision
+  - confidence
 
-## Important correctness/security fixes bundled into that work
+### 5. Worktree-aware workspace isolation has started shipping
 
-These were part of the final merged outcome, even though they arrived as review follow-ups:
+New server-side concept:
 
-1. Generic file upload hardening
+- `workspace_checkouts`
 
-- `/api/companies/:companyId/assets/files` now restricts uploads to inert document formats
-- asset responses send `X-Content-Type-Options: nosniff`
+What it does:
 
-Why this matters:
+- repo-backed project workspaces can now resolve to issue-specific reusable worktrees
+- the isolation key is effectively `(project workspace, issue, agent)`
+- when isolation is unavailable, the runtime marks that honestly and falls back to the shared workspace or agent home
 
-- the first version allowed arbitrary file MIME types
-- that created a stored-XSS risk if users uploaded active content and opened it from the Paperclip origin
+Visible user impact:
 
-2. Project health aggregation fix
+- agent run detail now shows workspace path, branch, and isolation status
+- issue detail now shows workspace-isolation information derived from linked runs
 
-- board project health now uses the full blocker and decision collections before the visible board lists are truncated to top items
+### 6. Cost reporting is more honest in executive and issue views
 
-Why this matters:
+What changed:
 
-- otherwise later projects in a busy company could incorrectly appear healthier than they are
+- board anomalies already used `pricingState`
+- portfolio rows now show `budgetPricingState`
+- issue detail no longer implies priced spend when only token usage exists
+- the dedicated `Costs` page now carries `pricingState` through summary, agent rows, and project rows
+- agent run history now labels unpriced token usage explicitly instead of leaving the cost column blank
 
-3. Extra test coverage
+Practical effect:
 
-New server-side tests now cover:
+- unpriced token-heavy work is now labeled as `Unpriced token usage`
+- mixed priceable/non-priceable cases can be shown as `estimated`
 
-- record routes
-- record service aggregation
-- generic file upload behavior and headers
+### 7. Workspace execution context is now visible end to end
 
-## Things that did not change
+This checkpoint fixed a subtle but important operational gap:
 
-These are easy to misunderstand if you only glance at the UI:
+- repo-backed issue runs already resolved into worktree checkouts
+- but the resolved checkout metadata was not always persisted back into the stored run context
 
-- `/dashboard` was not replaced
-  - it is still the narrow telemetry page
-- issue detail is still the execution-oriented page
-  - linked runs, comments, activity, and issue-level cost still live there
-- automatic publishing into a future knowledge library was not added yet
-- plans do not automatically explode into issues yet
+What changed:
 
-## Other recent commits and what they mean
+- heartbeat execution now writes the enriched `paperclipWorkspace` context back onto the run row before adapter execution continues
+- process adapters now execute in the resolved checkout cwd instead of accidentally honoring a stale configured cwd
+- process adapters also receive explicit workspace env vars such as:
+  - `PAPERCLIP_WORKSPACE_CWD`
+  - `PAPERCLIP_WORKSPACE_SOURCE`
+  - `PAPERCLIP_WORKSPACE_ID`
+  - `PAPERCLIP_WORKSPACES_JSON`
 
-### `3db6e13 chore(lockfile): refresh pnpm-lock.yaml`
+Visible effect:
 
-This is not a product feature. It is dependency lockfile maintenance from automation.
+- issue detail and run detail now show the actual checkout path and branch that the run used
+- the workspace-isolation UI is grounded in persisted run metadata, not just in-memory runtime state
 
-### `047a095 docs(dev-docs): add verified repository and branch maintenance snapshot`
+### 8. Briefing and routing polish removed misleading UI states
 
-This created the initial `DEV-DOCS/` folder for this workspace with a repo snapshot and branch notes.
+Two smaller but important UX fixes also landed during verification:
 
-### `0e5310e Merge branch 'codex/executive-briefings-results-layer' into development`
+- the record-detail schedule card no longer flashes fake default values while the saved schedule is still loading
+- `knowledge` is now treated as a real company-scoped board route root, so `/EXE/knowledge` works correctly from nav and path normalization
 
-This moved the executive briefings work into the local `development` branch.
+## New DB/API/UI footprint
 
-### `71a62da Merge remote-tracking branch 'origin/master' into development`
+### New database tables on this branch
 
-This synchronized `development` with the post-merge state of `master`, including the automated lockfile refresh.
+- `briefing_schedules`
+- `knowledge_entries`
+- `project_milestones`
+- `workspace_checkouts`
 
-## If you are staring at the app and not sure what to inspect
+### New server/API surface on this branch
 
-Start here:
+- `GET /api/companies/:companyId/briefings/portfolio`
+- `GET /api/records/:recordId/schedule`
+- `PUT /api/records/:recordId/schedule`
+- `DELETE /api/records/:recordId/schedule`
+- `GET /api/companies/:companyId/knowledge`
+- `GET /api/knowledge/:entryId`
+- `POST /api/records/:recordId/publish-to-knowledge`
+- milestone CRUD under `/api/projects/:id/milestones`
+
+### New UI surface on this branch
+
+- `Briefings` tab for briefing-library management
+- `Portfolio` tab for program/project rollups
+- `Knowledge` sidebar destination and library page
+- schedule and generation controls inside record detail
+
+## What to click in the app now
+
+If you are looking at the running app and want the shortest useful tour:
 
 1. Open `/dashboard`
-   - treat it as telemetry and operational status only
+   - still telemetry only
 2. Open `/briefings/board`
-   - this is the new executive surface
-3. Open `/briefings/results`
-   - this shows the new durable output model
-4. Open any issue / approval / agent run detail page
-   - look for "Promote to result"
-5. Open a record detail page under `/briefings/records/:recordId`
-   - this shows what the new durable record UX actually looks like
+   - executive exception view
+3. Open `/briefings/briefings`
+   - briefing templates and generated instances
+4. Open `/briefings/portfolio`
+   - project/program board
+5. Open `/knowledge`
+   - published durable knowledge
+6. Open any result or briefing record detail
+   - generate, schedule, publish, attach files, publish to knowledge
+7. Open any agent run detail
+   - inspect the workspace path/branch/isolation state
 
-## Practical reading of the app now
+## What is still not done
 
-If you want the shortest possible explanation:
+This branch moves far past the original Phase 1 merge, but some gaps still remain:
 
-- Dashboard tells you what the system is doing.
-- Issues tell you how work is being executed.
-- Briefings tells you what changed and why it matters.
-
-## What is still missing after that merge
-
-The app is in a better state, but the executive layer is not finished yet. The missing pieces are the ones now targeted by the current sprint branch:
-
-- a dedicated `Briefings` library view for briefing records themselves
-- scheduled daily/weekly digest generation
-- approval-aware decision synthesis inside generated briefings
-- a knowledge library that durable results can publish into
-- a portfolio/program board with milestones
-- git-worktree-backed workspace isolation for parallel issue work
-- wider use of truthful pricing states outside the board
+- no Slack/email/Discord delivery for briefings
+- no automatic plan-to-issue decomposition
+- no full worktree lifecycle management yet
+  - checkout cleanup/release is still minimal
+- attribution audit hardening still deserves a deeper sweep across every mutation path
+- the knowledge layer is lightweight by design
+  - it is not a semantic search/retrieval system yet

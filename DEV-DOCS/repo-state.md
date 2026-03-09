@@ -78,20 +78,18 @@ If the app "looks fine" but the shape is unclear, this is the current mental mod
   - durable planning library
   - where strategy memos, project briefs, decision records, operating plans, weekly objectives, and risk registers now live
 - `/briefings/briefings`
-  - planned next for a dedicated briefing library
-  - not shipped yet in the current baseline
+  - briefing library for briefing records/templates/instances
 - `/briefings/portfolio`
-  - planned next for a true portfolio/program surface
-  - not shipped yet in the current baseline
+  - dedicated portfolio/program board
 - `/knowledge`
-  - planned next for durable organizational memory
-  - not shipped yet in the current baseline
+  - lightweight knowledge library for published durable outputs
 - `/briefings/records/:recordId`
   - shared detail page for plans, results, and briefings
   - shows markdown body, attachments, linked work, publish state, and activity
 - issue / approval / agent run detail pages
   - still part of the operational layer
   - now include "Promote to result" entry points so execution artifacts can become durable outputs
+  - agent run detail also exposes persisted workspace-isolation metadata such as checkout path and branch
 
 ## Recent architecture additions now present in code
 
@@ -102,6 +100,10 @@ The repository now includes a durable executive-record layer in addition to goal
   - `record_links`
   - `record_attachments`
   - `briefing_view_states`
+  - `briefing_schedules`
+  - `knowledge_entries`
+  - `project_milestones`
+  - `workspace_checkouts`
 - Shared contracts:
   - record categories: `plan`, `result`, `briefing`
   - record scopes: `company`, `project`, `agent`
@@ -110,14 +112,21 @@ The repository now includes a durable executive-record layer in addition to goal
 - Server routes:
   - company-scoped CRUD/list routes for plans, results, and briefings
   - board summary endpoint at `/api/companies/:companyId/briefings/board`
+  - portfolio summary endpoint at `/api/companies/:companyId/briefings/portfolio`
   - shared record detail/mutation routes under `/api/records/:recordId/*`
+  - schedule routes under `/api/records/:recordId/schedule`
+  - knowledge routes under `/api/companies/:companyId/knowledge` and `/api/knowledge/:entryId`
+  - milestone CRUD under `/api/projects/:id/milestones`
   - generic asset upload route at `/api/companies/:companyId/assets/files`
 - UI routes:
   - `/briefings`
   - `/briefings/board`
+  - `/briefings/briefings`
   - `/briefings/results`
   - `/briefings/plans`
+  - `/briefings/portfolio`
   - `/briefings/records/:recordId`
+  - `/knowledge`
 
 ## Security/runtime corrections included in the merged feature work
 
@@ -128,15 +137,12 @@ The recent executive-record work also shipped follow-up fixes:
 - project health is derived from the full blocker/decision sets before the board truncates visible lists
 - server tests now cover those regressions
 
-## Major gaps still open after the first executive-layer merge
+## Major gaps still open after the current sprint branch
 
-- no dedicated briefing library yet
-- no scheduled digest generation yet
-- no knowledge library/index yet
-- no project milestones model yet
-- no dedicated portfolio/program page yet
-- no worktree-backed workspace isolation yet
-- no pricing-state propagation across all cost surfaces yet
+- checkout lifecycle management is still light
+- attribution normalization still deserves a deeper audit sweep
+- notifications/external reporting are still separate work
+- knowledge search/retrieval is intentionally lightweight
 
 ## Source/build artifacts present
 

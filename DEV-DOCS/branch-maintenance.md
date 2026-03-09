@@ -34,4 +34,9 @@ Remote-tracked branches verified:
 - `master` contains the squashed GitHub merge of the executive briefings work.
 - `development` contains the merged Phase 1 executive-record baseline and lockfile sync.
 - `codex/all-phases-executive-sprint` is the current implementation branch for finishing Phases 2-5.
+- The current branch now contains additional local commits for:
+  - schedule/knowledge/portfolio APIs
+  - scheduled briefing execution
+  - briefing/portfolio/knowledge UI
+  - checkout-aware workspace isolation
 - Do not claim the workspace is clean unless that is re-verified at the time of reading.

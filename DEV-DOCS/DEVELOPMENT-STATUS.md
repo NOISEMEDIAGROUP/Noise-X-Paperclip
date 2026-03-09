@@ -6,14 +6,14 @@ Last updated: 2026-03-09
 
 - Phase 1: `done`
   - executive records, board surface, results library, plans library, shared record detail, promotion flows
-- Phase 2: `partial`
-  - manual briefing generation exists, but the product still lacks briefing library/schedules and digest-specific UX
-- Phase 3: `next`
-  - no shipped knowledge library or record-to-knowledge publication yet
-- Phase 4: `partial`
-  - board has `projectHealth`, but there is no dedicated portfolio surface or milestone model
+- Phase 2: `done`
+  - briefing library, kind-aware generation, generation-window controls, and scheduled digest generation are now in code
+- Phase 3: `done`
+  - knowledge index, knowledge routes, and record-to-knowledge publication are now in code
+- Phase 4: `done`
+  - milestone model and dedicated portfolio surface are now in code
 - Phase 5: `partial`
-  - board-level `pricingState` is shipped, but attribution, worktree isolation, and wider cost truthfulness remain open
+  - repo-backed checkout isolation is shipped and issue/portfolio/company cost truthfulness improved, but checkout release/cleanup and full attribution normalization still need more work
 
 ## Branch state
 
@@ -35,7 +35,10 @@ Phase 1 created the basic executive surface. The remaining work is to make it fu
 ## Current blockers
 
 - None at the repo/tooling level right now.
-- The main risk is scope coordination because the remaining work touches DB, shared types, server, UI, scheduler behavior, docs, and QA together.
+- The remaining risk is completeness, not broken infra:
+  - checkout lifecycle is not fully mature yet
+  - attribution auditing across every mutation path still deserves a deeper sweep
+  - external delivery/search features remain intentionally out of scope for this sprint
 
 ## Verification posture
 
@@ -48,3 +51,19 @@ pnpm build
 ```
 
 The final pass must also include interactive browser QA over the executive flows.
+
+Verified on this branch:
+
+- `pnpm -r typecheck`
+- `pnpm test:run`
+- `pnpm build`
+- browser QA over:
+  - `/EXE/briefings/board`
+  - `/EXE/briefings/briefings`
+  - `/EXE/briefings/results`
+  - `/EXE/briefings/plans`
+  - `/EXE/briefings/portfolio`
+  - `/EXE/knowledge`
+  - issue detail promotion flow
+  - approval detail promotion flow
+  - agent run detail workspace-isolation view

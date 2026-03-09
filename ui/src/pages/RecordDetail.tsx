@@ -294,6 +294,13 @@ export function RecordDetail() {
   const generatedFromScheduleId = record?.metadata && typeof record.metadata === "object" && "generatedFromScheduleId" in record.metadata
     ? String(record.metadata.generatedFromScheduleId)
     : null;
+  const scheduleStatusLabel = scheduleQuery.isLoading
+    ? "Loading schedule"
+    : scheduleQuery.data
+      ? scheduleQuery.data.enabled
+        ? "Scheduled"
+        : "Paused"
+      : "Manual only";
 
   if (recordQuery.isLoading) return <PageSkeleton variant="detail" />;
   if (recordQuery.error) return <p className="text-sm text-destructive">{recordQuery.error.message}</p>;
@@ -404,7 +411,7 @@ export function RecordDetail() {
               <h2 className="text-base font-semibold text-foreground">Generation and schedule</h2>
               <p className="text-sm text-muted-foreground">Choose the briefing window, regenerate on demand, and configure scheduled briefings.</p>
             </div>
-            {scheduleQuery.data ? <Badge variant="outline">{scheduleQuery.data.enabled ? "Scheduled" : "Paused"}</Badge> : <Badge variant="outline">Manual only</Badge>}
+            <Badge variant="outline">{scheduleStatusLabel}</Badge>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
@@ -439,74 +446,80 @@ export function RecordDetail() {
 
             <div className="space-y-3 rounded-xl border border-border/70 bg-background p-4">
               <h3 className="text-sm font-semibold text-foreground">Schedule</h3>
-              <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
-                <input type="checkbox" checked={scheduleEnabled} onChange={(event) => setScheduleEnabled(event.target.checked)} className="h-4 w-4" />
-                <span>Enable scheduled generation for this briefing template.</span>
-              </label>
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="space-y-1 text-sm block">
-                  <span className="text-muted-foreground">Cadence</span>
-                  <select value={scheduleCadence} onChange={(event) => setScheduleCadence(event.target.value as "daily" | "weekly")} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                  </select>
-                </label>
-                <label className="space-y-1 text-sm block">
-                  <span className="text-muted-foreground">Timezone</span>
-                  <Input value={scheduleTimezone} onChange={(event) => setScheduleTimezone(event.target.value)} />
-                </label>
-                <label className="space-y-1 text-sm block">
-                  <span className="text-muted-foreground">Hour</span>
-                  <Input type="number" min={0} max={23} value={scheduleHour} onChange={(event) => setScheduleHour(event.target.value)} />
-                </label>
-                <label className="space-y-1 text-sm block">
-                  <span className="text-muted-foreground">Minute</span>
-                  <Input type="number" min={0} max={59} value={scheduleMinute} onChange={(event) => setScheduleMinute(event.target.value)} />
-                </label>
-                {scheduleCadence === "weekly" ? (
-                  <label className="space-y-1 text-sm block">
-                    <span className="text-muted-foreground">Day of week</span>
-                    <select value={scheduleDayOfWeek} onChange={(event) => setScheduleDayOfWeek(event.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-                      <option value="0">Sunday</option>
-                      <option value="1">Monday</option>
-                      <option value="2">Tuesday</option>
-                      <option value="3">Wednesday</option>
-                      <option value="4">Thursday</option>
-                      <option value="5">Friday</option>
-                      <option value="6">Saturday</option>
-                    </select>
+              {scheduleQuery.isLoading ? (
+                <p className="text-sm text-muted-foreground">Loading saved schedule configuration...</p>
+              ) : (
+                <>
+                  <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+                    <input type="checkbox" checked={scheduleEnabled} onChange={(event) => setScheduleEnabled(event.target.checked)} className="h-4 w-4" />
+                    <span>Enable scheduled generation for this briefing template.</span>
                   </label>
-                ) : null}
-                <label className="space-y-1 text-sm block">
-                  <span className="text-muted-foreground">Window preset</span>
-                  <select value={scheduleWindowPreset} onChange={(event) => setScheduleWindowPreset(event.target.value as GenerateWindowPreset)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-                    <option value="last_visit">Since last run</option>
-                    <option value="24h">Last 24 hours</option>
-                    <option value="7d">Last 7 days</option>
-                    <option value="custom" disabled>Custom range</option>
-                  </select>
-                </label>
-              </div>
-              <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
-                <input type="checkbox" checked={scheduleAutoPublish} onChange={(event) => setScheduleAutoPublish(event.target.checked)} className="h-4 w-4" />
-                <span>Automatically publish generated briefing instances.</span>
-              </label>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" onClick={() => scheduleMutation.mutate()} disabled={scheduleMutation.isPending}>
-                  {scheduleMutation.isPending ? "Saving..." : "Save schedule"}
-                </Button>
-                {scheduleQuery.data ? (
-                  <Button variant="ghost" onClick={() => deleteScheduleMutation.mutate()} disabled={deleteScheduleMutation.isPending}>
-                    {deleteScheduleMutation.isPending ? "Removing..." : "Delete schedule"}
-                  </Button>
-                ) : null}
-              </div>
-              {scheduleQuery.data ? (
-                <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
-                  <div>Last run: {scheduleQuery.data.lastRunAt ? formatDateTime(scheduleQuery.data.lastRunAt) : "Never"}</div>
-                  <div>Next run: {scheduleQuery.data.nextRunAt ? formatDateTime(scheduleQuery.data.nextRunAt) : "Not scheduled"}</div>
-                </div>
-              ) : null}
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="space-y-1 text-sm block">
+                      <span className="text-muted-foreground">Cadence</span>
+                      <select value={scheduleCadence} onChange={(event) => setScheduleCadence(event.target.value as "daily" | "weekly")} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-sm block">
+                      <span className="text-muted-foreground">Timezone</span>
+                      <Input value={scheduleTimezone} onChange={(event) => setScheduleTimezone(event.target.value)} />
+                    </label>
+                    <label className="space-y-1 text-sm block">
+                      <span className="text-muted-foreground">Hour</span>
+                      <Input type="number" min={0} max={23} value={scheduleHour} onChange={(event) => setScheduleHour(event.target.value)} />
+                    </label>
+                    <label className="space-y-1 text-sm block">
+                      <span className="text-muted-foreground">Minute</span>
+                      <Input type="number" min={0} max={59} value={scheduleMinute} onChange={(event) => setScheduleMinute(event.target.value)} />
+                    </label>
+                    {scheduleCadence === "weekly" ? (
+                      <label className="space-y-1 text-sm block">
+                        <span className="text-muted-foreground">Day of week</span>
+                        <select value={scheduleDayOfWeek} onChange={(event) => setScheduleDayOfWeek(event.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                          <option value="0">Sunday</option>
+                          <option value="1">Monday</option>
+                          <option value="2">Tuesday</option>
+                          <option value="3">Wednesday</option>
+                          <option value="4">Thursday</option>
+                          <option value="5">Friday</option>
+                          <option value="6">Saturday</option>
+                        </select>
+                      </label>
+                    ) : null}
+                    <label className="space-y-1 text-sm block">
+                      <span className="text-muted-foreground">Window preset</span>
+                      <select value={scheduleWindowPreset} onChange={(event) => setScheduleWindowPreset(event.target.value as GenerateWindowPreset)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                        <option value="last_visit">Since last run</option>
+                        <option value="24h">Last 24 hours</option>
+                        <option value="7d">Last 7 days</option>
+                        <option value="custom" disabled>Custom range</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+                    <input type="checkbox" checked={scheduleAutoPublish} onChange={(event) => setScheduleAutoPublish(event.target.checked)} className="h-4 w-4" />
+                    <span>Automatically publish generated briefing instances.</span>
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button variant="outline" onClick={() => scheduleMutation.mutate()} disabled={scheduleMutation.isPending}>
+                      {scheduleMutation.isPending ? "Saving..." : "Save schedule"}
+                    </Button>
+                    {scheduleQuery.data ? (
+                      <Button variant="ghost" onClick={() => deleteScheduleMutation.mutate()} disabled={deleteScheduleMutation.isPending}>
+                        {deleteScheduleMutation.isPending ? "Removing..." : "Delete schedule"}
+                      </Button>
+                    ) : null}
+                  </div>
+                  {scheduleQuery.data ? (
+                    <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+                      <div>Last run: {scheduleQuery.data.lastRunAt ? formatDateTime(scheduleQuery.data.lastRunAt) : "Never"}</div>
+                      <div>Next run: {scheduleQuery.data.nextRunAt ? formatDateTime(scheduleQuery.data.nextRunAt) : "Not scheduled"}</div>
+                    </div>
+                  ) : null}
+                </>
+              )}
             </div>
           </div>
         </section>

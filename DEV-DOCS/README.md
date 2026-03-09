@@ -43,3 +43,12 @@ These docs were updated from live repo inspection of:
   - verified repo structure, tooling, and product surface snapshot
 - `DEV-DOCS/recent-changes.md`
   - recent merged changes explained in product terms
+
+## Current emphasis
+
+If you only read two files before continuing work on this branch:
+
+1. `DEV-DOCS/recent-changes.md`
+2. `DEV-DOCS/DEVELOPMENT-STATUS.md`
+
+They now describe the post-Phase-1 executive layer plus the current all-phases sprint work that adds schedules, knowledge, portfolio, and checkout-aware workspace isolation.

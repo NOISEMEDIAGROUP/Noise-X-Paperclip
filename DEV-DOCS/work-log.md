@@ -15,3 +15,55 @@
   - Phase 1 shipped
   - Phases 2, 4, and 5 partial
   - Phase 3 not started
+
+### Session: all-phases sprint implementation
+
+- Added shared/data-model contracts for:
+  - briefing schedules
+  - knowledge entries
+  - project milestones
+  - workspace checkouts
+- Added backend APIs and services for:
+  - schedule CRUD
+  - schedule execution
+  - knowledge publication
+  - portfolio summaries
+  - milestone CRUD
+- Added UI surfaces for:
+  - briefing library
+  - portfolio board
+  - knowledge library
+  - briefing detail generation/schedule controls
+- Added repo-backed workspace checkout resolution in heartbeat execution.
+- Surfaced workspace metadata into run and issue detail pages.
+- Improved issue-level and portfolio-level cost truthfulness messaging for unpriced usage.
+- Re-ran:
+  - `pnpm -r typecheck`
+  - `pnpm test:run`
+  - `pnpm build`
+
+### Session: QA hardening and sprint verification
+
+- Fixed the process adapter so repo-backed issue runs execute in the resolved checkout cwd instead of falling back to stale config cwd.
+- Persisted enriched `paperclipWorkspace` context back onto heartbeat runs so issue detail and run detail can show the real checkout path and branch after the run completes.
+- Fixed company route handling for `/knowledge`.
+- Fixed record detail so schedule controls do not flash misleading default values before the saved schedule loads.
+- Extended cost truthfulness into the dedicated `Costs` page and agent run cost rows.
+- Added focused automated coverage for:
+  - process adapter workspace cwd/env propagation
+  - record schedule routes
+  - cost pricing-state aggregation
+  - company route handling for `/knowledge`
+- Completed browser QA against:
+  - briefing board
+  - briefing library
+  - plans/results libraries
+  - portfolio board
+  - knowledge library
+  - issue detail
+  - approval detail
+  - agent run detail
+- Final verification passed:
+  - `pnpm -r typecheck`
+  - `pnpm test:run`
+  - `pnpm build`

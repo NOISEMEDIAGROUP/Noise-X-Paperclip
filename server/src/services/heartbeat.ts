@@ -1352,6 +1352,20 @@ export function heartbeatService(db: Db) {
     if (resolvedWorkspace.projectId && !readNonEmptyString(context.projectId)) {
       context.projectId = resolvedWorkspace.projectId;
     }
+    // Persist the enriched workspace context so issue/run detail screens can show the exact
+    // checkout path and isolation state that the adapter executed against.
+    const runWithWorkspaceContext = await db
+      .update(heartbeatRuns)
+      .set({
+        contextSnapshot: context,
+        updatedAt: new Date(),
+      })
+      .where(eq(heartbeatRuns.id, run.id))
+      .returning()
+      .then((rows) => rows[0] ?? null);
+    if (runWithWorkspaceContext) {
+      run = runWithWorkspaceContext;
+    }
     const runtimeSessionFallback = taskKey || resetTaskSession ? null : runtime.sessionId;
     const previousSessionDisplayId = truncateDisplayId(
       taskSessionForRun?.sessionDisplayId ??
