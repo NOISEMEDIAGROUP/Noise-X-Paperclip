@@ -158,6 +158,8 @@ export function approvalRoutes(db: Db) {
             source: "approval.approved",
             approvalId: approval.id,
             approvalStatus: approval.status,
+            approvalPayload: redactEventPayload(approval.payload),
+            approvalDecisionNote: approval.decisionNote,
             issueId: primaryIssueId,
             issueIds: linkedIssueIds,
             taskId: primaryIssueId,
@@ -222,6 +224,10 @@ export function approvalRoutes(db: Db) {
     });
 
     if (approval.requestedByAgentId) {
+      const rejectLinkedIssues = await issueApprovalsSvc.listIssuesForApproval(approval.id);
+      const rejectLinkedIssueIds = rejectLinkedIssues.map((issue) => issue.id);
+      const rejectPrimaryIssueId = rejectLinkedIssueIds[0] ?? null;
+
       try {
         await heartbeat.wakeup(approval.requestedByAgentId, {
           source: "automation",
@@ -230,6 +236,8 @@ export function approvalRoutes(db: Db) {
           payload: {
             approvalId: approval.id,
             approvalStatus: approval.status,
+            issueId: rejectPrimaryIssueId,
+            issueIds: rejectLinkedIssueIds,
           },
           requestedByActorType: "user",
           requestedByActorId: req.actor.userId ?? "board",
@@ -237,6 +245,11 @@ export function approvalRoutes(db: Db) {
             source: "approval.rejected",
             approvalId: approval.id,
             approvalStatus: approval.status,
+            approvalPayload: redactEventPayload(approval.payload),
+            approvalDecisionNote: approval.decisionNote,
+            issueId: rejectPrimaryIssueId,
+            issueIds: rejectLinkedIssueIds,
+            taskId: rejectPrimaryIssueId,
             wakeReason: "approval_rejected",
           },
         });
@@ -274,6 +287,10 @@ export function approvalRoutes(db: Db) {
       });
 
       if (approval.requestedByAgentId) {
+        const revisionLinkedIssues = await issueApprovalsSvc.listIssuesForApproval(approval.id);
+        const revisionLinkedIssueIds = revisionLinkedIssues.map((issue) => issue.id);
+        const revisionPrimaryIssueId = revisionLinkedIssueIds[0] ?? null;
+
         try {
           await heartbeat.wakeup(approval.requestedByAgentId, {
             source: "automation",
@@ -282,6 +299,8 @@ export function approvalRoutes(db: Db) {
             payload: {
               approvalId: approval.id,
               approvalStatus: approval.status,
+              issueId: revisionPrimaryIssueId,
+              issueIds: revisionLinkedIssueIds,
             },
             requestedByActorType: "user",
             requestedByActorId: req.actor.userId ?? "board",
@@ -289,6 +308,11 @@ export function approvalRoutes(db: Db) {
               source: "approval.revision_requested",
               approvalId: approval.id,
               approvalStatus: approval.status,
+              approvalPayload: redactEventPayload(approval.payload),
+              approvalDecisionNote: approval.decisionNote,
+              issueId: revisionPrimaryIssueId,
+              issueIds: revisionLinkedIssueIds,
+              taskId: revisionPrimaryIssueId,
               wakeReason: "approval_revision_requested",
             },
           });

@@ -23,7 +23,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { FolderOpen, Heart, ChevronDown, X } from "lucide-react";
+import { FolderOpen, Heart, ChevronDown, X, ShieldCheck } from "lucide-react";
 import { cn } from "../lib/utils";
 import { extractModelName, extractProviderId } from "../lib/model-utils";
 import { queryKeys } from "../lib/queryKeys";
@@ -769,6 +769,32 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                   </Field>
                 </>
               )}
+          </div>
+        </div>
+      )}
+
+      {/* ---- Approval Policy ---- */}
+      {!isCreate && (
+        <div className={cn(!cards && "border-b border-border")}>
+          {cards
+            ? <h3 className="text-sm font-medium flex items-center gap-2 mb-3"><ShieldCheck className="h-3 w-3" /> Approval Policy</h3>
+            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground flex items-center gap-2"><ShieldCheck className="h-3 w-3" /> Approval Policy</div>
+          }
+          <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
+            <Field
+              label="Actions requiring approval"
+              hint="Comma-separated action names that require approval before the agent can proceed (e.g. publish, send_email, delete_data). Leave empty to disable."
+            >
+              <DraftInput
+                value={eff("adapterConfig", "approvalRequiredActions", formatArgList(config.approvalRequiredActions))}
+                onCommit={(v) =>
+                  mark("adapterConfig", "approvalRequiredActions", v ? parseCommaArgs(v) : undefined)
+                }
+                immediate
+                className={inputClass}
+                placeholder="e.g. publish, send_email, delete_data"
+              />
+            </Field>
           </div>
         </div>
       )}
