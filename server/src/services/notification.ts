@@ -20,6 +20,7 @@ const SENSITIVE_FIELDS: Record<string, string[]> = {
   webhook: ["url", "secret"],
   discord: ["webhookUrl"],
   ntfy: ["topic"],
+  telnyx_sms: ["apiKey"],
 };
 
 function redactValue(value: unknown): string {
