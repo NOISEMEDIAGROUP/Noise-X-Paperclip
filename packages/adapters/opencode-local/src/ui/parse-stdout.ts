@@ -56,20 +56,28 @@ function parseToolUse(parsed: Record<string, unknown>, ts: string): TranscriptEn
   const status = asString(state?.status);
   if (status !== "completed" && status !== "error") return [callEntry];
 
-  const rawOutput =
+  const metadata = asRecord(state?.metadata);
+  const exit = metadata ? asNumber(metadata.exit, Number.NaN) : Number.NaN;
+  const rawOutput = (
     asString(state?.output) ||
     asString(state?.error) ||
     asString(part.title) ||
-    `${toolName} ${status}`;
-
-  const metadata = asRecord(state?.metadata);
-  const headerParts: string[] = [`status: ${status}`];
+    `${toolName} ${status}`
+  ).replace(/\s+$/, "");
+  const isError = status === "error" || (Number.isFinite(exit) && exit !== 0);
+  const headerParts: string[] = [];
+  if (status) headerParts.push(`status: ${status}`);
+  if (Number.isFinite(exit)) headerParts.push(`exit: ${exit}`);
   if (metadata) {
     for (const [key, value] of Object.entries(metadata)) {
-      if (value !== undefined && value !== null) headerParts.push(`${key}: ${value}`);
+      if (key === "exit" || value === undefined || value === null) continue;
+      headerParts.push(`${key}: ${value}`);
     }
   }
-  const content = `${headerParts.join("\n")}\n\n${rawOutput}`.trim();
+  const content = [...headerParts, rawOutput ? `\n${rawOutput}` : ""]
+    .filter(Boolean)
+    .join("\n")
+    .trim();
 
   return [
     callEntry,
@@ -78,7 +86,7 @@ function parseToolUse(parsed: Record<string, unknown>, ts: string): TranscriptEn
       ts,
       toolUseId: asString(part.callID) || asString(part.id, toolName),
       content,
-      isError: status === "error",
+      isError,
     },
   ];
 }

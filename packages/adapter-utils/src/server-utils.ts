@@ -270,9 +270,32 @@ export async function runChildProcess(
   },
 ): Promise<RunProcessResult> {
   const onLogError = opts.onLogError ?? ((err, id, msg) => console.warn({ err, runId: id }, msg));
+  const isBenignStdinError = (err: unknown) => {
+    const code = (err as NodeJS.ErrnoException | undefined)?.code;
+    return code === "EPIPE" || code === "ERR_STREAM_DESTROYED";
+  };
 
   return new Promise<RunProcessResult>((resolve, reject) => {
     const mergedEnv = ensurePathInEnv({ ...process.env, ...opts.env });
+    const child = spawn(command, args, {
+      cwd: opts.cwd,
+      env: mergedEnv,
+      shell: false,
+      stdio: [opts.stdin != null ? "pipe" : "ignore", "pipe", "pipe"],
+    }) as ChildProcessWithEvents;
+
+    if (child.stdin) {
+      child.stdin.on("error", (err) => {
+        if (isBenignStdinError(err)) {
+          return;
+        }
+        onLogError(err, runId, "unexpected child stdin error");
+      });
+    }
+
+    if (opts.stdin != null && child.stdin) {
+      child.stdin.end(opts.stdin);
+    }
     void resolveSpawnTarget(command, args, opts.cwd, mergedEnv)
       .then((target) => {
         const child = spawn(target.command, target.args, {

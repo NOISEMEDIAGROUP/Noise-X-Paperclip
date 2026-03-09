@@ -113,7 +113,12 @@ export async function promptServer(opts?: {
   }
 
   const port = Number(portStr) || 3100;
+<<<<<<< portable-backups-prod
+  const disableSignUp = currentAuth?.disableSignUp ?? false;
+  let auth: AuthConfig = { baseUrlMode: "auto", disableSignUp };
+=======
   let auth: AuthConfig = { baseUrlMode: "auto", disableSignUp: false };
+>>>>>>> master
   if (deploymentMode === "authenticated" && exposure === "public") {
     const urlInput = await p.text({
       message: "Public base URL",
@@ -141,12 +146,14 @@ export async function promptServer(opts?: {
       baseUrlMode: "explicit",
       disableSignUp: false,
       publicBaseUrl: urlInput.trim().replace(/\/+$/, ""),
+      disableSignUp,
     };
   } else if (currentAuth?.baseUrlMode === "explicit" && currentAuth.publicBaseUrl) {
     auth = {
       baseUrlMode: "explicit",
       disableSignUp: false,
       publicBaseUrl: currentAuth.publicBaseUrl,
+      disableSignUp,
     };
   }
 
@@ -162,4 +169,3 @@ export async function promptServer(opts?: {
     auth,
   };
 }
-

@@ -5,7 +5,7 @@ import path from "node:path";
 import { testEnvironment } from "@paperclipai/adapter-opencode-local/server";
 
 describe("opencode_local environment diagnostics", () => {
-  it("reports a missing working directory as an error when cwd is absolute", async () => {
+  it("creates a missing working directory when cwd is absolute", async () => {
     const cwd = path.join(
       os.tmpdir(),
       `paperclip-opencode-local-cwd-${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -23,9 +23,11 @@ describe("opencode_local environment diagnostics", () => {
       },
     });
 
-    expect(result.checks.some((check) => check.code === "opencode_cwd_invalid")).toBe(true);
-    expect(result.checks.some((check) => check.level === "error")).toBe(true);
-    expect(result.status).toBe("fail");
+    expect(result.checks.some((check) => check.code === "opencode_cwd_valid")).toBe(true);
+    expect(result.checks.some((check) => check.level === "error")).toBe(false);
+    const stats = await fs.stat(cwd);
+    expect(stats.isDirectory()).toBe(true);
+    await fs.rm(path.dirname(cwd), { recursive: true, force: true });
   });
 
   it("treats an empty OPENAI_API_KEY override as missing", async () => {
@@ -65,6 +67,10 @@ describe("opencode_local environment diagnostics", () => {
     const fakeOpencode = path.join(binDir, "opencode");
     const script = [
       "#!/bin/sh",
+      "if [ \"$1\" = \"models\" ]; then",
+      "  echo 'openai/gpt-5.3-codex'",
+      "  exit 0",
+      "fi",
       "echo 'ProviderModelNotFoundError: ProviderModelNotFoundError' 1>&2",
       "echo 'data: { providerID: \"openai\", modelID: \"gpt-5.3-codex\", suggestions: [] }' 1>&2",
       "exit 1",
@@ -81,6 +87,7 @@ describe("opencode_local environment diagnostics", () => {
         config: {
           command: fakeOpencode,
           cwd,
+          model: "openai/gpt-5.3-codex",
         },
       });
 

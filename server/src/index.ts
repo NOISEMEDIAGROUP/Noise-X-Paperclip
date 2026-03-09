@@ -13,8 +13,6 @@ import {
   inspectMigrations,
   applyPendingMigrations,
   reconcilePendingMigrationHistory,
-  formatDatabaseBackupResult,
-  runDatabaseBackup,
   authUsers,
   companies,
   companyMemberships,
@@ -25,7 +23,7 @@ import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { logger } from "./middleware/logger.js";
 import { setupLiveEventsWebSocketServer } from "./realtime/live-events-ws.js";
-import { heartbeatService } from "./services/index.js";
+import { createBackupManager, heartbeatService } from "./services/index.js";
 import { createStorageServiceFromConfig } from "./storage/index.js";
 import { printStartupBanner } from "./startup-banner.js";
 import { getBoardClaimWarningUrl, initializeBoardClaimChallenge } from "./board-claim.js";
@@ -419,6 +417,134 @@ export async function startServer(): Promise<StartedServer> {
   if (config.deploymentMode === "local_trusted") {
     await ensureLocalTrustedBoardPrincipal(db as any);
   }
+  const derivedTrustedOrigins = deriveAuthTrustedOrigins(config);
+  const envTrustedOrigins = (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  const effectiveTrustedOrigins = Array.from(new Set([...derivedTrustedOrigins, ...envTrustedOrigins]));
+  logger.info(
+    {
+      authBaseUrlMode: config.authBaseUrlMode,
+      authPublicBaseUrl: config.authPublicBaseUrl ?? null,
+      trustedOrigins: effectiveTrustedOrigins,
+      trustedOriginsSource: {
+        derived: derivedTrustedOrigins.length,
+        env: envTrustedOrigins.length,
+      },
+    },
+    "Authenticated mode auth origin configuration",
+  );
+  const auth = createBetterAuthInstance(db as any, config, effectiveTrustedOrigins);
+  betterAuthHandler = createBetterAuthHandler(auth);
+  resolveSession = (req) => resolveBetterAuthSession(auth, req);
+  resolveSessionFromHeaders = (headers) => resolveBetterAuthSessionFromHeaders(auth, headers);
+  await initializeBoardClaimChallenge(db as any, { deploymentMode: config.deploymentMode });
+  authReady = true;
+}
+
+const uiMode = config.uiDevMiddleware ? "vite-dev" : config.serveUi ? "static" : "none";
+const storageService = createStorageServiceFromConfig(config);
+const backupManager = createBackupManager({
+  connectionString: activeDatabaseConnectionString,
+  config,
+});
+const backupOverview = await backupManager.getOverview();
+const app = await createApp(db as any, {
+  uiMode,
+  storageService,
+  deploymentMode: config.deploymentMode,
+  deploymentExposure: config.deploymentExposure,
+  allowedHostnames: config.allowedHostnames,
+  bindHost: config.host,
+  authReady,
+  companyDeletionEnabled: config.companyDeletionEnabled,
+  backupManager,
+  betterAuthHandler,
+  resolveSession,
+});
+const server = createServer(app as unknown as Parameters<typeof createServer>[0]);
+const listenPort = await detectPort(config.port);
+
+if (listenPort !== config.port) {
+  logger.warn(`Requested port is busy; using next free port (requestedPort=${config.port}, selectedPort=${listenPort})`);
+}
+
+const runtimeListenHost = config.host;
+const runtimeApiHost =
+  runtimeListenHost === "0.0.0.0" || runtimeListenHost === "::"
+    ? "localhost"
+    : runtimeListenHost;
+process.env.PAPERCLIP_LISTEN_HOST = runtimeListenHost;
+process.env.PAPERCLIP_LISTEN_PORT = String(listenPort);
+process.env.PAPERCLIP_API_URL = `http://${runtimeApiHost}:${listenPort}`;
+
+setupLiveEventsWebSocketServer(server, db as any, {
+  deploymentMode: config.deploymentMode,
+  resolveSessionFromHeaders,
+});
+
+if (config.heartbeatSchedulerEnabled) {
+  const heartbeat = heartbeatService(db as any);
+
+  // Reap orphaned runs at startup (no threshold -- runningProcesses is empty)
+  void heartbeat.reapOrphanedRuns().catch((err) => {
+    logger.error({ err }, "startup reap of orphaned heartbeat runs failed");
+  });
+
+  setInterval(() => {
+    if (backupManager.isRestoreRunning() || backupManager.isSnapshotBarrierActive()) {
+      return;
+    }
+    void heartbeat
+      .tickTimers(new Date())
+      .then((result) => {
+        if (result.enqueued > 0) {
+          logger.info({ ...result }, "heartbeat timer tick enqueued runs");
+        }
+      })
+      .catch((err) => {
+        logger.error({ err }, "heartbeat timer tick failed");
+      });
+
+    // Periodically reap orphaned runs (5-min staleness threshold)
+    void heartbeat
+      .reapOrphanedRuns({ staleThresholdMs: 5 * 60 * 1000 })
+      .catch((err) => {
+        logger.error({ err }, "periodic reap of orphaned heartbeat runs failed");
+      });
+  }, config.heartbeatSchedulerIntervalMs);
+}
+
+logger.info(
+  {
+    enabled: backupOverview.settings.enabled,
+    intervalMinutes: backupOverview.settings.intervalMinutes,
+    retentionDays: backupOverview.settings.retentionDays,
+    backupDir: backupOverview.settings.directory,
+    components: backupOverview.settings.components,
+  },
+  "Backup manager ready",
+);
+setInterval(() => {
+  void backupManager.tick().catch((err) => {
+    logger.error({ err }, "backup scheduler tick failed");
+  });
+}, 30_000);
+
+server.listen(listenPort, config.host, () => {
+  logger.info(`Server listening on ${config.host}:${listenPort}`);
+  if (process.env.PAPERCLIP_OPEN_ON_LISTEN === "true") {
+    const openHost = config.host === "0.0.0.0" || config.host === "::" ? "127.0.0.1" : config.host;
+    const url = `http://${openHost}:${listenPort}`;
+    void import("open")
+      .then((mod) => mod.default(url))
+      .then(() => {
+        logger.info(`Opened browser at ${url}`);
+      })
+      .catch((err) => {
+        logger.warn({ err, url }, "Failed to open browser on startup");
+      });
   if (config.deploymentMode === "authenticated") {
     const {
       createBetterAuthHandler,
@@ -470,6 +596,17 @@ export async function startServer(): Promise<StartedServer> {
     allowedHostnames: config.allowedHostnames,
     bindHost: config.host,
     authReady,
+    requestedPort: config.port,
+    listenPort,
+    uiMode,
+    db: startupDbInfo,
+    migrationSummary,
+    heartbeatSchedulerEnabled: config.heartbeatSchedulerEnabled,
+    heartbeatSchedulerIntervalMs: config.heartbeatSchedulerIntervalMs,
+    databaseBackupEnabled: backupOverview.settings.enabled,
+    databaseBackupIntervalMinutes: backupOverview.settings.intervalMinutes,
+    databaseBackupRetentionDays: backupOverview.settings.retentionDays,
+    databaseBackupDir: backupOverview.settings.directory,
     companyDeletionEnabled: config.companyDeletionEnabled,
     betterAuthHandler,
     resolveSession,
