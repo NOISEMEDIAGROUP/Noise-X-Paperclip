@@ -92,10 +92,11 @@ export function approvalService(db: Db) {
       .returning()
       .then((rows) => rows[0]);
 
-    // Auto-approve hire_agent for autonomous agents
+    // Auto-approve hire_agent for autonomous agents.
+    // Requester must belong to the same company to prevent cross-company spoofing.
     if (approval.type === "hire_agent" && data.requestedByAgentId) {
       const requester = await agentsSvc.getById(data.requestedByAgentId);
-      if (requester?.trustLevel === "autonomous") {
+      if (requester?.companyId === companyId && requester.trustLevel === "autonomous") {
         return approve(approval.id, null, "Auto-approved: autonomous trust level");
       }
     }
