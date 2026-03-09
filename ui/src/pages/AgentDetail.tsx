@@ -499,7 +499,7 @@ export function AgentDetail() {
             </Button>
           )}
           <span className="hidden sm:inline"><StatusBadge status={agent.status} /></span>
-          <span className="hidden sm:inline"><TrustBadge level={agent.trustLevel} /></span>
+          {agent.trustLevel === "autonomous" && <span className="hidden sm:inline"><TrustBadge level={agent.trustLevel} /></span>}
           {mobileLiveRun && (
             <Link
               to={`/agents/${canonicalAgentRef}/runs/${mobileLiveRun.id}`}
