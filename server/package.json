@@ -41,6 +41,7 @@
     "@paperclipai/notifier-webhook": "workspace:*",
     "@paperclipai/notifier-discord": "workspace:*",
     "@paperclipai/notifier-ntfy": "workspace:*",
+    "@paperclipai/notifier-telegram": "workspace:*",
     "@paperclipai/db": "workspace:*",
     "@paperclipai/plugin-sdk": "workspace:*",
     "@paperclipai/shared": "workspace:*",
