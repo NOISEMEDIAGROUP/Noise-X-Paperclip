@@ -74,6 +74,24 @@ interface ParsedIssueAssigneeAdapterOverrides {
   useProjectWorkspace: boolean | null;
 }
 
+const ACTIVE_ASSIGNED_ISSUE_STATUSES = ["todo", "in_progress", "blocked"] as const;
+
+export type IssueTaskResolutionSource = "event_id" | "re-resolved" | "none";
+
+export function resolveIssueAssignedTaskId(input: {
+  requestedIssueId: string | null;
+  activeAssignedIssueIds: string[];
+}) {
+  const { requestedIssueId, activeAssignedIssueIds } = input;
+  if (requestedIssueId && activeAssignedIssueIds.includes(requestedIssueId)) {
+    return { issueId: requestedIssueId, source: "event_id" as IssueTaskResolutionSource };
+  }
+  if (activeAssignedIssueIds.length > 0) {
+    return { issueId: activeAssignedIssueIds[0]!, source: "re-resolved" as IssueTaskResolutionSource };
+  }
+  return { issueId: null, source: "none" as IssueTaskResolutionSource };
+}
+
 export type ResolvedWorkspaceForRun = {
   cwd: string;
   source: "project_primary" | "task_session" | "agent_home";
@@ -283,6 +301,20 @@ function enrichWakeContextSnapshot(input: {
   };
 }
 
+function applyResolvedTaskContext(
+  contextSnapshot: Record<string, unknown>,
+  resolution: { issueId: string | null; source: IssueTaskResolutionSource },
+) {
+  contextSnapshot.taskIdSource = resolution.source;
+  if (resolution.issueId) {
+    contextSnapshot.issueId = resolution.issueId;
+    contextSnapshot.taskId = resolution.issueId;
+    return;
+  }
+  delete contextSnapshot.issueId;
+  delete contextSnapshot.taskId;
+}
+
 function mergeCoalescedContextSnapshot(
   existingRaw: unknown,
   incoming: Record<string, unknown>,
@@ -449,6 +481,39 @@ export function heartbeatService(db: Db) {
         ),
       )
       .then((rows) => rows[0] ?? null);
+  }
+
+  async function resolveIssueAssignedTaskContext(
+    companyId: string,
+    agentId: string,
+    contextSnapshot: Record<string, unknown>,
+    payload: Record<string, unknown> | null,
+  ) {
+    const wakeReason = readNonEmptyString(contextSnapshot.wakeReason);
+    if (wakeReason !== "issue_assigned") return;
+
+    const requestedIssueId =
+      readNonEmptyString(payload?.issueId) ??
+      readNonEmptyString(contextSnapshot.issueId) ??
+      readNonEmptyString(contextSnapshot.taskId);
+    const activeAssignedIssueIds = await db
+      .select({ id: issues.id })
+      .from(issues)
+      .where(
+        and(
+          eq(issues.companyId, companyId),
+          eq(issues.assigneeAgentId, agentId),
+          inArray(issues.status, [...ACTIVE_ASSIGNED_ISSUE_STATUSES]),
+        ),
+      )
+      .orderBy(asc(issues.issueNumber), asc(issues.id))
+      .then((rows) => rows.map((row) => row.id));
+
+    const resolution = resolveIssueAssignedTaskId({
+      requestedIssueId,
+      activeAssignedIssueIds,
+    });
+    applyResolvedTaskContext(contextSnapshot, resolution);
   }
 
   async function resolveSessionBeforeForWakeup(
@@ -1249,8 +1314,9 @@ export function heartbeatService(db: Db) {
       return;
     }
 
-    const runtime = await ensureRuntimeState(agent);
     const context = parseObject(run.contextSnapshot);
+    await resolveIssueAssignedTaskContext(agent.companyId, agent.id, context, null);
+    const runtime = await ensureRuntimeState(agent);
     const taskKey = deriveTaskKey(context, null);
     const sessionCodec = getAdapterSessionCodec(agent.adapterType);
     const issueId = readNonEmptyString(context.issueId);
@@ -1339,6 +1405,7 @@ export function heartbeatService(db: Db) {
         .update(heartbeatRuns)
         .set({
           startedAt,
+          contextSnapshot: context,
           sessionIdBefore: runtimeForAdapter.sessionDisplayId ?? runtimeForAdapter.sessionId,
           updatedAt: new Date(),
         })
@@ -1372,6 +1439,17 @@ export function heartbeatService(db: Db) {
         stream: "system",
         level: "info",
         message: "run started",
+      });
+      await appendRunEvent(currentRun, seq++, {
+        eventType: "lifecycle",
+        stream: "system",
+        level: "info",
+        message: "task context resolved",
+        payload: {
+          issueId: readNonEmptyString(context.issueId),
+          taskId: readNonEmptyString(context.taskId),
+          taskIdSource: readNonEmptyString(context.taskIdSource) ?? "none",
+        },
       });
 
       handle = await runLogStore.begin({
@@ -1820,10 +1898,10 @@ export function heartbeatService(db: Db) {
       triggerDetail,
       payload,
     });
-    const issueId = readNonEmptyString(enrichedContextSnapshot.issueId) ?? issueIdFromPayload;
-
     const agent = await getAgent(agentId);
     if (!agent) throw notFound("Agent not found");
+    await resolveIssueAssignedTaskContext(agent.companyId, agent.id, enrichedContextSnapshot, payload);
+    const issueId = readNonEmptyString(enrichedContextSnapshot.issueId) ?? issueIdFromPayload;
 
     if (
       agent.status === "paused" ||
