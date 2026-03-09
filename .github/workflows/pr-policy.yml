@@ -30,6 +30,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: pnpm
 
       - name: Block manual lockfile edits
         if: github.head_ref != 'chore/refresh-lockfile'

@@ -32,6 +32,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
+      - name: Check forbidden tokens
+        run: node scripts/check-forbidden-tokens.mjs
+
       - name: Typecheck
         run: pnpm -r typecheck
 

@@ -21,11 +21,6 @@ AUTH_SECRET_OVERRIDE=""
 PUBLIC_URL_OVERRIDE=""
 PORT_OVERRIDE=""
 DATA_DIR_OVERRIDE=""
-S3_BUCKET_OVERRIDE=""
-S3_REGION_OVERRIDE=""
-S3_ENDPOINT_OVERRIDE=""
-AWS_ACCESS_KEY_OVERRIDE=""
-AWS_SECRET_KEY_OVERRIDE=""
 
 COMPOSE_CMD=()
 TMP_FILES=()
@@ -89,11 +84,7 @@ Options:
       --public-url <value>     set PAPERCLIP_PUBLIC_URL (http/https)
       --port <value>           set PAPERCLIP_PORT
       --data-dir <value>       set PAPERCLIP_DATA_DIR
-      --s3-bucket <value>      set PAPERCLIP_STORAGE_S3_BUCKET (enables S3 storage + agent runtime sync)
-      --s3-region <value>      set PAPERCLIP_STORAGE_S3_REGION (default: us-east-1)
-      --s3-endpoint <value>    set PAPERCLIP_STORAGE_S3_ENDPOINT (optional, for MinIO/R2)
-      --aws-access-key <value> set AWS_ACCESS_KEY_ID
-      --aws-secret-key <value> set AWS_SECRET_ACCESS_KEY
+
   -h, --help                   show this help
 EOF
 }
@@ -703,30 +694,7 @@ parse_args() {
         [[ -n "$DATA_DIR_OVERRIDE" ]] || die "--data-dir requiere valor"
         shift 2
         ;;
-      --s3-bucket)
-        S3_BUCKET_OVERRIDE="${2:-}"
-        [[ -n "$S3_BUCKET_OVERRIDE" ]] || die "--s3-bucket requiere valor"
-        shift 2
-        ;;
-      --s3-region)
-        S3_REGION_OVERRIDE="${2:-}"
-        [[ -n "$S3_REGION_OVERRIDE" ]] || die "--s3-region requiere valor"
-        shift 2
-        ;;
-      --s3-endpoint)
-        S3_ENDPOINT_OVERRIDE="${2:-}"
-        shift 2
-        ;;
-      --aws-access-key)
-        AWS_ACCESS_KEY_OVERRIDE="${2:-}"
-        [[ -n "$AWS_ACCESS_KEY_OVERRIDE" ]] || die "--aws-access-key requiere valor"
-        shift 2
-        ;;
-      --aws-secret-key)
-        AWS_SECRET_KEY_OVERRIDE="${2:-}"
-        [[ -n "$AWS_SECRET_KEY_OVERRIDE" ]] || die "--aws-secret-key requiere valor"
-        shift 2
-        ;;
+
       -h|--help)
         usage
         exit 0
@@ -827,11 +795,11 @@ prepare_env_values() {
   paperclip_public_url="${PUBLIC_URL_OVERRIDE:-$default_public_url}"
   paperclip_data_dir="${DATA_DIR_OVERRIDE:-$default_data_dir}"
   better_auth_secret="${AUTH_SECRET_OVERRIDE:-$default_auth_secret}"
-  s3_bucket="${S3_BUCKET_OVERRIDE:-$existing_s3_bucket}"
-  s3_region="${S3_REGION_OVERRIDE:-${existing_s3_region:-us-east-1}}"
-  s3_endpoint="${S3_ENDPOINT_OVERRIDE:-$existing_s3_endpoint}"
-  aws_access_key="${AWS_ACCESS_KEY_OVERRIDE:-$existing_aws_access_key}"
-  aws_secret_key="${AWS_SECRET_KEY_OVERRIDE:-$existing_aws_secret_key}"
+  s3_bucket="${existing_s3_bucket}"
+  s3_region="${existing_s3_region:-us-east-1}"
+  s3_endpoint="${existing_s3_endpoint}"
+  aws_access_key="${existing_aws_access_key}"
+  aws_secret_key="${existing_aws_secret_key}"
 
   if (( INTERACTIVE == 1 )); then
     log "Configuracion Docker local de Paperclip"

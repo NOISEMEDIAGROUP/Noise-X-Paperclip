@@ -188,6 +188,29 @@ Agents currently write memory, notes, and logs scattered across their own subdir
 6. Successful runs show warnings separately from failures in the UI.
 7. Operators can reproduce agent runtime behavior without depending on personal CLI state.
 
+---
+
+### Phase 9 — Auth Bootstrap Integrity (`local_trusted` → `authenticated` Contamination)
+
+**Bug discovered:** When a user runs Paperclip in dev mode (`local_trusted`) and then switches to Docker (`authenticated` mode) with the same data directory, the ghost user `local@paperclip.local` created by `ensureLocalTrustedBoardPrincipal()` persists in the DB. Because this user has an `instance_admin` role, `bootstrapStatus` returns `"ready"` — even though there are zero real credentials in the `account` table. The result: the bootstrap CEO invite flow is skipped entirely, leaving the instance in a state where no one can log in.
+
+**Two bugs:**
+
+1. **Ghost admin blocks bootstrap** — `bootstrapStatus` considers the `local-board` ghost user an instance admin. In `authenticated` mode, the check should only count users that have at least one credential account (`account.provider_id = 'credential'`), not uncredentialed ghost users from dev mode.
+
+2. **No recovery path** — once `bootstrapStatus = "ready"` with no real credentials, the bootstrap CLI command (`auth bootstrap-ceo`) refuses to run. There is no operator-facing tool to reset the bootstrap state or generate an admin invite after the fact.
+
+**Deliverables:**
+
+1. **Fix `bootstrapStatus` query** — in `authenticated` mode, only count `instance_admin` roles where the user has at least one real credential account. Ghost users from `local_trusted` mode are not valid authenticated principals.
+2. **Cleanup on mode transition** — when the server starts in `authenticated` mode and detects the `local-board` user with no credentials, either remove it or strip its `instance_admin` role automatically.
+3. **Force-bootstrap CLI escape hatch** — add a `--force` flag to `auth bootstrap-ceo` that regenerates an invite even when `bootstrapStatus = "ready"`, for recovery scenarios.
+4. **Prevent `ensureLocalTrustedBoardPrincipal()` from running in `authenticated` mode** — confirm the guard is airtight so a misconfigured restart can't create the ghost user.
+
+**Outcome:** Switching from dev mode to Docker authenticated mode is safe. Operators who end up in a locked-out state have a documented recovery path.
+
+---
+
 ## Open Questions
 
 1. Should runtime isolation be per company or per agent?
