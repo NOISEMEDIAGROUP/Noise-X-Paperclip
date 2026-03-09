@@ -83,12 +83,6 @@ export function issueRoutes(db: Db, storage: StorageService) {
     return false;
   }
 
-  function canCreateAgentsLegacy(agent: { permissions: Record<string, unknown> | null | undefined; role: string }) {
-    if (agent.role === "ceo") return true;
-    if (!agent.permissions || typeof agent.permissions !== "object") return false;
-    return Boolean((agent.permissions as Record<string, unknown>).canCreateAgents);
-  }
-
   async function assertCanAssignTasks(req: Request, companyId: string) {
     assertCompanyAccess(req, companyId);
     if (req.actor.type === "board") {
@@ -99,11 +93,9 @@ export function issueRoutes(db: Db, storage: StorageService) {
     }
     if (req.actor.type === "agent") {
       if (!req.actor.agentId) throw forbidden("Agent authentication required");
-      const allowedByGrant = await access.hasPermission(companyId, "agent", req.actor.agentId, "tasks:assign");
-      if (allowedByGrant) return;
-      const actorAgent = await agentsSvc.getById(req.actor.agentId);
-      if (actorAgent && actorAgent.companyId === companyId && canCreateAgentsLegacy(actorAgent)) return;
-      throw forbidden("Missing permission: tasks:assign");
+      const allowed = await access.hasPermission(companyId, "agent", req.actor.agentId, "tasks:assign");
+      if (!allowed) throw forbidden("Missing permission: tasks:assign");
+      return;
     }
     throw unauthorized();
   }
