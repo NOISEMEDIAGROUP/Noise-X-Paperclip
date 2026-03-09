@@ -211,6 +211,41 @@ Agents currently write memory, notes, and logs scattered across their own subdir
 
 ---
 
+## Merged PRs — Post-Merge Follow-ups
+
+The following upstream PRs have been merged into this branch. Each has a Greptile-identified issue that was either fixed inline or deferred as a follow-up.
+
+### PR #386 — Route heartbeat cost recording through costService
+
+**Status:** Merged. Greptile finding deferred as follow-up.
+
+**Follow-up:** `costService.createEvent()` performs 2 extra `SELECT` queries per cost-bearing heartbeat run — one to validate the agent belongs to the company (line 14–23 of `costs.ts`) and one after updates to evaluate the budget threshold (lines 47–51). The heartbeat already holds the fully-loaded `agent` object at the call site, making both fetches redundant. For high-frequency agents this adds meaningful overhead.
+
+**Recommended fix:** Add an internal `createEventWithAgent(agent, data)` variant that accepts the pre-loaded agent and skips the validation SELECT. The budget-check SELECT can be eliminated by using the in-memory `spentMonthlyCents + event.costCents` directly.
+
+---
+
+### PR #385 — Model-based token pricing for cost calculation
+
+**Status:** Merged. Both Greptile bugs fixed inline.
+
+Fixes applied:
+1. **Cached token double-counting** — Codex reports `cachedInputTokens` as a *subset* of `inputTokens` (total includes cached), while Claude reports them separately. The formula now subtracts `cachedInputTokens` from the base before applying the full-rate, preventing double-billing for Codex cache hits.
+2. **Unknown model returns `null` not `0`** — `calculateTokenCostCents` now returns `number | null`. Unknown or unset models return `null`, distinguishable from a known model with genuinely zero cost.
+
+---
+
+### PR #179 — Git worktree cleanup lifecycle on session clear
+
+**Status:** Merged. All Greptile bugs addressed in PR's follow-up commits or fixed inline.
+
+Greptile findings resolved:
+1. **Incorrect `repoRoot` derivation** — Original used `path.dirname(path.dirname(prevCwd))` which returned the grandparent dir, not the git repo root. Fixed in PR with `gitRepoRoot()` using `git rev-parse --git-common-dir`.
+2. **`removed` counts attempts not successes** — `removeGitWorktree` now returns `boolean`; callers only increment counter on `true`.
+3. **Redundant `isPaperclipWorktree` condition** — Simplified to use `path.sep` consistently (no duplicate literal check).
+
+---
+
 ## Open Questions
 
 1. Should runtime isolation be per company or per agent?
