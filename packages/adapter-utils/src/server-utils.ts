@@ -118,11 +118,11 @@ export function buildPaperclipEnv(agent: { id: string; companyId: string }): Rec
   return vars;
 }
 
-export function defaultPathForPlatform() {
+export function defaultPathForPlatform(env?: NodeJS.ProcessEnv) {
   if (process.platform === "win32") {
     return "C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\Wbem";
   }
-  const home = process.env.HOME ?? "";
+  const home = (env?.HOME ?? process.env.HOME) || "";
   const dirs = [
     "/usr/local/bin",
     "/opt/homebrew/bin",
@@ -142,7 +142,7 @@ export function ensurePathInEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const delimiter = process.platform === "win32" ? ";" : ":";
   const currentPath = (typeof env.PATH === "string" && env.PATH) ||
     (typeof env.Path === "string" && env.Path) || "";
-  const defaultDirs = defaultPathForPlatform().split(delimiter);
+  const defaultDirs = defaultPathForPlatform(env).split(delimiter);
   const currentDirs = new Set(currentPath.split(delimiter).filter(Boolean));
   const missingDirs = defaultDirs.filter(d => d && !currentDirs.has(d));
   if (missingDirs.length === 0 && currentPath.length > 0) return env;
