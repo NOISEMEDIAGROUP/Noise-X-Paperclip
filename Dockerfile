@@ -1,8 +1,12 @@
 FROM node:lts-trixie-slim AS base
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl git \
+  && apt-get install -y --no-install-recommends ca-certificates curl git locales \
+  && sed -i '/^# *en_US.UTF-8 UTF-8/s/^# *//' /etc/locale.gen \
+  && locale-gen en_US.UTF-8 \
   && rm -rf /var/lib/apt/lists/*
 RUN corepack enable
+ENV LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8
 
 FROM base AS deps
 WORKDIR /app
@@ -42,11 +46,14 @@ ENV NODE_ENV=production \
   HOST=0.0.0.0 \
   PORT=3100 \
   SERVE_UI=true \
+  PAPERCLIP_IN_CONTAINER=true \
   PAPERCLIP_HOME=/paperclip \
   PAPERCLIP_INSTANCE_ID=default \
   PAPERCLIP_CONFIG=/paperclip/instances/default/config.json \
   PAPERCLIP_DEPLOYMENT_MODE=authenticated \
   PAPERCLIP_DEPLOYMENT_EXPOSURE=private
+
+USER node
 
 VOLUME ["/paperclip"]
 EXPOSE 3100
