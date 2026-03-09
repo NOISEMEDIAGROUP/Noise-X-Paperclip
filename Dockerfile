@@ -35,6 +35,12 @@ WORKDIR /app
 COPY --from=build /app /app
 RUN npm install --global --omit=dev @anthropic-ai/claude-code@latest @openai/codex@latest opencode-ai
 
+# Run as non-root so the claude CLI --dangerously-skip-permissions flag works
+# (claude blocks that flag when the process is root) and so the server can
+# write to the /paperclip volume without EACCES errors.
+# node:lts-trixie-slim ships with a built-in non-root "node" user.
+RUN mkdir -p /paperclip && chown -R node:node /app /paperclip
+
 ENV NODE_ENV=production \
   HOME=/paperclip \
   HOST=0.0.0.0 \
@@ -45,6 +51,8 @@ ENV NODE_ENV=production \
   PAPERCLIP_CONFIG=/paperclip/instances/default/config.json \
   PAPERCLIP_DEPLOYMENT_MODE=authenticated \
   PAPERCLIP_DEPLOYMENT_EXPOSURE=private
+
+USER node
 
 VOLUME ["/paperclip"]
 EXPOSE 3100
