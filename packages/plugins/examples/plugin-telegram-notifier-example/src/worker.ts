@@ -79,6 +79,22 @@ function formatMarkdownV2(event: EventLike): string {
   ].join("\n");
 }
 
+function escapeHTML(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function formatHTML(event: EventLike): string {
+  const emoji = EVENT_EMOJI[event.eventType] ?? "\uD83D\uDD14";
+  const title = EVENT_LABELS[event.eventType] ?? event.eventType;
+  const entity = event.entityId ?? "unknown";
+
+  return [
+    `${emoji} <b>${escapeHTML(title)}</b>`,
+    "",
+    `<b>Entity:</b> ${escapeHTML(entity)}`,
+  ].join("\n");
+}
+
 function formatPlainText(event: EventLike): string {
   const title = EVENT_LABELS[event.eventType] ?? event.eventType;
   const entity = event.entityId ?? "unknown";
@@ -135,27 +151,24 @@ const plugin = definePlugin({
       try {
         const botToken = await ctx.secrets.resolve(config.botTokenRef);
 
-        // Try preferred parse mode, fall back to plain text
-        let sent = false;
+        // Format and send with preferred parse mode
+        let text: string;
+        let mode: string | undefined;
+
         if (config.parseMode === "MarkdownV2") {
-          sent = await sendTelegram(
-            botToken,
-            config.chatId,
-            formatMarkdownV2(event),
-            "MarkdownV2",
-          );
+          text = formatMarkdownV2(event);
+          mode = "MarkdownV2";
         } else if (config.parseMode === "HTML") {
-          // HTML mode passes through as-is (plain text content is safe)
-          sent = await sendTelegram(
-            botToken,
-            config.chatId,
-            formatPlainText(event),
-            "HTML",
-          );
+          text = formatHTML(event);
+          mode = "HTML";
+        } else {
+          text = formatPlainText(event);
         }
 
-        if (!sent) {
-          // Fallback to plain text
+        let sent = await sendTelegram(botToken, config.chatId, text, mode);
+
+        // Fall back to plain text if formatted mode was rejected
+        if (!sent && mode) {
           sent = await sendTelegram(
             botToken,
             config.chatId,
@@ -219,13 +232,14 @@ const plugin = definePlugin({
     handleEvent("issue.updated");
 
     handleEvent("issue.comment.created", async (e) => {
+      if (!e.entityId) return;
       await ctx.state.set(
         {
           scopeKind: "issue",
-          scopeId: e.entityId!,
+          scopeId: e.entityId,
           stateKey: "last_telegram_notified_at",
         },
-        e.occurredAt,
+        e.occurredAt ?? new Date().toISOString(),
       );
     });
 
@@ -246,7 +260,7 @@ const plugin = definePlugin({
   },
 
   async onHealth() {
-    return { status: "ok", message: "Telegram notifier example plugin ready" };
+    return { status: "ok", message: "Telegram notifier plugin ready" };
   },
 });
 
