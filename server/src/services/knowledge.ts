@@ -104,6 +104,16 @@ async function assertAssetBelongsToCompanyWithDb(dbOrTx: DbLike, companyId: stri
   }
 }
 
+async function resolveAssetById(dbOrTx: DbLike, assetId: string | null): Promise<AssetRow | null> {
+  if (!assetId) return null;
+
+  return dbOrTx
+    .select()
+    .from(assets)
+    .where(eq(assets.id, assetId))
+    .then((rows) => rows[0] ?? null);
+}
+
 function assertPatchCompatibleWithKind(kind: KnowledgeItem["kind"], patch: UpdateKnowledgeItem) {
   if (kind === "note" && (patch.assetId !== undefined || patch.sourceUrl !== undefined)) {
     throw unprocessable("Note knowledge items cannot set assetId or sourceUrl");
@@ -212,7 +222,8 @@ export function knowledgeService(db: Db) {
         .returning();
 
       const created = rows[0];
-      return toIssueKnowledgeAttachment(created, knowledgeItem);
+      const asset = await resolveAssetById(dbOrTx, knowledgeItem.assetId);
+      return toIssueKnowledgeAttachment(created, knowledgeItem, asset);
     } catch (error) {
       if (isIssueKnowledgeConflict(error)) {
         throw conflict("Knowledge item already attached to issue");

@@ -31,6 +31,7 @@ const issueStub: IssueStub = {
 };
 
 let failOnKnowledgeItemId: string | null = null;
+const missingKnowledgeItemIds = new Set<string>();
 const state: TxState = {
   persistedIssueIds: [],
   attachedKnowledgeIds: [],
@@ -86,10 +87,13 @@ const issueServiceStub = {
 };
 
 const knowledgeServiceStub = {
-  getById: vi.fn(async (knowledgeItemId: string) => ({
-    id: knowledgeItemId,
-    companyId: "cmp-1",
-  })),
+  getById: vi.fn(async (knowledgeItemId: string) => {
+    if (missingKnowledgeItemIds.has(knowledgeItemId)) return null;
+    return {
+      id: knowledgeItemId,
+      companyId: "cmp-1",
+    };
+  }),
   attachToIssue: vi.fn(async (issueId: string, knowledgeItemId: string) => {
     callOrder.push(`attach:${knowledgeItemId}`);
     if (knowledgeItemId === failOnKnowledgeItemId) {
@@ -169,6 +173,7 @@ describe("issue create knowledge routing", () => {
   beforeEach(() => {
     callOrder.length = 0;
     failOnKnowledgeItemId = null;
+    missingKnowledgeItemIds.clear();
     state.persistedIssueIds = [];
     state.attachedKnowledgeIds = [];
     state.activityActions = [];
@@ -248,5 +253,27 @@ describe("issue create knowledge routing", () => {
     expect(state.attachedKnowledgeIds).toEqual([]);
     expect(state.activityActions).toEqual([]);
     expect(heartbeatServiceStub.wakeup).not.toHaveBeenCalled();
+  });
+
+  it("returns a not found error when a requested knowledge item does not exist", async () => {
+    missingKnowledgeItemIds.add("55555555-5555-4555-8555-555555555555");
+    const app = await createApp();
+
+    const res = await request(app)
+      .post("/companies/cmp-1/issues")
+      .send({
+        title: "Create with missing knowledge",
+        status: "todo",
+        knowledgeItemIds: [
+          "55555555-5555-4555-8555-555555555555",
+        ],
+      });
+
+    expect(res.status).toBe(422);
+    expect(res.body).toEqual({
+      error: "Knowledge item not found",
+    });
+    expect(issueServiceStub.createInTx).not.toHaveBeenCalled();
+    expect(knowledgeServiceStub.attachToIssueInTx).not.toHaveBeenCalled();
   });
 });

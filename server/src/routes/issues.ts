@@ -427,7 +427,11 @@ export function issueRoutes(db: Db, storage: StorageService) {
 
     for (const knowledgeItemId of knowledgeItemIds) {
       const knowledgeItem = await knowledgeSvc.getById(knowledgeItemId);
-      if (!knowledgeItem || knowledgeItem.companyId !== companyId) {
+      if (!knowledgeItem) {
+        res.status(422).json({ error: "Knowledge item not found" });
+        return;
+      }
+      if (knowledgeItem.companyId !== companyId) {
         res.status(422).json({ error: "Knowledge item must belong to same company as issue" });
         return;
       }
