@@ -206,7 +206,14 @@ export function ApprovalDetail() {
               <p className="text-xs text-muted-foreground font-mono">{approval.id}</p>
             </div>
           </div>
-          <StatusBadge status={approval.status} />
+          <div className="flex items-center gap-2">
+            <StatusBadge status={approval.status} />
+            {approval.status === "approved" && approval.decisionNote?.startsWith("Auto-approved") && (
+              <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded">
+                Auto
+              </span>
+            )}
+          </div>
         </div>
         <div className="text-sm space-y-1">
           {approval.requestedByAgentId && (
