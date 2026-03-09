@@ -149,7 +149,7 @@ export const PROJECT_COLORS = [
   "#3b82f6", // blue
 ] as const;
 
-export const APPROVAL_TYPES = ["hire_agent", "approve_ceo_strategy"] as const;
+export const APPROVAL_TYPES = ["hire_agent", "approve_ceo_strategy", "action"] as const;
 export type ApprovalType = (typeof APPROVAL_TYPES)[number];
 
 export const APPROVAL_STATUSES = [
@@ -235,6 +235,31 @@ export type JoinRequestType = (typeof JOIN_REQUEST_TYPES)[number];
 
 export const JOIN_REQUEST_STATUSES = ["pending_approval", "approved", "rejected"] as const;
 export type JoinRequestStatus = (typeof JOIN_REQUEST_STATUSES)[number];
+
+export const TRUST_LEVELS = ["supervised", "autonomous"] as const;
+export type TrustLevel = (typeof TRUST_LEVELS)[number];
+
+export const TRUST_PROMOTION_THRESHOLD = 20;
+export const TRUST_DEMOTION_FAILURE_THRESHOLD = 3;
+export const TRUST_DEMOTION_WINDOW_SIZE = 10;
+export const TRUST_MANUAL_OVERRIDE_COOLDOWN_MS = 5 * 60 * 1000;
+
+export const NOTIFICATION_CHANNEL_TYPES = ["webhook", "discord", "ntfy"] as const;
+export type NotificationChannelType = (typeof NOTIFICATION_CHANNEL_TYPES)[number];
+
+export const NOTIFICATION_EVENT_TYPES = [
+  "agent.run.finished",
+  "agent.run.failed",
+  "agent.run.cancelled",
+  "agent.status_changed",
+  "approval.created",
+  "approval.decided",
+  "issue.created",
+  "issue.updated",
+  "issue.comment.created",
+  "cost_event.created",
+] as const;
+export type NotificationEventType = (typeof NOTIFICATION_EVENT_TYPES)[number];
 
 export const PERMISSION_KEYS = [
   "agents:create",

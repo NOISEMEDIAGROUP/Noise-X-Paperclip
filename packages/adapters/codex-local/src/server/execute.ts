@@ -186,6 +186,20 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (linkedIssueIds.length > 0) {
     env.PAPERCLIP_LINKED_ISSUE_IDS = linkedIssueIds.join(",");
   }
+  const approvalPolicy = context.approvalPolicy;
+  if (approvalPolicy && typeof approvalPolicy === "object") {
+    env.PAPERCLIP_APPROVAL_POLICY = JSON.stringify(approvalPolicy);
+    const policy = approvalPolicy as Record<string, unknown>;
+    if (typeof policy.instructions === "string") {
+      env.PAPERCLIP_APPROVAL_POLICY_INSTRUCTIONS = policy.instructions;
+    }
+  }
+  if (typeof context.approvalDecisionNote === "string" && context.approvalDecisionNote.trim().length > 0) {
+    env.PAPERCLIP_APPROVAL_DECISION_NOTE = context.approvalDecisionNote.trim();
+  }
+  if (context.approvalPayload && typeof context.approvalPayload === "object") {
+    env.PAPERCLIP_APPROVAL_PAYLOAD = JSON.stringify(context.approvalPayload);
+  }
   if (effectiveWorkspaceCwd) {
     env.PAPERCLIP_WORKSPACE_CWD = effectiveWorkspaceCwd;
   }

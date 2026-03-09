@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AGENT_ADAPTER_TYPES } from "@paperclipai/shared";
+import { AGENT_ADAPTER_TYPES, TRUST_LEVELS, TRUST_PROMOTION_THRESHOLD } from "@paperclipai/shared";
+import type { TrustLevel } from "@paperclipai/shared";
 import type {
   Agent,
   AdapterEnvironmentTestResult,
@@ -22,7 +23,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { FolderOpen, Heart, ChevronDown, X } from "lucide-react";
+import { FolderOpen, Heart, ChevronDown, X, ShieldCheck } from "lucide-react";
 import { cn } from "../lib/utils";
 import { extractModelName, extractProviderId } from "../lib/model-utils";
 import { queryKeys } from "../lib/queryKeys";
@@ -186,6 +187,18 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
     mutationFn: async ({ file, namespace }: { file: File; namespace: string }) => {
       if (!selectedCompanyId) throw new Error("Select a company to upload images");
       return assetsApi.uploadImage(selectedCompanyId, file, namespace);
+    },
+  });
+
+  const setTrustLevel = useMutation({
+    mutationFn: (trustLevel: TrustLevel) => {
+      if (isCreate) throw new Error("Cannot set trust level on create");
+      return agentsApi.setTrustLevel(props.agent.id, trustLevel, selectedCompanyId ?? undefined);
+    },
+    onSuccess: () => {
+      if (!isCreate) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(props.agent.id) });
+      }
     },
   });
 
@@ -760,6 +773,32 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
         </div>
       )}
 
+      {/* ---- Approval Policy ---- */}
+      {!isCreate && (
+        <div className={cn(!cards && "border-b border-border")}>
+          {cards
+            ? <h3 className="text-sm font-medium flex items-center gap-2 mb-3"><ShieldCheck className="h-3 w-3" /> Approval Policy</h3>
+            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground flex items-center gap-2"><ShieldCheck className="h-3 w-3" /> Approval Policy</div>
+          }
+          <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
+            <Field
+              label="Actions requiring approval"
+              hint="Comma-separated action names that require approval before the agent can proceed (e.g. publish, send_email, delete_data). Leave empty to disable."
+            >
+              <DraftInput
+                value={eff("adapterConfig", "approvalRequiredActions", formatArgList(config.approvalRequiredActions))}
+                onCommit={(v) =>
+                  mark("adapterConfig", "approvalRequiredActions", v ? parseCommaArgs(v) : undefined)
+                }
+                immediate
+                className={inputClass}
+                placeholder="e.g. publish, send_email, delete_data"
+              />
+            </Field>
+          </div>
+        </div>
+      )}
+
       {/* ---- Run Policy ---- */}
       {isCreate ? (
         <div className={cn(!cards && "border-b border-border")}>
@@ -846,6 +885,55 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
               </Field>
             </div>
           </CollapsibleSection>
+
+          {/* ---- Trust ---- */}
+          <div className={cn(cards ? "p-4 border-t border-border space-y-3" : "px-4 pb-3 pt-3 space-y-3")}>
+            <Field label="Trust level" hint="Supervised agents require approval; autonomous agents run without approval gates.">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent/50 transition-colors w-full justify-between">
+                    <span className={cn(
+                      "inline-flex items-center gap-1.5 capitalize",
+                      props.agent.trustLevel === "autonomous" ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400",
+                    )}>
+                      {props.agent.trustLevel}
+                    </span>
+                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-1" align="start">
+                  {TRUST_LEVELS.map((level) => (
+                    <button
+                      key={level}
+                      className={cn(
+                        "flex items-center w-full px-2 py-1.5 text-sm rounded capitalize",
+                        "hover:bg-accent/50",
+                        level === props.agent.trustLevel && "bg-accent",
+                      )}
+                      onClick={() => setTrustLevel.mutate(level)}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </PopoverContent>
+              </Popover>
+            </Field>
+            <Field label="Promotion threshold" hint={`Consecutive successful runs before auto-promoting to autonomous. Default: ${TRUST_PROMOTION_THRESHOLD}.`}>
+              <DraftNumberInput
+                value={eff(
+                  "identity",
+                  "trustPromotionThreshold",
+                  props.agent.trustPromotionThreshold ?? TRUST_PROMOTION_THRESHOLD,
+                )}
+                onCommit={(v) => {
+                  const val = v === TRUST_PROMOTION_THRESHOLD ? null : v;
+                  mark("identity", "trustPromotionThreshold", val);
+                }}
+                immediate
+                className={inputClass}
+              />
+            </Field>
+          </div>
           </div>
         </div>
       )}

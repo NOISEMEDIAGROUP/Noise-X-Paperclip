@@ -52,6 +52,11 @@ export function ApprovalCard({
         <div className="flex items-center gap-1.5 shrink-0">
           {statusIcon(approval.status)}
           <span className="text-xs text-muted-foreground capitalize">{approval.status}</span>
+          {approval.status === "approved" && approval.decisionNote?.startsWith("Auto-approved") && (
+            <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded">
+              Auto
+            </span>
+          )}
           <span className="text-xs text-muted-foreground">· {timeAgo(approval.createdAt)}</span>
         </div>
       </div>

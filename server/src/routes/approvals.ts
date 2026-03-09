@@ -158,6 +158,8 @@ export function approvalRoutes(db: Db) {
             source: "approval.approved",
             approvalId: approval.id,
             approvalStatus: approval.status,
+            approvalPayload: redactEventPayload(approval.payload),
+            approvalDecisionNote: approval.decisionNote,
             issueId: primaryIssueId,
             issueIds: linkedIssueIds,
             taskId: primaryIssueId,
@@ -221,6 +223,44 @@ export function approvalRoutes(db: Db) {
       details: { type: approval.type },
     });
 
+    if (approval.requestedByAgentId) {
+      const rejectLinkedIssues = await issueApprovalsSvc.listIssuesForApproval(approval.id);
+      const rejectLinkedIssueIds = rejectLinkedIssues.map((issue) => issue.id);
+      const rejectPrimaryIssueId = rejectLinkedIssueIds[0] ?? null;
+
+      try {
+        await heartbeat.wakeup(approval.requestedByAgentId, {
+          source: "automation",
+          triggerDetail: "system",
+          reason: "approval_rejected",
+          payload: {
+            approvalId: approval.id,
+            approvalStatus: approval.status,
+            issueId: rejectPrimaryIssueId,
+            issueIds: rejectLinkedIssueIds,
+          },
+          requestedByActorType: "user",
+          requestedByActorId: req.actor.userId ?? "board",
+          contextSnapshot: {
+            source: "approval.rejected",
+            approvalId: approval.id,
+            approvalStatus: approval.status,
+            approvalPayload: redactEventPayload(approval.payload),
+            approvalDecisionNote: approval.decisionNote,
+            issueId: rejectPrimaryIssueId,
+            issueIds: rejectLinkedIssueIds,
+            taskId: rejectPrimaryIssueId,
+            wakeReason: "approval_rejected",
+          },
+        });
+      } catch (err) {
+        logger.warn(
+          { err, approvalId: approval.id, requestedByAgentId: approval.requestedByAgentId },
+          "failed to queue requester wakeup after rejection",
+        );
+      }
+    }
+
     res.json(redactApprovalPayload(approval));
   });
 
@@ -245,6 +285,44 @@ export function approvalRoutes(db: Db) {
         entityId: approval.id,
         details: { type: approval.type },
       });
+
+      if (approval.requestedByAgentId) {
+        const revisionLinkedIssues = await issueApprovalsSvc.listIssuesForApproval(approval.id);
+        const revisionLinkedIssueIds = revisionLinkedIssues.map((issue) => issue.id);
+        const revisionPrimaryIssueId = revisionLinkedIssueIds[0] ?? null;
+
+        try {
+          await heartbeat.wakeup(approval.requestedByAgentId, {
+            source: "automation",
+            triggerDetail: "system",
+            reason: "approval_revision_requested",
+            payload: {
+              approvalId: approval.id,
+              approvalStatus: approval.status,
+              issueId: revisionPrimaryIssueId,
+              issueIds: revisionLinkedIssueIds,
+            },
+            requestedByActorType: "user",
+            requestedByActorId: req.actor.userId ?? "board",
+            contextSnapshot: {
+              source: "approval.revision_requested",
+              approvalId: approval.id,
+              approvalStatus: approval.status,
+              approvalPayload: redactEventPayload(approval.payload),
+              approvalDecisionNote: approval.decisionNote,
+              issueId: revisionPrimaryIssueId,
+              issueIds: revisionLinkedIssueIds,
+              taskId: revisionPrimaryIssueId,
+              wakeReason: "approval_revision_requested",
+            },
+          });
+        } catch (err) {
+          logger.warn(
+            { err, approvalId: approval.id, requestedByAgentId: approval.requestedByAgentId },
+            "failed to queue requester wakeup after revision request",
+          );
+        }
+      }
 
       res.json(redactApprovalPayload(approval));
     },

@@ -22,6 +22,7 @@ import type { AdapterExecutionResult, AdapterInvocationMeta, AdapterSessionCodec
 import { createLocalAgentJwt } from "../agent-auth-jwt.js";
 import { parseObject, asBoolean, asNumber, appendWithCap, MAX_EXCERPT_BYTES } from "../adapters/utils.js";
 import { secretService } from "./secrets.js";
+import { trustService } from "./trust.js";
 import { resolveDefaultAgentWorkspaceDir } from "../home-paths.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
@@ -89,6 +90,14 @@ export type ResolvedWorkspaceForRun = {
   }>;
   warnings: string[];
 };
+
+function parseUniqueStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const filtered = value.filter(
+    (v): v is string => typeof v === "string" && v.trim().length > 0,
+  );
+  return Array.from(new Set(filtered));
+}
 
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
@@ -406,6 +415,7 @@ function resolveNextSessionState(input: {
 export function heartbeatService(db: Db) {
   const runLogStore = getRunLogStore();
   const secretsSvc = secretService(db);
+  const trustSvc = trustService(db);
 
   async function getAgent(agentId: string) {
     return db
@@ -892,6 +902,13 @@ export function heartbeatService(db: Db) {
         },
       });
     }
+
+    // Trust evaluation — non-blocking, errors logged but don't prevent status update
+    try {
+      await trustSvc.evaluateTrust(agentId, outcome);
+    } catch (err) {
+      logger.error({ err, agentId, outcome }, "Trust evaluation failed");
+    }
   }
 
   async function reapOrphanedRuns(opts?: { staleThresholdMs?: number }) {
@@ -1128,6 +1145,34 @@ export function heartbeatService(db: Db) {
     if (resolvedWorkspace.projectId && !readNonEmptyString(context.projectId)) {
       context.projectId = resolvedWorkspace.projectId;
     }
+
+    // Inject approval policy from agent-level config (not merged config, which could be overridden by issue-level settings)
+    const rawAdapterConfig = parseObject(agent.adapterConfig);
+    const approvalRequiredActions = parseUniqueStringArray(rawAdapterConfig.approvalRequiredActions);
+    if (approvalRequiredActions.length > 0) {
+      const actionList = approvalRequiredActions.map((a) => `- ${a}`).join("\n");
+      context.approvalPolicy = {
+        requiredActions: approvalRequiredActions,
+        approvalEndpoint: `/api/companies/${agent.companyId}/approvals`,
+        agentId: agent.id,
+        companyId: agent.companyId,
+        autoApproveIfTrusted: true,
+        instructions: [
+          `Before performing any of the following actions, you MUST create an approval request and wait for it to be resolved:`,
+          actionList,
+          ``,
+          `To request approval:`,
+          `1. POST to /api/companies/${agent.companyId}/approvals with:`,
+          `   { "type": "action", "requestedByAgentId": "${agent.id}", "autoApproveIfTrusted": true, "payload": { "title": "<action name>", "description": "<what you intend to do>", ... } }`,
+          `2. If the response status is "approved", proceed with the action.`,
+          `3. If the response status is "pending", STOP your current run. You will be woken up when the approval is decided.`,
+          `4. If you are woken with reason "approval_rejected" or "approval_revision_requested", read the decisionNote and adjust your approach.`,
+          `5. If the approval request fails (non-2xx response), do NOT proceed with the action. Report the error and stop.`,
+          `6. If you need multiple gated actions in sequence, request approval for each one separately. After being woken for one approval, continue your task and request the next as needed.`,
+        ].join("\n"),
+      };
+    }
+
     const runtimeSessionFallback = taskKey || resetTaskSession ? null : runtime.sessionId;
     const previousSessionDisplayId = truncateDisplayId(
       taskSessionForRun?.sessionDisplayId ??
@@ -2281,6 +2326,19 @@ export function heartbeatService(db: Db) {
       await finalizeAgentStatus(run.agentId, "cancelled");
       await startNextQueuedRunForAgent(run.agentId);
       return cancelled;
+    },
+
+    dismissRun: async (runId: string) => {
+      const run = await getRun(runId);
+      if (!run) return null;
+      if (run.dismissedAt) return run;
+
+      const [updated] = await db
+        .update(heartbeatRuns)
+        .set({ dismissedAt: new Date(), updatedAt: new Date() })
+        .where(eq(heartbeatRuns.id, runId))
+        .returning();
+      return updated ?? null;
     },
 
     cancelActiveForAgent: async (agentId: string) => {

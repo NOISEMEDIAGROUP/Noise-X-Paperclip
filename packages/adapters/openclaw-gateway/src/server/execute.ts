@@ -911,7 +911,24 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   const wakePayload = buildWakePayload(ctx);
   const paperclipEnv = buildPaperclipEnvForWake(ctx, wakePayload);
-  const wakeText = buildWakeText(wakePayload, paperclipEnv);
+  let wakeText = buildWakeText(wakePayload, paperclipEnv);
+
+  // Append approval policy if configured on the agent
+  const approvalPolicy = ctx.context.approvalPolicy;
+  if (approvalPolicy && typeof approvalPolicy === "object") {
+    const policy = approvalPolicy as Record<string, unknown>;
+    wakeText += `\nPAPERCLIP_APPROVAL_POLICY=${JSON.stringify(policy)}`;
+    if (typeof policy.instructions === "string") {
+      wakeText += `\n\n## Approval Policy\n${policy.instructions}`;
+    }
+  }
+  // Append approval decision context if present (wakeup from approval decision)
+  if (typeof ctx.context.approvalDecisionNote === "string" && ctx.context.approvalDecisionNote.trim().length > 0) {
+    wakeText += `\nPAPERCLIP_APPROVAL_DECISION_NOTE=${ctx.context.approvalDecisionNote.trim()}`;
+  }
+  if (ctx.context.approvalPayload && typeof ctx.context.approvalPayload === "object") {
+    wakeText += `\nPAPERCLIP_APPROVAL_PAYLOAD=${JSON.stringify(ctx.context.approvalPayload)}`;
+  }
 
   const sessionKeyStrategy = normalizeSessionKeyStrategy(ctx.config.sessionKeyStrategy);
   const configuredSessionKey = nonEmpty(ctx.config.sessionKey);
