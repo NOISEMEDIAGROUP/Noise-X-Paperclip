@@ -1067,6 +1067,46 @@ export function heartbeatService(db: Db) {
     const taskKey = deriveTaskKey(context, null);
     const sessionCodec = getAdapterSessionCodec(agent.adapterType);
     const issueId = readNonEmptyString(context.issueId);
+
+    // Phase 4 pre-flight guard: for bare timer wakes with no issue context, skip the
+    // adapter subprocess entirely if the agent has no actionable work assigned.
+    // Avoids spawning a CLI process (and burning tokens) when there is nothing to do.
+    const preflightWakeSource = readNonEmptyString(context.wakeSource);
+    if (!issueId && preflightWakeSource === "timer") {
+      const activeIssueCount = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(issues)
+        .where(
+          and(
+            eq(issues.companyId, agent.companyId),
+            eq(issues.assigneeAgentId, agent.id),
+            inArray(issues.status, ["todo", "in_progress", "in_review", "blocked"]),
+          ),
+        )
+        .then((rows) => rows[0]?.count ?? 0);
+      if (activeIssueCount === 0) {
+        logger.info(
+          { companyId: agent.companyId, agentId: agent.id, runId: run.id },
+          "pre-flight: no active assigned issues for timer wake — skipping adapter invocation",
+        );
+        const skippedRun = await setRunStatus(run.id, "succeeded", {
+          finishedAt: new Date(),
+          resultJson: { skipped: true, reason: "no_actionable_work" },
+        });
+        await setWakeupStatus(run.wakeupRequestId, "completed", { finishedAt: new Date() });
+        if (skippedRun) {
+          await appendRunEvent(skippedRun, 1, {
+            eventType: "lifecycle",
+            stream: "system",
+            level: "info",
+            message: "pre-flight: no active assigned issues — adapter invocation skipped",
+          });
+          await releaseIssueExecutionAndPromote(skippedRun);
+        }
+        return;
+      }
+    }
+
     const issueAssigneeConfig = issueId
       ? await db
           .select({
