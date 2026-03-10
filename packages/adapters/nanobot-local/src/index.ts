@@ -8,7 +8,7 @@ export const agentConfigurationDoc = `# nanobot_local agent configuration
 Adapter: nanobot_local
 
 Use when:
-- You have a long-running nanobot instance (e.g. Stefany, Cody) with its Paperclip channel enabled.
+- You have a long-running nanobot instance with its Paperclip channel enabled.
 - You want Paperclip to send tasks to the nanobot over HTTP and receive responses.
 
 Don't use when:
