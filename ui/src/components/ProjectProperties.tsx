@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Project } from "@paperclipai/shared";
+import type { Project, ProjectWorkspace } from "@paperclipai/shared";
 import { StatusBadge } from "./StatusBadge";
 import { cn, formatDate } from "../lib/utils";
 import { goalsApi } from "../api/goals";
@@ -13,7 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ExternalLink, Github, Plus, Trash2, X } from "lucide-react";
+import { ExternalLink, Github, Plus, Trash2, X, Pencil } from "lucide-react";
 import { ChoosePathButton } from "./PathInstructionsModal";
 
 const PROJECT_STATUSES = [
@@ -81,6 +81,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
   const queryClient = useQueryClient();
   const [goalOpen, setGoalOpen] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState<"local" | "repo" | null>(null);
+  const [editingWorkspace, setEditingWorkspace] = useState<ProjectWorkspace | null>(null);
   const [workspaceCwd, setWorkspaceCwd] = useState("");
   const [workspaceRepoUrl, setWorkspaceRepoUrl] = useState("");
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
@@ -134,6 +135,13 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
       projectsApi.updateWorkspace(project.id, workspaceId, data),
     onSuccess: invalidateProject,
   });
+  const startEditWorkspace = (workspace: ProjectWorkspace) => {
+    setEditingWorkspace(workspace);
+    setWorkspaceCwd(workspace.cwd ?? "");
+    setWorkspaceRepoUrl(workspace.repoUrl ?? "");
+    setWorkspaceMode("both");
+    setWorkspaceError(null);
+  };
 
   const removeGoal = (goalId: string) => {
     if (!onUpdate) return;
@@ -251,6 +259,47 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
       return;
     }
     removeWorkspace.mutate(workspace.id);
+  };
+
+  const editWorkspace = () => {
+    if (!editingWorkspace) return;
+    const localRequired = workspaceMode === "local" || workspaceMode === "both";
+    const repoRequired = workspaceMode === "repo" || workspaceMode === "both";
+    const localPath = workspaceCwd.trim();
+    const repoUrl = workspaceRepoUrl.trim();
+
+    if (localRequired && !isAbsolutePath(localPath)) {
+      setWorkspaceError("Local folder must be a full absolute path.");
+      return;
+    }
+    if (repoRequired && !isGitHubRepoUrl(repoUrl)) {
+      setWorkspaceError("Repo workspace must use a valid GitHub repo URL.");
+      return;
+    }
+
+    setWorkspaceError(null);
+
+    const updateData: Record<string, unknown> = {};
+    if (localRequired) {
+      updateData.cwd = localPath;
+    } else {
+      updateData.cwd = null;
+    }
+    if (repoRequired) {
+      updateData.repoUrl = repoUrl;
+    } else {
+      updateData.repoUrl = null;
+    }
+
+    updateWorkspace.mutate({
+      workspaceId: editingWorkspace.id,
+      data: updateData,
+    });
+
+    setEditingWorkspace(null);
+    setWorkspaceMode(null);
+    setWorkspaceCwd("");
+    setWorkspaceRepoUrl("");
   };
 
   return (
@@ -372,41 +421,45 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
             <div className="space-y-1">
               {workspaces.map((workspace) => (
                 <div key={workspace.id} className="space-y-1">
-                  {workspace.cwd && workspace.cwd !== REPO_ONLY_CWD_SENTINEL ? (
-                    <div className="flex items-center justify-between gap-2 py-1">
-                      <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{workspace.cwd}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={() => clearLocalWorkspace(workspace)}
-                        aria-label="Delete local folder"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      {workspace.cwd && workspace.cwd !== REPO_ONLY_CWD_SENTINEL ? (
+                        <div className="flex items-center gap-2">
+                          <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{workspace.cwd}</span>
+                        </div>
+                      ) : null}
+                      {workspace.repoUrl ? (
+                        <a
+                          href={workspace.repoUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground hover:underline"
+                        >
+                          <Github className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{formatGitHubRepo(workspace.repoUrl)}</span>
+                          <ExternalLink className="h-3 w-3 shrink-0" />
+                        </a>
+                      ) : null}
                     </div>
-                  ) : null}
-                  {workspace.repoUrl ? (
-                    <div className="flex items-center justify-between gap-2 py-1">
-                      <a
-                        href={workspace.repoUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground hover:underline"
-                      >
-                        <Github className="h-3 w-3 shrink-0" />
-                        <span className="truncate">{formatGitHubRepo(workspace.repoUrl)}</span>
-                        <ExternalLink className="h-3 w-3 shrink-0" />
-                      </a>
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={() => clearRepoWorkspace(workspace)}
-                        aria-label="Delete workspace repo"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ) : null}
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => startEditWorkspace(workspace)}
+                      aria-label="Edit workspace"
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => clearLocalWorkspace(workspace)}
+                      aria-label="Delete local folder"
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -436,7 +489,10 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
             </Button>
           </div>
           {workspaceMode === "local" && (
-            <div className="space-y-1.5 rounded-md border border-border p-2">
+            <div className="space-y-1.5 rounded-md border border-foreground/50 bg-accent/20 p-2">
+              <div className="text-xs font-medium text-foreground">
+                {editingWorkspace ? "Editing workspace" : "Add workspace"}
+              </div>
               <div className="flex items-center gap-2">
                 <input
                   className="w-full rounded border border-border bg-transparent px-2 py-1 text-xs font-mono outline-none"
@@ -452,9 +508,9 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
                   size="xs"
                   className="h-6 px-2"
                   disabled={!workspaceCwd.trim() || createWorkspace.isPending}
-                  onClick={submitLocalWorkspace}
+                  onClick={() => editingWorkspace ? editWorkspace() : submitLocalWorkspace()}
                 >
-                  Save
+                  {editingWorkspace ? "Update" : "Save"}
                 </Button>
                 <Button
                   variant="ghost"
@@ -464,6 +520,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
                     setWorkspaceMode(null);
                     setWorkspaceCwd("");
                     setWorkspaceError(null);
+                    setEditingWorkspace(null);
                   }}
                 >
                   Cancel
@@ -472,7 +529,10 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
             </div>
           )}
           {workspaceMode === "repo" && (
-            <div className="space-y-1.5 rounded-md border border-border p-2">
+            <div className="space-y-1.5 rounded-md border border-foreground/50 bg-accent/20 p-2">
+              <div className="text-xs font-medium text-foreground">
+                {editingWorkspace ? "Editing workspace" : "Add workspace"}
+              </div>
               <input
                 className="w-full rounded border border-border bg-transparent px-2 py-1 text-xs outline-none"
                 value={workspaceRepoUrl}
@@ -485,9 +545,9 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
                   size="xs"
                   className="h-6 px-2"
                   disabled={!workspaceRepoUrl.trim() || createWorkspace.isPending}
-                  onClick={submitRepoWorkspace}
+                  onClick={() => editingWorkspace ? editWorkspace() : submitRepoWorkspace()}
                 >
-                  Save
+                  {editingWorkspace ? "Update" : "Save"}
                 </Button>
                 <Button
                   variant="ghost"
@@ -497,6 +557,61 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
                     setWorkspaceMode(null);
                     setWorkspaceRepoUrl("");
                     setWorkspaceError(null);
+                    setEditingWorkspace(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+          {workspaceMode === "both" && (
+            <div className="space-y-1.5 rounded-md border border-foreground/50 bg-accent/20 p-2">
+              <div className="text-xs font-medium text-foreground">
+                {editingWorkspace ? "Editing workspace" : "Add workspace"}
+              </div>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    className="w-full rounded border border-border bg-transparent px-2 py-1 text-xs font-mono outline-none"
+                    value={workspaceCwd}
+                    onChange={(e) => setWorkspaceCwd(e.target.value)}
+                    placeholder="/absolute/path/to/workspace (optional)"
+                  />
+                  <ChoosePathButton />
+                </div>
+                <input
+                  className="w-full rounded border border-border bg-transparent px-2 py-1 text-xs outline-none"
+                  value={workspaceRepoUrl}
+                  onChange={(e) => setWorkspaceRepoUrl(e.target.value)}
+                  placeholder="https://github.com/org/repo (optional)"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="xs"
+                  className="h-6 px-2"
+                  disabled={createWorkspace.isPending}
+                  onClick={() => editingWorkspace ? editWorkspace() : (
+                    // Default to local if only local path provided
+                    workspaceCwd.trim() && !workspaceRepoUrl.trim() ? submitLocalWorkspace() :
+                    !workspaceCwd.trim() && workspaceRepoUrl.trim() ? submitRepoWorkspace() :
+                    null
+                  )}
+                >
+                  {editingWorkspace ? "Update" : "Save"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="h-6 px-2"
+                  onClick={() => {
+                    setWorkspaceMode(null);
+                    setWorkspaceCwd("");
+                    setWorkspaceRepoUrl("");
+                    setWorkspaceError(null);
+                    setEditingWorkspace(null);
                   }}
                 >
                   Cancel
