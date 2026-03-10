@@ -15,6 +15,11 @@ if [ -z "$SLOT_NAME" ]; then
   exit 1
 fi
 
+if [[ "$SLOT_NAME" == *"/"* || "$SLOT_NAME" == *".."* ]]; then
+  echo "Error: slot name must not contain '/' or '..'"
+  exit 1
+fi
+
 SLOT_DIR="$HOME/.paperclip/subscription-slots/$SLOT_NAME"
 
 if [ -f "$SLOT_DIR/.credentials.json" ]; then

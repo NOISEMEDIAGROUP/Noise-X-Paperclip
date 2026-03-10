@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   agents,
@@ -1446,10 +1446,12 @@ export function heartbeatService(db: Db) {
             throw new Error("resolved path escapes allowed prefix");
           }
           return canonicalResolved;
-        } catch {
-          logger.warn(
-            { agentId: agent.id, subscriptionConfigDir: resolved },
-            "subscriptionConfigDir does not exist or is not a valid directory; ignoring",
+        } catch (err) {
+          const code = (err as NodeJS.ErrnoException).code;
+          const level = code === "ENOENT" || code === "ENOTDIR" ? "warn" : "error";
+          logger[level](
+            { agentId: agent.id, subscriptionConfigDir: resolved, err },
+            "subscriptionConfigDir validation failed; ignoring",
           );
           return null;
         }
@@ -1467,11 +1469,11 @@ export function heartbeatService(db: Db) {
           const strategy = typeof rc.subscriptionStrategy === "string" ? rc.subscriptionStrategy : "round-robin";
 
           if (slotNames.length > 0) {
-            // Single query: get last run's slot and status for rotation decisions
+            // Get previous run's slot and status (exclude current run which has null usageJson)
             const [lastRun] = await db
               .select({ status: heartbeatRuns.status, usageJson: heartbeatRuns.usageJson })
               .from(heartbeatRuns)
-              .where(eq(heartbeatRuns.agentId, agent.id))
+              .where(and(eq(heartbeatRuns.agentId, agent.id), ne(heartbeatRuns.id, run.id)))
               .orderBy(desc(heartbeatRuns.createdAt))
               .limit(1);
 
