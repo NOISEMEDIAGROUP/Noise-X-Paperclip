@@ -798,11 +798,13 @@ export function IssueDetail() {
               <MessageSquare className="h-3.5 w-3.5" />
               Comments
             </TabsTrigger>
-            <TabsTrigger value="subissues" className="gap-1.5 shrink-0">
-              <ListTree className="h-3.5 w-3.5" />
-              Sub-issues
-              {subtaskCounts && <SubtaskBadge counts={subtaskCounts} />}
-            </TabsTrigger>
+            {!issue.parentId && (
+              <TabsTrigger value="subissues" className="gap-1.5 shrink-0">
+                <ListTree className="h-3.5 w-3.5" />
+                Sub-issues
+                {subtaskCounts && <SubtaskBadge counts={subtaskCounts} />}
+              </TabsTrigger>
+            )}
             <TabsTrigger value="activity" className="gap-1.5 shrink-0">
               <ActivityIcon className="h-3.5 w-3.5" />
               Activity
@@ -839,7 +841,7 @@ export function IssueDetail() {
           />
         </TabsContent>
 
-        <TabsContent value="subissues">
+        {!issue.parentId && <TabsContent value="subissues">
           <div className="space-y-2">
             {childIssues.length === 0 ? (
               <p className="text-xs text-muted-foreground">No sub-issues.</p>
@@ -901,7 +903,7 @@ export function IssueDetail() {
               Create sub-issue
             </Button>
           </div>
-        </TabsContent>
+        </TabsContent>}
 
         <TabsContent value="activity">
           {!activity || activity.length === 0 ? (
