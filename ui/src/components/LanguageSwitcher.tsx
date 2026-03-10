@@ -9,28 +9,30 @@ interface LanguageSwitcherProps {
 
 export function LanguageSwitcher({ className }: LanguageSwitcherProps) {
   const { i18n, t } = useTranslation();
-  const currentLang = i18n.language as LanguageCode;
+  const currentLang = (i18n.language.split("-")[0] || "en") as LanguageCode;
+  const safeLang: LanguageCode = SUPPORTED_LANGUAGES.some((l) => l.code === currentLang) ? currentLang : "en";
 
   function toggleLanguage() {
-    const next = currentLang === "en" ? "zh" : "en";
+    const next = safeLang === "en" ? "zh" : "en";
     i18n.changeLanguage(next);
   }
 
-  const currentLabel =
-    SUPPORTED_LANGUAGES.find((l) => l.code === currentLang)?.nativeLabel ?? "EN";
+  const current = SUPPORTED_LANGUAGES.find((l) => l.code === safeLang);
+  const currentLabel = current?.nativeLabel ?? "English";
+  const currentShortLabel = current?.shortLabel ?? "EN";
 
   return (
     <Button
       type="button"
       variant="ghost"
-      size="icon-sm"
+      size="sm"
       className={className}
       onClick={toggleLanguage}
-      aria-label={t("common.language")}
-      title={t("common.language")}
+      aria-label={`${t("common.language")}: ${currentLabel}`}
+      title={`${t("common.language")}: ${currentLabel}`}
     >
       <Languages className="h-4 w-4" />
-      <span className="sr-only">{currentLabel}</span>
+      <span className="text-xs font-medium">{currentShortLabel}</span>
     </Button>
   );
 }
