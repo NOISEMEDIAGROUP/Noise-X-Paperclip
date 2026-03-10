@@ -1,0 +1,58 @@
+name: Issue Triage
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: issue-triage-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  triage:
+    if: github.event.label.name == 'claude'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Triage issue with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          max_turns: "10"
+          allowed_tools: "Read,Glob,Grep,Bash(gh issue *)"
+          prompt: |
+            You are an issue triage agent for this repository.
+
+            First, read the following files to understand the codebase:
+            1. AGENTS.md
+            2. doc/SPEC-implementation.md
+
+            Then analyze the current GitHub issue and assess whether it is
+            implementable by an autonomous coding agent.
+
+            Criteria for an agent-implementable issue:
+            - Clear, well-scoped task with defined acceptance criteria
+            - Does not require external service access or credentials
+            - Can be verified with tests or static analysis
+            - Touches a bounded set of files
+
+            Based on your assessment:
+
+            If the issue IS implementable by an agent:
+            - Add the label 'agent-approved' using: gh issue edit ${{ github.event.issue.number }} --add-label "agent-approved"
+            - Comment on the issue with a concrete implementation plan that includes:
+              - Which files need to be created or modified
+              - A summary of the changes required
+              - Potential risks or edge cases
+
+            If the issue is TOO LARGE or ambiguous for a single agent pass:
+            - Add the label 'needs-breakdown' using: gh issue edit ${{ github.event.issue.number }} --add-label "needs-breakdown"
+            - Comment on the issue suggesting how it could be split into smaller,
+              agent-sized sub-issues, with a brief description of each.

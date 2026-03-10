@@ -3,7 +3,8 @@ name: PR Verify
 on:
   pull_request:
     branches:
-      - master
+      - main
+      - dev
 
 concurrency:
   group: pr-verify-${{ github.event.pull_request.number }}

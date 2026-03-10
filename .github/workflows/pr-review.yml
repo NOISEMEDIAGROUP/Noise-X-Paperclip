@@ -1,0 +1,244 @@
+name: "PR Review (Multi-Agent)"
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        reviewer:
+          - architecture
+          - security
+          - performance
+          - pattern-consistency
+          - code-simplicity
+          - data-integrity
+          - contract-sync
+        include:
+          - reviewer: architecture
+            prompt: |
+              ## Architecture Review
+
+              You are an architecture reviewer for this PR. Focus on:
+
+              - Architectural patterns and component boundaries
+              - Separation of concerns between layers
+              - Whether new code follows existing patterns found in server/src/ and packages/
+              - Module coupling and cohesion
+              - Dependency direction (dependencies should point inward, not outward)
+
+              Read AGENTS.md and doc/SPEC-implementation.md for project context first.
+
+              Review the PR diff carefully. Post your findings as a PR comment under the heading "## Architecture Review". Include specific file paths and line numbers. If everything looks good, say so briefly. If there are issues, categorize them as Critical, Warning, or Suggestion.
+
+          - reviewer: security
+            prompt: |
+              ## Security Review
+
+              You are a security reviewer for this PR. Focus on:
+
+              - Authentication and authorization issues
+              - SQL injection vulnerabilities
+              - Cross-site scripting (XSS) risks
+              - Secrets or credentials accidentally exposed in code
+              - Improper input validation or sanitization
+              - Pay special attention to files in server/src/auth/ and server/src/middleware/
+              - Insecure defaults or missing security headers
+
+              Read AGENTS.md for project context first.
+
+              Review the PR diff carefully. Post your findings as a PR comment under the heading "## Security Review". Include specific file paths and line numbers. If everything looks good, say so briefly. If there are issues, categorize them as Critical, Warning, or Suggestion.
+
+          - reviewer: performance
+            prompt: |
+              ## Performance Review
+
+              You are a performance reviewer for this PR. Focus on:
+
+              - N+1 query patterns in database access code
+              - Missing database indexes for new queries
+              - Unnecessary re-renders in UI components
+              - Large payload responses that should be paginated or filtered
+              - Inefficient algorithms or data structures
+              - Missing caching opportunities
+              - Expensive operations in hot paths
+
+              Read AGENTS.md for project context first.
+
+              Review the PR diff carefully. Post your findings as a PR comment under the heading "## Performance Review". Include specific file paths and line numbers. If everything looks good, say so briefly. If there are issues, categorize them as Critical, Warning, or Suggestion.
+
+          - reviewer: pattern-consistency
+            prompt: |
+              ## Pattern Consistency Review
+
+              You are a pattern consistency reviewer for this PR. Focus on:
+
+              - Naming conventions (files, variables, functions, types) matching existing codebase style
+              - File organization and directory structure consistency
+              - Import patterns and module resolution conventions
+              - Error handling patterns matching the rest of the codebase
+              - Consistent use of TypeScript types vs interfaces
+              - Logging and observability patterns
+
+              Read AGENTS.md for project context first. Then examine existing code in server/src/ and packages/ to understand established patterns.
+
+              Review the PR diff carefully. Post your findings as a PR comment under the heading "## Pattern Consistency Review". Include specific file paths and line numbers. If everything looks good, say so briefly. If there are issues, categorize them as Critical, Warning, or Suggestion.
+
+          - reviewer: code-simplicity
+            prompt: |
+              ## Code Simplicity Review
+
+              You are a code simplicity reviewer for this PR. Focus on:
+
+              - Over-engineering or unnecessary abstractions
+              - Dead code or unused imports
+              - Overly complex logic that could be simplified
+              - Premature generalization
+              - Functions or classes that do too many things
+              - Code that could leverage existing utilities instead of reimplementing
+
+              Read AGENTS.md for project context first.
+
+              Review the PR diff carefully. Post your findings as a PR comment under the heading "## Code Simplicity Review". Include specific file paths and line numbers. If everything looks good, say so briefly. If there are issues, categorize them as Critical, Warning, or Suggestion.
+
+          - reviewer: data-integrity
+            prompt: |
+              ## Data Integrity Review
+
+              You are a data integrity reviewer for this PR. Focus on:
+
+              - Database migration safety (can they be rolled back? do they lock tables for too long?)
+              - Data loss risks from schema changes
+              - Referential integrity between tables
+              - Transaction boundaries (are related operations wrapped in transactions?)
+              - Default values and NOT NULL constraints
+              - Proper handling of concurrent writes and race conditions
+
+              Read AGENTS.md for project context first. Examine packages/db/src/schema/ and packages/db/drizzle/ for existing patterns.
+
+              Review the PR diff carefully. Post your findings as a PR comment under the heading "## Data Integrity Review". Include specific file paths and line numbers. If everything looks good, say so briefly. If there are issues, categorize them as Critical, Warning, or Suggestion.
+
+          - reviewer: contract-sync
+            prompt: |
+              ## Contract Sync Review
+
+              You are a contract sync reviewer for this PR. This is PAPERCLIP-SPECIFIC.
+
+              Focus on:
+
+              - Changes touching packages/db MUST be reflected in packages/shared, server, and ui
+              - API route changes MUST have corresponding type updates in packages/shared
+              - Schema changes MUST have proper Drizzle migrations in packages/db/drizzle/
+              - Shared type definitions must stay in sync across all consumers
+              - New API endpoints need corresponding client-side type definitions
+              - Removed or renamed fields must be updated everywhere they are referenced
+
+              Read AGENTS.md and doc/SPEC-implementation.md for project context first. Then cross-reference changes across packages/db, packages/shared, server/src, and ui/src.
+
+              Review the PR diff carefully. Post your findings as a PR comment under the heading "## Contract Sync Review". Include specific file paths and line numbers. If everything looks good, say so briefly. If there are issues, categorize them as Critical, Warning, or Suggestion.
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run ${{ matrix.reviewer }} review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_tools: "Read,Glob,Grep,Bash(gh pr view *),Bash(gh pr diff *),Bash(gh api *)"
+          max_turns: "15"
+          prompt: ${{ matrix.prompt }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  merge-decision:
+    needs: review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: needs.review.result == 'success'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Assess risk and decide
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_tools: "Read,Glob,Grep,Bash(gh pr *),Bash(gh api *)"
+          max_turns: "15"
+          prompt: |
+            You are the merge-decision agent for PR #${{ github.event.pull_request.number }}.
+
+            Your job is to:
+            1. Determine if this PR is HIGH RISK or LOW RISK
+            2. Read all review comments from the other reviewers
+            3. Make a merge or escalate decision
+
+            STEP 1: Check risk level.
+
+            Run this command to get the list of changed files:
+            ```
+            gh pr diff ${{ github.event.pull_request.number }} --name-only
+            ```
+
+            A PR is HIGH RISK if ANY changed file matches these patterns:
+            - packages/db/src/schema/**
+            - packages/db/drizzle/**
+            - server/src/auth/**
+            - server/src/middleware/**
+            - .env*
+            - Dockerfile
+            - docker-compose*
+
+            Otherwise the PR is LOW RISK.
+
+            STEP 2: Read all review comments.
+
+            Run this command to fetch all comments on the PR:
+            ```
+            gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments --paginate --jq '.[].body'
+            ```
+
+            Look for the review comments from the 7 reviewers (Architecture, Security,
+            Performance, Pattern Consistency, Code Simplicity, Data Integrity, Contract Sync).
+
+            Check if ANY reviewer flagged a "Critical" issue.
+
+            STEP 3: Make the decision.
+
+            If the PR is LOW RISK AND no reviewer flagged any Critical issues:
+            - Auto-merge the PR with:
+              ```
+              gh pr merge ${{ github.event.pull_request.number }} --squash --delete-branch
+              ```
+            - Comment on the PR explaining that all 7 reviewers passed with no critical
+              findings and the PR was auto-merged.
+
+            If the PR is HIGH RISK OR any reviewer flagged Critical issues:
+            - Do NOT merge.
+            - Comment on the PR with a summary that includes:
+              - Whether the PR is HIGH RISK or LOW RISK (and which files triggered high risk)
+              - A summary of all critical findings from reviewers
+              - A clear statement that manual human review is required before merging
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

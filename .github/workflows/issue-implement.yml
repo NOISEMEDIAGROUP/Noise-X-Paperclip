@@ -1,0 +1,63 @@
+name: Issue Implement
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: issue-implement-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  implement:
+    if: github.event.label.name == 'agent-approved'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+
+      - name: Create implementation branch
+        run: |
+          git checkout -b agent/issue-${{ github.event.issue.number }}
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          max_turns: 50
+          prompt: |
+            You are implementing issue #${{ github.event.issue.number }}.
+
+            First, read these files for context:
+            - AGENTS.md
+            - doc/SPEC-implementation.md
+
+            Then implement the requirements described in the issue.
+
+            Follow these rules:
+            - Contract sync: if you change any schema or API contract, you must
+              update all affected packages: packages/db, packages/shared, server,
+              and ui. Keep everything in sync.
+            - Keep all changes company-scoped.
+            - Only use Drizzle for database migrations. Do not use raw SQL or any
+              other migration tool.
+
+            After implementation, run verification:
+            ```
+            pnpm -r typecheck && pnpm test:run && pnpm build
+            ```
+            Fix any errors until all three commands pass.
+
+            Finally, create a pull request targeting the dev branch with a clear
+            title and description summarizing what was implemented and why.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
