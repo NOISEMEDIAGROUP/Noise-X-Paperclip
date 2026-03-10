@@ -14,7 +14,8 @@ const VOLATILE_TEMPLATE_WARNINGS: Array<PromptCacheWarning> = [
   },
   {
     variable: "context",
-    message: "Serializes the entire wake context, which is bulky and often includes volatile fields.",
+    message:
+      "Serializes the entire wake context, including volatile sub-fields like now and run IDs, which defeats prompt-prefix stability.",
   },
   {
     variable: "context.now",

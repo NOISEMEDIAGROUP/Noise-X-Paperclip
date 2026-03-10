@@ -275,11 +275,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       `[paperclip] Cursor session "${runtimeSessionId}" was saved for cwd "${runtimeSessionCwd}" and will not be resumed in "${cwd}".\n`,
     );
   }
-  for (const warning of promptCacheWarnings) {
-    await onLog(
-      "stderr",
-      `[paperclip] Prompt cache warning: {{ ${warning.variable} }} ${warning.message}\n`,
-    );
+  if (promptCacheWarnings.length > 0) {
+    const summary = promptCacheWarnings
+      .map((warning) => `{{ ${warning.variable} }} ${warning.message}`)
+      .join(" | ");
+    await onLog("stderr", `[paperclip] Prompt cache warning: ${summary}\n`);
   }
 
   const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
