@@ -8,6 +8,7 @@ import { agentsApi } from "../api/agents";
 import { authApi } from "../api/auth";
 import { projectsApi } from "../api/projects";
 import { useCompany } from "../context/CompanyContext";
+import { useDialog } from "../context/DialogContext";
 import { usePanel } from "../context/PanelContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
@@ -41,6 +42,7 @@ import {
   MessageSquare,
   MoreHorizontal,
   Paperclip,
+  Plus,
   SlidersHorizontal,
   Trash2,
 } from "lucide-react";
@@ -149,6 +151,7 @@ export function IssueDetail() {
   const { selectedCompanyId } = useCompany();
   const { openPanel, closePanel, panelVisible, setPanelVisible } = usePanel();
   const { setBreadcrumbs } = useBreadcrumbs();
+  const { openNewIssue } = useDialog();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -837,65 +840,65 @@ export function IssueDetail() {
         </TabsContent>
 
         <TabsContent value="subissues">
-          {childIssues.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No sub-issues.</p>
-          ) : (
-            <div className="space-y-2">
-            {subtaskCounts && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <SubtaskBadge counts={subtaskCounts} />
-                <span>{subtaskCounts.done} of {subtaskCounts.total} completed</span>
-                <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${subtaskCounts.done === subtaskCounts.total ? "bg-green-500" : "bg-primary"}`}
-                    style={{ width: `${(subtaskCounts.done / subtaskCounts.total) * 100}%` }}
-                  />
-                </div>
-              </div>
-            )}
-            <div className="border border-border rounded-lg divide-y divide-border">
-              {childIssues.map((child) => (
-                <Link
-                  key={child.id}
-                  to={`/issues/${child.identifier ?? child.id}`}
-                  className="flex items-center justify-between px-3 py-2 text-sm hover:bg-accent/20 transition-colors"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <StatusIcon status={child.status} />
-                    <PriorityIcon priority={child.priority} />
-                    <span className="font-mono text-muted-foreground shrink-0">
-                      {child.identifier ?? child.id.slice(0, 8)}
-                    </span>
-                    <span className="truncate">{child.title}</span>
+          <div className="space-y-2">
+            {childIssues.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No sub-issues.</p>
+            ) : (
+              <>
+                {subtaskCounts && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <SubtaskBadge counts={subtaskCounts} />
+                    <span>{subtaskCounts.done} of {subtaskCounts.total} completed</span>
+                    <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${subtaskCounts.done === subtaskCounts.total ? "bg-green-500" : "bg-primary"}`}
+                        style={{ width: `${(subtaskCounts.done / subtaskCounts.total) * 100}%` }}
+                      />
+                    </div>
                   </div>
-                  {child.assigneeAgentId && (() => {
-                    const name = agentMap.get(child.assigneeAgentId)?.name;
-                    return name
-                      ? <Identity name={name} size="sm" />
-                      : <span className="text-muted-foreground font-mono">{child.assigneeAgentId.slice(0, 8)}</span>;
-                  })()}
-                </Link>
-              ))}
-            </div>
-            {!issue.parentId && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full text-muted-foreground"
-                onClick={() =>
-                  openNewIssue({
-                    parentId: issue.id,
-                    ...(issue.projectId ? { projectId: issue.projectId } : {}),
-                    ...(issue.goalId ? { goalId: issue.goalId } : {}),
-                  })
-                }
-              >
-                <Plus className="h-3.5 w-3.5 mr-1.5" />
-                Create sub-issue
-              </Button>
+                )}
+                <div className="border border-border rounded-lg divide-y divide-border">
+                  {childIssues.map((child) => (
+                    <Link
+                      key={child.id}
+                      to={`/issues/${child.identifier ?? child.id}`}
+                      className="flex items-center justify-between px-3 py-2 text-sm hover:bg-accent/20 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <StatusIcon status={child.status} />
+                        <PriorityIcon priority={child.priority} />
+                        <span className="font-mono text-muted-foreground shrink-0">
+                          {child.identifier ?? child.id.slice(0, 8)}
+                        </span>
+                        <span className="truncate">{child.title}</span>
+                      </div>
+                      {child.assigneeAgentId && (() => {
+                        const name = agentMap.get(child.assigneeAgentId)?.name;
+                        return name
+                          ? <Identity name={name} size="sm" />
+                          : <span className="text-muted-foreground font-mono">{child.assigneeAgentId.slice(0, 8)}</span>;
+                      })()}
+                    </Link>
+                  ))}
+                </div>
+              </>
             )}
-            </div>
-          )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full text-muted-foreground"
+              onClick={() =>
+                openNewIssue({
+                  parentId: issue.id,
+                  ...(issue.projectId ? { projectId: issue.projectId } : {}),
+                  ...(issue.goalId ? { goalId: issue.goalId } : {}),
+                })
+              }
+            >
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              Create sub-issue
+            </Button>
+          </div>
         </TabsContent>
 
         <TabsContent value="activity">
