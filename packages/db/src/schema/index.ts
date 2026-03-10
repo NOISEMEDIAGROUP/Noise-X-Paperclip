@@ -31,3 +31,11 @@ export { approvalComments } from "./approval_comments.js";
 export { activityLog } from "./activity_log.js";
 export { companySecrets } from "./company_secrets.js";
 export { companySecretVersions } from "./company_secret_versions.js";
+
+// ClipMart marketplace
+export { marketplaceCreators } from "./marketplace_creators.js";
+export { marketplaceListings } from "./marketplace_listings.js";
+export { marketplaceVersions } from "./marketplace_versions.js";
+export { marketplacePurchases } from "./marketplace_purchases.js";
+export { marketplaceReviews } from "./marketplace_reviews.js";
+export { marketplaceStars } from "./marketplace_stars.js";

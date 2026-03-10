@@ -28,6 +28,8 @@ import { NewAgent } from "./pages/NewAgent";
 import { AuthPage } from "./pages/Auth";
 import { BoardClaimPage } from "./pages/BoardClaim";
 import { InviteLandingPage } from "./pages/InviteLanding";
+import { Marketplace } from "./pages/Marketplace";
+import { MarketplaceDetail } from "./pages/MarketplaceDetail";
 import { queryKeys } from "./lib/queryKeys";
 import { useCompany } from "./context/CompanyContext";
 import { useDialog } from "./context/DialogContext";
@@ -221,6 +223,8 @@ export function App() {
         <Route path="invite/:token" element={<InviteLandingPage />} />
 
         <Route element={<CloudAccessGate />}>
+          <Route path="marketplace" element={<Marketplace />} />
+          <Route path="marketplace/:slug" element={<MarketplaceDetail />} />
           <Route index element={<CompanyRootRedirect />} />
           <Route path="companies" element={<UnprefixedBoardRedirect />} />
           <Route path="issues" element={<UnprefixedBoardRedirect />} />
