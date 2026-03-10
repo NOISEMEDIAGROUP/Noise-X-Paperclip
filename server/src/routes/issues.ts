@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import multer from "multer";
-import type { Db } from "@paperclipai/db";
+import { agents as agentsTable, type Db } from "@paperclipai/db";
+import { eq } from "drizzle-orm";
 import {
   addIssueCommentSchema,
   createIssueAttachmentMetadataSchema,
@@ -26,10 +27,8 @@ import { logger } from "../middleware/logger.js";
 import { forbidden, HttpError, unauthorized } from "../errors.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 import { shouldWakeAssigneeOnCheckout } from "./issues-checkout-wakeup.js";
-import { defaultPermissionsForRole, normalizeAgentPermissions } from "../services/agent-permissions.js";
 
 const MAX_ATTACHMENT_BYTES = Number(process.env.PAPERCLIP_ATTACHMENT_MAX_BYTES) || 10 * 1024 * 1024;
-const ALLOW_DEFAULT_AGENT_TASK_ASSIGNMENT = process.env.PAPERCLIP_ALLOW_DEFAULT_AGENT_TASK_ASSIGNMENT === "true";
 const ALLOWED_ATTACHMENT_CONTENT_TYPES = new Set([
   "image/png",
   "image/jpeg",
@@ -45,16 +44,23 @@ type AgentPermissionShape = {
   permissions: Record<string, unknown> | null | undefined;
 };
 
+function isDefaultAgentTaskAssignmentEnabled() {
+  return process.env.PAPERCLIP_ALLOW_DEFAULT_AGENT_TASK_ASSIGNMENT === "true";
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export function hasDefaultAgentPermissionSet(agent: AgentPermissionShape) {
-  const defaults = defaultPermissionsForRole(agent.role);
-  const normalized = normalizeAgentPermissions(agent.permissions, agent.role);
-  return Object.entries(defaults).every(([key, value]) => normalized[key] === value);
+  if (!isPlainRecord(agent.permissions)) return true;
+  return Object.keys(agent.permissions).length === 0;
 }
 
 export function canAssignTasksWithDefaultPermissionFlag(
   agent: AgentPermissionShape,
   assignmentTargetType: AssignmentTargetType,
-  flagEnabled = ALLOW_DEFAULT_AGENT_TASK_ASSIGNMENT,
+  flagEnabled = isDefaultAgentTaskAssignmentEnabled(),
 ) {
   if (!flagEnabled) return false;
   if (assignmentTargetType !== "agent") return false;
@@ -126,7 +132,16 @@ export function issueRoutes(db: Db, storage: StorageService) {
       if (!req.actor.agentId) throw forbidden("Agent authentication required");
       const allowedByGrant = await access.hasPermission(companyId, "agent", req.actor.agentId, "tasks:assign");
       if (allowedByGrant) return;
-      const actorAgent = await agentsSvc.getById(req.actor.agentId);
+      const actorAgent = await db
+        .select({
+          id: agentsTable.id,
+          companyId: agentsTable.companyId,
+          role: agentsTable.role,
+          permissions: agentsTable.permissions,
+        })
+        .from(agentsTable)
+        .where(eq(agentsTable.id, req.actor.agentId))
+        .then((rows) => rows[0] ?? null);
       if (actorAgent && actorAgent.companyId === companyId && canCreateAgentsLegacy(actorAgent)) return;
       if (
         actorAgent &&

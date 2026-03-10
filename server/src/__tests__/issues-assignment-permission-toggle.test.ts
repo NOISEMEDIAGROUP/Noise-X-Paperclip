@@ -24,6 +24,11 @@ describe("hasDefaultAgentPermissionSet", () => {
     expect(hasDefaultAgentPermissionSet({ role: "ceo", permissions: null })).toBe(true);
   });
 
+  it("treats empty permission objects as defaults", () => {
+    expect(hasDefaultAgentPermissionSet({ role: "general", permissions: {} })).toBe(true);
+    expect(hasDefaultAgentPermissionSet({ role: "ceo", permissions: {} })).toBe(true);
+  });
+
   it("detects permission overrides that differ from defaults", () => {
     expect(
       hasDefaultAgentPermissionSet({
@@ -37,12 +42,19 @@ describe("hasDefaultAgentPermissionSet", () => {
         permissions: { canCreateAgents: false },
       }),
     ).toBe(false);
+    expect(
+      hasDefaultAgentPermissionSet({
+        role: "general",
+        permissions: { canCreateAgents: false },
+      }),
+    ).toBe(false);
   });
 });
 
 describe("canAssignTasksWithDefaultPermissionFlag", () => {
   it("allows assigning to agents when flag is enabled and permissions are defaults", () => {
     expect(canAssign("general", null, "agent", true)).toBe(true);
+    expect(canAssign("general", {}, "agent", true)).toBe(true);
   });
 
   it("blocks non-agent assignment targets even when flag is enabled", () => {
@@ -56,5 +68,6 @@ describe("canAssignTasksWithDefaultPermissionFlag", () => {
 
   it("blocks assignments when permissions are not default", () => {
     expect(canAssign("general", { canCreateAgents: true }, "agent", true)).toBe(false);
+    expect(canAssign("general", { canCreateAgents: false }, "agent", true)).toBe(false);
   });
 });

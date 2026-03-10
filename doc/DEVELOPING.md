@@ -227,7 +227,7 @@ Default behavior:
 
 By default, agent task assignment requires explicit `tasks:assign` grants (or legacy manager permissions).
 
-To allow agents on role-default permissions to assign issues to other agents, set:
+To allow agents with no explicit permission overrides (default permission set) to assign issues to other agents, set:
 
 ```sh
 PAPERCLIP_ALLOW_DEFAULT_AGENT_TASK_ASSIGNMENT=true
