@@ -42,3 +42,5 @@ tmp/
 # Playwright
 tests/e2e/test-results/
 tests/e2e/playwright-report/
+tests/e2e/.paperclip-data/
+tests/e2e/.paperclip-home/

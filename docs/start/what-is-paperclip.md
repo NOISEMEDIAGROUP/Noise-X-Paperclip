@@ -37,3 +37,17 @@ The control plane doesn't run agents. It orchestrates them. Agents run wherever 
 ## Core Principle
 
 You should be able to look at Paperclip and understand your entire company at a glance — who's doing what, how much it costs, and whether it's working.
+
+## Where to Go Next
+
+<Card title="Quickstart" href="/start/quickstart">
+  Get Paperclip running locally in minutes.
+</Card>
+
+<Card title="Architecture" href="/start/architecture">
+  Understand the control plane, adapters, and request flow.
+</Card>
+
+<Card title="Roadmap (V1)" href="/start/roadmap-v1">
+  See the V1 milestones and exit criteria.
+</Card>

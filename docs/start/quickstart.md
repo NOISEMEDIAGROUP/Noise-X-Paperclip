@@ -50,3 +50,7 @@ Once Paperclip is running:
 <Card title="Core Concepts" href="/start/core-concepts">
   Learn the key concepts behind Paperclip
 </Card>
+
+<Card title="Roadmap (V1)" href="/start/roadmap-v1">
+  See the V1 milestones and exit criteria
+</Card>
