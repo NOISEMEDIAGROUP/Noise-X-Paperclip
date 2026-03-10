@@ -24,6 +24,27 @@ spec:
         - name: server
           image: "{{ .Values.server.image.repository }}:{{ .Values.server.image.tag }}"
           imagePullPolicy: {{ .Values.server.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              if [ ! -f "${PAPERCLIP_CONFIG}" ]; then
+                echo '=== ONBOARDING PAPERCLIP INSTANCE ===';
+                pnpm paperclipai onboard --yes;
+                echo '=== STARTING SERVER FOR BOOTSTRAP ===';
+                pnpm --filter @paperclipai/server dev &
+                until curl -sf http://localhost:3100/api/health > /dev/null 2>&1; do
+                  echo 'Waiting for server...';
+                  sleep 2;
+                done;
+                echo '=== BOOTSTRAPPING ADMIN (CEO) ===';
+                pnpm paperclipai auth bootstrap-ceo --data-dir /paperclip --base-url "http://localhost:3100";
+                echo '=== BOOTSTRAP DONE ===';
+                wait;
+              else
+                echo "Config ${PAPERCLIP_CONFIG} exists; skipping onboarding/bootstrap.";
+                pnpm --filter @paperclipai/server dev;
+              fi
           ports:
             - name: http
               containerPort: 3100
