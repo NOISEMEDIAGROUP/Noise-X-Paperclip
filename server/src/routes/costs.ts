@@ -62,6 +62,14 @@ export function costRoutes(db: Db) {
     res.json(rows);
   });
 
+  router.get("/companies/:companyId/costs/by-runtime", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+    const range = parseDateRange(req.query);
+    const rows = await costs.byRuntime(companyId, range);
+    res.json(rows);
+  });
+
   router.get("/companies/:companyId/costs/by-project", async (req, res) => {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);

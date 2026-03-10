@@ -26,6 +26,7 @@ import { promptServer } from "../prompts/server.js";
 import {
   describeLocalInstancePaths,
   expandHomePrefix,
+  resolveDefaultAgentRuntimeDir,
   resolveDefaultBackupDir,
   resolveDefaultEmbeddedPostgresDir,
   resolveDefaultLogsDir,
@@ -43,7 +44,10 @@ type OnboardOptions = {
   invokedByRun?: boolean;
 };
 
-type OnboardDefaults = Pick<PaperclipConfig, "database" | "logging" | "server" | "auth" | "storage" | "secrets">;
+type OnboardDefaults = Pick<
+  PaperclipConfig,
+  "database" | "logging" | "server" | "auth" | "storage" | "storageAuth" | "secrets" | "runtime" | "agentAuth"
+>;
 
 const ONBOARD_ENV_KEYS = [
   "PAPERCLIP_PUBLIC_URL",
@@ -204,6 +208,9 @@ function quickstartDefaultsFromEnv(): {
           defaultStorage.s3.forcePathStyle,
       },
     },
+    storageAuth: {
+      s3: {},
+    },
     secrets: {
       provider: secretsProvider,
       strictMode: parseBooleanFromEnv(process.env.PAPERCLIP_SECRETS_STRICT_MODE) ?? defaultSecrets.strictMode,
@@ -211,6 +218,25 @@ function quickstartDefaultsFromEnv(): {
         keyFilePath:
           resolvePathFromEnv(process.env.PAPERCLIP_SECRETS_MASTER_KEY_FILE) ??
           defaultSecrets.localEncrypted.keyFilePath,
+      },
+    },
+    runtime: {
+      heartbeatScheduler: {
+        enabled: true,
+        intervalMs: 30000,
+      },
+      agentRuntime: {
+        dir: resolveDefaultAgentRuntimeDir(instanceId),
+        syncEnabled: true,
+        syncIntervalMs: 5 * 60 * 1000,
+      },
+    },
+    agentAuth: {
+      claudeLocal: {
+        useApiKey: false,
+      },
+      codexLocal: {
+        useApiKey: false,
       },
     },
   };
@@ -294,6 +320,7 @@ export async function onboard(opts: OnboardOptions): Promise<void> {
     auth,
     storage,
     secrets,
+    runtime,
   } = derivedDefaults;
 
   if (setupMode === "advanced") {
@@ -418,7 +445,10 @@ export async function onboard(opts: OnboardOptions): Promise<void> {
     server,
     auth,
     storage,
+    storageAuth: derivedDefaults.storageAuth,
     secrets,
+    runtime,
+    agentAuth: derivedDefaults.agentAuth,
   };
 
   const keyResult = ensureLocalSecretsKeyFile(config, configPath);

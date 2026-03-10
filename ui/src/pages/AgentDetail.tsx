@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useParams, useNavigate, Link, useBeforeUnload } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { agentsApi, type AgentKey, type ClaudeLoginResult } from "../api/agents";
+import { agentsApi, type AgentKey, type LocalCliLoginResult } from "../api/agents";
 import { heartbeatsApi } from "../api/heartbeats";
 import { ApiError } from "../api/client";
 import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
@@ -18,6 +18,7 @@ import { adapterLabels, roleLabels } from "../components/agent-config-primitives
 import { getUIAdapter, buildTranscript } from "../adapters";
 import type { TranscriptEntry } from "../adapters";
 import { StatusBadge } from "../components/StatusBadge";
+import { RunWarningBadge, hasBenignStderrWarnings } from "../components/RunWarningBadge";
 import { agentStatusDot, agentStatusDotDefault } from "../lib/status-colors";
 import { MarkdownBody } from "../components/MarkdownBody";
 import { CopyText } from "../components/CopyText";
@@ -1222,6 +1223,7 @@ function RunListItem({ run, isSelected, agentId }: { run: HeartbeatRun; isSelect
   const statusInfo = runStatusIcons[run.status] ?? { icon: Clock, color: "text-neutral-400" };
   const StatusIcon = statusInfo.icon;
   const metrics = runMetrics(run);
+  const hasBenignWarnings = hasBenignStderrWarnings(run.stderrStats);
   const summary = run.resultJson
     ? String((run.resultJson as Record<string, unknown>).summary ?? (run.resultJson as Record<string, unknown>).result ?? "")
     : run.error ?? "";
@@ -1248,6 +1250,7 @@ function RunListItem({ run, isSelected, agentId }: { run: HeartbeatRun; isSelect
         )}>
           {sourceLabels[run.invocationSource] ?? run.invocationSource}
         </span>
+        {hasBenignWarnings && <RunWarningBadge stderrStats={run.stderrStats} />}
         <span className="ml-auto text-[11px] text-muted-foreground shrink-0">
           {relativeTime(run.createdAt)}
         </span>
@@ -1354,10 +1357,10 @@ function RunDetail({ run, agentRouteId, adapterType }: { run: HeartbeatRun; agen
   const navigate = useNavigate();
   const metrics = runMetrics(run);
   const [sessionOpen, setSessionOpen] = useState(false);
-  const [claudeLoginResult, setClaudeLoginResult] = useState<ClaudeLoginResult | null>(null);
+  const [cliLoginResult, setCliLoginResult] = useState<LocalCliLoginResult | null>(null);
 
   useEffect(() => {
-    setClaudeLoginResult(null);
+    setCliLoginResult(null);
   }, [run.id]);
 
   const cancelRun = useMutation({
@@ -1459,7 +1462,14 @@ function RunDetail({ run, agentRouteId, adapterType }: { run: HeartbeatRun; agen
   const runClaudeLogin = useMutation({
     mutationFn: () => agentsApi.loginWithClaude(run.agentId, run.companyId),
     onSuccess: (data) => {
-      setClaudeLoginResult(data);
+      setCliLoginResult(data);
+    },
+  });
+
+  const runCodexLogin = useMutation({
+    mutationFn: () => agentsApi.loginWithCodex(run.agentId, run.companyId),
+    onSuccess: (data) => {
+      setCliLoginResult(data);
     },
   });
 
@@ -1488,6 +1498,7 @@ function RunDetail({ run, agentRouteId, adapterType }: { run: HeartbeatRun; agen
   const displayDurationSec = durationSec ?? (isRunning ? elapsedSec : null);
   const hasMetrics = metrics.input > 0 || metrics.output > 0 || metrics.cached > 0 || metrics.cost > 0;
   const hasSession = !!(run.sessionIdBefore || run.sessionIdAfter);
+  const hasBenignWarnings = hasBenignStderrWarnings(run.stderrStats);
   const sessionChanged = run.sessionIdBefore && run.sessionIdAfter && run.sessionIdBefore !== run.sessionIdAfter;
   const sessionId = run.sessionIdAfter || run.sessionIdBefore;
   const hasNonZeroExit = run.exitCode !== null && run.exitCode !== 0;
@@ -1501,6 +1512,7 @@ function RunDetail({ run, agentRouteId, adapterType }: { run: HeartbeatRun; agen
           <div className="flex-1 p-4 space-y-3">
             <div className="flex items-center gap-2">
               <StatusBadge status={run.status} />
+              {hasBenignWarnings && <RunWarningBadge stderrStats={run.stderrStats} className="text-xs" />}
               {(run.status === "running" || run.status === "queued") && (
                 <Button
                   variant="ghost"
@@ -1571,47 +1583,66 @@ function RunDetail({ run, agentRouteId, adapterType }: { run: HeartbeatRun; agen
                 {run.errorCode && <span className="text-muted-foreground ml-1">({run.errorCode})</span>}
               </div>
             )}
-            {run.errorCode === "claude_auth_required" && adapterType === "claude_local" && (
+            {((run.errorCode === "claude_auth_required" && adapterType === "claude_local") ||
+              (run.errorCode === "codex_auth_required" && adapterType === "codex_local")) && (
               <div className="space-y-2">
                 <Button
                   variant="outline"
                   size="sm"
                   className="h-7 px-2 text-xs"
-                  onClick={() => runClaudeLogin.mutate()}
-                  disabled={runClaudeLogin.isPending}
+                  onClick={() =>
+                    adapterType === "claude_local"
+                      ? runClaudeLogin.mutate()
+                      : runCodexLogin.mutate()
+                  }
+                  disabled={runClaudeLogin.isPending || runCodexLogin.isPending}
                 >
-                  {runClaudeLogin.isPending ? "Running claude login..." : "Login to Claude Code"}
+                  {runClaudeLogin.isPending || runCodexLogin.isPending
+                    ? adapterType === "claude_local"
+                      ? "Running claude login..."
+                      : "Running codex login..."
+                    : adapterType === "claude_local"
+                      ? "Login to Claude Code"
+                      : "Login to Codex"}
                 </Button>
-                {runClaudeLogin.isError && (
+                <p className="text-xs text-muted-foreground">
+                  This signs in the CLI inside the Paperclip runtime environment.
+                  In Docker, that means inside the container/runtime, not your Mac host shell.
+                </p>
+                {(runClaudeLogin.isError || runCodexLogin.isError) && (
                   <p className="text-xs text-destructive">
                     {runClaudeLogin.error instanceof Error
                       ? runClaudeLogin.error.message
-                      : "Failed to run Claude login"}
+                      : runCodexLogin.error instanceof Error
+                        ? runCodexLogin.error.message
+                        : adapterType === "claude_local"
+                          ? "Failed to run Claude login"
+                          : "Failed to run Codex login"}
                   </p>
                 )}
-                {claudeLoginResult?.loginUrl && (
+                {cliLoginResult?.loginUrl && (
                   <p className="text-xs">
                     Login URL:
                     <a
-                      href={claudeLoginResult.loginUrl}
+                      href={cliLoginResult.loginUrl}
                       className="text-blue-600 underline underline-offset-2 ml-1 break-all dark:text-blue-400"
                       target="_blank"
                       rel="noreferrer"
                     >
-                      {claudeLoginResult.loginUrl}
+                      {cliLoginResult.loginUrl}
                     </a>
                   </p>
                 )}
-                {claudeLoginResult && (
+                {cliLoginResult && (
                   <>
-                    {!!claudeLoginResult.stdout && (
+                    {!!cliLoginResult.stdout && (
                       <pre className="bg-neutral-100 dark:bg-neutral-950 rounded-md p-3 text-xs font-mono text-foreground overflow-x-auto whitespace-pre-wrap">
-                        {claudeLoginResult.stdout}
+                        {cliLoginResult.stdout}
                       </pre>
                     )}
-                    {!!claudeLoginResult.stderr && (
+                    {!!cliLoginResult.stderr && (
                       <pre className="bg-neutral-100 dark:bg-neutral-950 rounded-md p-3 text-xs font-mono text-red-700 dark:text-red-300 overflow-x-auto whitespace-pre-wrap">
-                        {claudeLoginResult.stderr}
+                        {cliLoginResult.stderr}
                       </pre>
                     )}
                   </>
@@ -1733,8 +1764,18 @@ function RunDetail({ run, agentRouteId, adapterType }: { run: HeartbeatRun; agen
       {/* stderr excerpt for failed runs */}
       {run.stderrExcerpt && (
         <div className="space-y-1">
-          <span className="text-xs font-medium text-red-600 dark:text-red-400">stderr</span>
-          <pre className="bg-neutral-100 dark:bg-neutral-950 rounded-md p-3 text-xs font-mono text-red-700 dark:text-red-300 overflow-x-auto whitespace-pre-wrap">{run.stderrExcerpt}</pre>
+          <span className={cn(
+            "text-xs font-medium",
+            hasBenignWarnings ? "text-amber-700 dark:text-amber-300" : "text-red-600 dark:text-red-400",
+          )}>
+            {hasBenignWarnings ? "stderr warnings" : "stderr"}
+          </span>
+          <pre className={cn(
+            "rounded-md p-3 text-xs font-mono overflow-x-auto whitespace-pre-wrap",
+            hasBenignWarnings
+              ? "bg-amber-50 text-amber-900 dark:bg-amber-500/10 dark:text-amber-100"
+              : "bg-neutral-100 text-red-700 dark:bg-neutral-950 dark:text-red-300",
+          )}>{run.stderrExcerpt}</pre>
         </div>
       )}
 
@@ -1773,6 +1814,7 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
     distanceFromBottom: Number.POSITIVE_INFINITY,
   });
   const isLive = run.status === "running" || run.status === "queued";
+  const hasBenignWarnings = hasBenignStderrWarnings(run.stderrStats);
 
   function isRunLogUnavailable(err: unknown): boolean {
     return err instanceof ApiError && err.status === 404;
@@ -2133,7 +2175,7 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
 
   const streamColors: Record<string, string> = {
     stdout: "text-foreground",
-    stderr: "text-red-600 dark:text-red-300",
+    stderr: hasBenignWarnings ? "text-amber-700 dark:text-amber-300" : "text-red-600 dark:text-red-300",
     system: "text-blue-600 dark:text-blue-300",
   };
 
@@ -2340,7 +2382,7 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
             entry.kind === "system" ? "system" :
             "stdout";
           const color =
-            entry.kind === "stderr" ? "text-red-600 dark:text-red-300" :
+            entry.kind === "stderr" ? (hasBenignWarnings ? "text-amber-700 dark:text-amber-300" : "text-red-600 dark:text-red-300") :
             entry.kind === "system" ? "text-blue-600 dark:text-blue-300" :
             "text-neutral-500";
           return (

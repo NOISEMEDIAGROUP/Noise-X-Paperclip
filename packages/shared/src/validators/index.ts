@@ -133,3 +133,8 @@ export {
   type UpdateMemberPermissions,
   type UpdateUserCompanyAccess,
 } from "./access.js";
+
+export {
+  updateInstanceSettingsSchema,
+  type UpdateInstanceSettings,
+} from "./instance-settings.js";

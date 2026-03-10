@@ -190,6 +190,20 @@
       "when": 1772900000000,
       "tag": "0026_model_token_pricing",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1773111029564,
+      "tag": "0027_lame_weapon_omega",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1773111386418,
+      "tag": "0028_nebulous_purifiers",
+      "breakpoints": true
     }
   ]
 }

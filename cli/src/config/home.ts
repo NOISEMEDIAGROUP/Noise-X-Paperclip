@@ -53,6 +53,10 @@ export function resolveDefaultBackupDir(instanceId?: string): string {
   return path.resolve(resolvePaperclipInstanceRoot(instanceId), "data", "backups");
 }
 
+export function resolveDefaultAgentRuntimeDir(instanceId?: string): string {
+  return path.resolve(resolvePaperclipInstanceRoot(instanceId), "agent-runtime");
+}
+
 export function expandHomePrefix(value: string): string {
   if (value === "~") return os.homedir();
   if (value.startsWith("~/")) return path.resolve(os.homedir(), value.slice(2));
@@ -72,5 +76,6 @@ export function describeLocalInstancePaths(instanceId?: string) {
     logDir: resolveDefaultLogsDir(resolvedInstanceId),
     secretsKeyFilePath: resolveDefaultSecretsKeyFilePath(resolvedInstanceId),
     storageDir: resolveDefaultStorageDir(resolvedInstanceId),
+    agentRuntimeDir: resolveDefaultAgentRuntimeDir(resolvedInstanceId),
   };
 }

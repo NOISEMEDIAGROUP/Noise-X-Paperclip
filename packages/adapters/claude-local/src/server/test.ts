@@ -97,14 +97,33 @@ export async function testEnvironment(
 
   const configApiKey = env.ANTHROPIC_API_KEY;
   const hostApiKey = process.env.ANTHROPIC_API_KEY;
-  if (isNonEmpty(configApiKey) || isNonEmpty(hostApiKey)) {
+  const authMode = asString(config.paperclipAuthMode, "").trim();
+  const explicitSubscriptionOverride =
+    authMode === "subscription" &&
+    typeof configApiKey === "string" &&
+    configApiKey.trim().length === 0;
+  if (explicitSubscriptionOverride) {
+    checks.push({
+      code: "claude_subscription_override_active",
+      level: "info",
+      message:
+        "Claude is explicitly set to local subscription/login. Inherited ANTHROPIC_API_KEY will be ignored.",
+      detail: isNonEmpty(hostApiKey)
+        ? "A server/container ANTHROPIC_API_KEY is present, but this agent override blanks it at runtime."
+        : "No ANTHROPIC_API_KEY will be passed; Claude must rely on login/session auth in the Paperclip runtime environment.",
+      hint: "In Docker, local login happens inside the Paperclip container/runtime, not your host shell.",
+    });
+  } else if (isNonEmpty(configApiKey) || isNonEmpty(hostApiKey)) {
     const source = isNonEmpty(configApiKey) ? "adapter config env" : "server environment";
     checks.push({
       code: "claude_anthropic_api_key_overrides_subscription",
       level: "warn",
       message:
         "ANTHROPIC_API_KEY is set. Claude will use API-key auth instead of subscription credentials.",
-      detail: `Detected in ${source}.`,
+      detail:
+        source === "server environment"
+          ? "Detected in the Paperclip server/container environment."
+          : `Detected in ${source}.`,
       hint: "Unset ANTHROPIC_API_KEY if you want subscription-based Claude login behavior.",
     });
   } else {
@@ -184,7 +203,7 @@ export async function testEnvironment(
           ...(detail ? { detail } : {}),
           hint: loginMeta.loginUrl
             ? `Run \`claude login\` and complete sign-in at ${loginMeta.loginUrl}, then retry.`
-            : "Run `claude login` in this environment, then retry the probe.",
+            : "Run `claude login` in the Paperclip runtime environment, then retry the probe.",
         });
       } else if ((probe.exitCode ?? 1) === 0) {
         const summary = parsedStream.summary.trim();

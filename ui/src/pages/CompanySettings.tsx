@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "@/lib/router";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { companiesApi } from "../api/companies";
@@ -8,6 +9,7 @@ import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
 import { Settings, Check } from "lucide-react";
 import { CompanyPatternIcon } from "../components/CompanyPatternIcon";
+import { InstanceSettingsPanel } from "../components/InstanceSettingsPanel";
 import {
   Field,
   ToggleField,
@@ -29,6 +31,27 @@ export function CompanySettings() {
   } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const settingsView = searchParams.get("view") ?? "company";
+  const isCompanyView = settingsView === "company";
+  const instanceSection =
+    settingsView === "instance-auth"
+      ? "agent-auth"
+      : settingsView === "instance-secrets"
+        ? "secrets"
+        : "operations";
+  const instanceViewTitle =
+    settingsView === "instance-auth"
+      ? "Agent Auth Defaults"
+      : settingsView === "instance-secrets"
+        ? "Instance Secrets"
+        : "Storage, DB & Runtime";
+  const instanceViewDescription =
+    settingsView === "instance-auth"
+      ? "Default auth behavior for new Claude and Codex local agents across this Paperclip installation."
+      : settingsView === "instance-secrets"
+        ? "Global secret-storage behavior for this Paperclip installation."
+        : "Global app settings for file storage, S3, database backups, and scheduler/runtime automation.";
 
   // General settings local state
   const [companyName, setCompanyName] = useState("");
@@ -178,6 +201,12 @@ export function CompanySettings() {
     });
   }
 
+  function setView(nextView: "company" | "instance-ops" | "instance-auth" | "instance-secrets") {
+    const next = new URLSearchParams(searchParams);
+    next.set("view", nextView);
+    setSearchParams(next);
+  }
+
   return (
     <div className="max-w-2xl space-y-6">
       <div className="flex items-center gap-2">
@@ -185,6 +214,23 @@ export function CompanySettings() {
         <h1 className="text-lg font-semibold">Company Settings</h1>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant={isCompanyView ? "secondary" : "outline"} onClick={() => setView("company")}>
+          Company
+        </Button>
+        <Button size="sm" variant={settingsView === "instance-ops" ? "secondary" : "outline"} onClick={() => setView("instance-ops")}>
+          Storage / DB / Runtime
+        </Button>
+        <Button size="sm" variant={settingsView === "instance-auth" ? "secondary" : "outline"} onClick={() => setView("instance-auth")}>
+          Agent Auth
+        </Button>
+        <Button size="sm" variant={settingsView === "instance-secrets" ? "secondary" : "outline"} onClick={() => setView("instance-secrets")}>
+          Instance Secrets
+        </Button>
+      </div>
+
+      {isCompanyView ? (
+        <>
       {/* General */}
       <div className="space-y-4">
         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -431,6 +477,21 @@ export function CompanySettings() {
           </div>
         </div>
       </div>
+        </>
+      ) : (
+        <div className="space-y-4">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            {instanceViewTitle}
+          </div>
+          <div className="rounded-md border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+            <div className="font-medium text-foreground">Global instance settings</div>
+            <div className="mt-1">
+              {instanceViewDescription} These settings apply to the whole Paperclip installation, not just the currently selected company.
+            </div>
+          </div>
+          <InstanceSettingsPanel section={instanceSection} />
+        </div>
+      )}
     </div>
   );
 }

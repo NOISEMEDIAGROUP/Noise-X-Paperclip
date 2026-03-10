@@ -1,12 +1,12 @@
 import { Router } from "express";
 import type { Db } from "@paperclipai/db";
-import { and, count, eq, gt, isNull, ne, sql } from "drizzle-orm";
-import { instanceUserRoles, invites } from "@paperclipai/db";
-
-// The ghost user created by local_trusted mode. In authenticated mode this
-// user must not be counted as a real instance admin — it has no credentials.
-const LOCAL_BOARD_USER_ID = "local-board";
+import { and, count, eq, gt, isNull } from "drizzle-orm";
+import { invites } from "@paperclipai/db";
 import type { DeploymentExposure, DeploymentMode } from "@paperclipai/shared";
+import {
+  getInstanceBootstrapState
+} from "../services/instance-bootstrap.js";
+import { getBoardClaimPath } from "../board-claim.js";
 
 export function healthRoutes(
   db?: Db,
@@ -30,17 +30,13 @@ export function healthRoutes(
       return;
     }
 
-    let bootstrapStatus: "ready" | "bootstrap_pending" = "ready";
+    let bootstrapStatus: "ready" | "bootstrap_pending" | "board_claim_required" =
+      "ready";
     let bootstrapInviteActive = false;
+    let boardClaimPath: string | null = null;
     if (opts.deploymentMode === "authenticated") {
-      // Phase 9: exclude the local_trusted ghost user from the admin count.
-      // local-board has no real credentials and must not prevent bootstrap.
-      const roleCount = await db
-        .select({ count: count() })
-        .from(instanceUserRoles)
-        .where(and(sql`${instanceUserRoles.role} = 'instance_admin'`, ne(instanceUserRoles.userId, LOCAL_BOARD_USER_ID)))
-        .then((rows) => Number(rows[0]?.count ?? 0));
-      bootstrapStatus = roleCount > 0 ? "ready" : "bootstrap_pending";
+      const bootstrapState = await getInstanceBootstrapState(db);
+      bootstrapStatus = bootstrapState.status;
 
       if (bootstrapStatus === "bootstrap_pending") {
         const now = new Date();
@@ -58,6 +54,10 @@ export function healthRoutes(
           .then((rows) => Number(rows[0]?.count ?? 0));
         bootstrapInviteActive = inviteCount > 0;
       }
+
+      if (bootstrapStatus === "board_claim_required") {
+        boardClaimPath = getBoardClaimPath();
+      }
     }
 
     res.json({
@@ -67,6 +67,7 @@ export function healthRoutes(
       authReady: opts.authReady,
       bootstrapStatus,
       bootstrapInviteActive,
+      boardClaimPath,
       features: {
         companyDeletionEnabled: opts.companyDeletionEnabled,
       },

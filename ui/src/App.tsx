@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Navigate, Outlet, Route, Routes, useLocation } from "@/lib/router";
+import { Link, Navigate, Outlet, Route, Routes, useLocation } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Layout } from "./components/Layout";
@@ -32,7 +32,38 @@ import { queryKeys } from "./lib/queryKeys";
 import { useCompany } from "./context/CompanyContext";
 import { useDialog } from "./context/DialogContext";
 
-function BootstrapPendingPage({ hasActiveInvite = false }: { hasActiveInvite?: boolean }) {
+function BootstrapPendingPage({
+  status = "bootstrap_pending",
+  hasActiveInvite = false,
+  boardClaimPath = null
+}: {
+  status?: "bootstrap_pending" | "board_claim_required";
+  hasActiveInvite?: boolean;
+  boardClaimPath?: string | null;
+}) {
+  if (status === "board_claim_required") {
+    return (
+      <div className="mx-auto max-w-xl py-10">
+        <div className="rounded-lg border border-border bg-card p-6">
+          <h1 className="text-xl font-semibold">Board claim required</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            This instance still points at the legacy `local-board` admin from `local_trusted` mode.
+            Claim it with a real authenticated user to finish the migration.
+          </p>
+          {boardClaimPath ? (
+            <Button asChild className="mt-4">
+              <Link to={boardClaimPath}>Claim board ownership</Link>
+            </Button>
+          ) : (
+            <pre className="mt-4 overflow-x-auto rounded-md border border-border bg-muted/30 p-3 text-xs">
+{`Check Paperclip startup logs for the board-claim URL, then open it in the browser.`}
+            </pre>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-xl py-10">
       <div className="rounded-lg border border-border bg-card p-6">
@@ -58,9 +89,14 @@ function CloudAccessGate() {
     retry: false,
     refetchInterval: (query) => {
       const data = query.state.data as
-        | { deploymentMode?: "local_trusted" | "authenticated"; bootstrapStatus?: "ready" | "bootstrap_pending" }
+        | {
+          deploymentMode?: "local_trusted" | "authenticated";
+          bootstrapStatus?: "ready" | "bootstrap_pending" | "board_claim_required";
+        }
         | undefined;
-      return data?.deploymentMode === "authenticated" && data.bootstrapStatus === "bootstrap_pending"
+      return data?.deploymentMode === "authenticated" &&
+        (data.bootstrapStatus === "bootstrap_pending" ||
+          data.bootstrapStatus === "board_claim_required")
         ? 2000
         : false;
     },
@@ -87,8 +123,18 @@ function CloudAccessGate() {
     );
   }
 
-  if (isAuthenticatedMode && healthQuery.data?.bootstrapStatus === "bootstrap_pending") {
-    return <BootstrapPendingPage hasActiveInvite={healthQuery.data.bootstrapInviteActive} />;
+  if (
+    isAuthenticatedMode &&
+    (healthQuery.data?.bootstrapStatus === "bootstrap_pending" ||
+      healthQuery.data?.bootstrapStatus === "board_claim_required")
+  ) {
+    return (
+      <BootstrapPendingPage
+        status={healthQuery.data.bootstrapStatus}
+        hasActiveInvite={healthQuery.data.bootstrapInviteActive}
+        boardClaimPath={healthQuery.data.boardClaimPath}
+      />
+    );
   }
 
   if (isAuthenticatedMode && !sessionQuery.data) {

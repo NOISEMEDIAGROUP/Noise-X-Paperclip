@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Db } from "@paperclipai/db";
 import { validate } from "../middleware/validate.js";
 import { activityService } from "../services/activity.js";
+import { loadHeartbeatRunStderrStats } from "../services/heartbeat-run-stderr.js";
 import { assertBoard, assertCompanyAccess } from "./authz.js";
 import { issueService } from "../services/index.js";
 import { sanitizeRecord } from "../redaction.js";
@@ -83,7 +84,11 @@ export function activityRoutes(db: Db) {
     }
     assertCompanyAccess(req, issue.companyId);
     const result = await svc.runsForIssue(issue.companyId, id);
-    res.json(result);
+    const stderrStatsByRunId = await loadHeartbeatRunStderrStats(db, result.map((run) => run.runId));
+    res.json(result.map((run) => ({
+      ...run,
+      stderrStats: stderrStatsByRunId.get(run.runId) ?? null,
+    })));
   });
 
   router.get("/heartbeat-runs/:runId/issues", async (req, res) => {

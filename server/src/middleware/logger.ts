@@ -15,10 +15,21 @@ function resolveServerLogDir(): string {
   return resolveDefaultLogsDir();
 }
 
-const logDir = resolveServerLogDir();
-fs.mkdirSync(logDir, { recursive: true });
+function resolveServerLogFile(): string | null {
+  const logDir = resolveServerLogDir();
+  try {
+    fs.mkdirSync(logDir, { recursive: true });
+    return path.join(logDir, "server.log");
+  } catch (err) {
+    if (process.env.NODE_ENV !== "test" && !process.env.VITEST) {
+      const reason = err instanceof Error ? err.message : String(err);
+      console.warn(`[paperclip] file logging disabled for '${logDir}': ${reason}`);
+    }
+    return null;
+  }
+}
 
-const logFile = path.join(logDir, "server.log");
+const logFile = resolveServerLogFile();
 
 const sharedOpts = {
   translateTime: "HH:MM:ss",
@@ -34,11 +45,13 @@ export const logger = pino({
       options: { ...sharedOpts, ignore: "pid,hostname,req,res,responseTime", colorize: true, destination: 1 },
       level: "info",
     },
-    {
-      target: "pino-pretty",
-      options: { ...sharedOpts, colorize: false, destination: logFile, mkdir: true },
-      level: "debug",
-    },
+    ...(logFile
+      ? [{
+          target: "pino-pretty",
+          options: { ...sharedOpts, colorize: false, destination: logFile, mkdir: true },
+          level: "debug" as const,
+        }]
+      : []),
   ],
 }));
 

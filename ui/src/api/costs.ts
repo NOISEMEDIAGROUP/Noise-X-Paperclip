@@ -1,4 +1,4 @@
-import type { CostSummary, CostByAgent } from "@paperclipai/shared";
+import type { CostSummary, CostByAgent, CostByRuntime } from "@paperclipai/shared";
 import { api } from "./client";
 
 export interface CostByProject {
@@ -22,6 +22,8 @@ export const costsApi = {
     api.get<CostSummary>(`/companies/${companyId}/costs/summary${dateParams(from, to)}`),
   byAgent: (companyId: string, from?: string, to?: string) =>
     api.get<CostByAgent[]>(`/companies/${companyId}/costs/by-agent${dateParams(from, to)}`),
+  byRuntime: (companyId: string, from?: string, to?: string) =>
+    api.get<CostByRuntime[]>(`/companies/${companyId}/costs/by-runtime${dateParams(from, to)}`),
   byProject: (companyId: string, from?: string, to?: string) =>
     api.get<CostByProject[]>(`/companies/${companyId}/costs/by-project${dateParams(from, to)}`),
 };

@@ -70,6 +70,14 @@ export const storageS3ConfigSchema = z.object({
   forcePathStyle: z.boolean().default(false),
 });
 
+export const storageAuthConfigSchema = z.object({
+  s3: z.object({
+    accessKeyId: z.string().optional(),
+    secretAccessKey: z.string().optional(),
+    sessionToken: z.string().optional(),
+  }).default({}),
+});
+
 export const storageConfigSchema = z.object({
   provider: z.enum(STORAGE_PROVIDERS).default("local_disk"),
   localDisk: storageLocalDiskConfigSchema.default({
@@ -92,6 +100,43 @@ export const secretsConfigSchema = z.object({
   strictMode: z.boolean().default(false),
   localEncrypted: secretsLocalEncryptedConfigSchema.default({
     keyFilePath: "~/.paperclip/instances/default/secrets/master.key",
+  }),
+});
+
+export const heartbeatSchedulerConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  intervalMs: z.number().int().min(10000).max(24 * 60 * 60 * 1000).default(30000),
+});
+
+export const agentRuntimeConfigSchema = z.object({
+  dir: z.string().default("~/.paperclip/instances/default/agent-runtime"),
+  syncEnabled: z.boolean().default(true),
+  syncIntervalMs: z.number().int().min(60000).max(24 * 60 * 60 * 1000).default(5 * 60 * 1000),
+});
+
+export const runtimeConfigSchema = z.object({
+  heartbeatScheduler: heartbeatSchedulerConfigSchema.default({
+    enabled: true,
+    intervalMs: 30000,
+  }),
+  agentRuntime: agentRuntimeConfigSchema.default({
+    dir: "~/.paperclip/instances/default/agent-runtime",
+    syncEnabled: true,
+    syncIntervalMs: 5 * 60 * 1000,
+  }),
+});
+
+export const agentAuthProfileConfigSchema = z.object({
+  useApiKey: z.boolean().default(false),
+  apiKey: z.string().optional(),
+});
+
+export const agentAuthConfigSchema = z.object({
+  claudeLocal: agentAuthProfileConfigSchema.default({
+    useApiKey: false,
+  }),
+  codexLocal: agentAuthProfileConfigSchema.default({
+    useApiKey: false,
   }),
 });
 
@@ -118,11 +163,33 @@ export const paperclipConfigSchema = z
         forcePathStyle: false,
       },
     }),
+    storageAuth: storageAuthConfigSchema.default({
+      s3: {},
+    }),
     secrets: secretsConfigSchema.default({
       provider: "local_encrypted",
       strictMode: false,
       localEncrypted: {
         keyFilePath: "~/.paperclip/instances/default/secrets/master.key",
+      },
+    }),
+    runtime: runtimeConfigSchema.default({
+      heartbeatScheduler: {
+        enabled: true,
+        intervalMs: 30000,
+      },
+      agentRuntime: {
+        dir: "~/.paperclip/instances/default/agent-runtime",
+        syncEnabled: true,
+        syncIntervalMs: 5 * 60 * 1000,
+      },
+    }),
+    agentAuth: agentAuthConfigSchema.default({
+      claudeLocal: {
+        useApiKey: false,
+      },
+      codexLocal: {
+        useApiKey: false,
       },
     }),
   })
@@ -169,10 +236,16 @@ export type DatabaseConfig = z.infer<typeof databaseConfigSchema>;
 export type LoggingConfig = z.infer<typeof loggingConfigSchema>;
 export type ServerConfig = z.infer<typeof serverConfigSchema>;
 export type StorageConfig = z.infer<typeof storageConfigSchema>;
+export type StorageAuthConfig = z.infer<typeof storageAuthConfigSchema>;
 export type StorageLocalDiskConfig = z.infer<typeof storageLocalDiskConfigSchema>;
 export type StorageS3Config = z.infer<typeof storageS3ConfigSchema>;
 export type SecretsConfig = z.infer<typeof secretsConfigSchema>;
 export type SecretsLocalEncryptedConfig = z.infer<typeof secretsLocalEncryptedConfigSchema>;
+export type HeartbeatSchedulerConfig = z.infer<typeof heartbeatSchedulerConfigSchema>;
+export type AgentRuntimeConfig = z.infer<typeof agentRuntimeConfigSchema>;
+export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;
+export type AgentAuthProfileConfig = z.infer<typeof agentAuthProfileConfigSchema>;
+export type AgentAuthConfig = z.infer<typeof agentAuthConfigSchema>;
 export type AuthConfig = z.infer<typeof authConfigSchema>;
 export type ConfigMeta = z.infer<typeof configMetaSchema>;
 export type DatabaseBackupConfig = z.infer<typeof databaseBackupConfigSchema>;

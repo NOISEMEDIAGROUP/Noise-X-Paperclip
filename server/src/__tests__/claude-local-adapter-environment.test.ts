@@ -64,6 +64,36 @@ describe("claude_local environment diagnostics", () => {
     expect(result.checks.some((check) => check.level === "error")).toBe(false);
   });
 
+  it("reports explicit subscription override separately from API-key fallback", async () => {
+    process.env.ANTHROPIC_API_KEY = "sk-test-host";
+
+    const result = await testEnvironment({
+      companyId: "company-1",
+      adapterType: "claude_local",
+      config: {
+        command: process.execPath,
+        cwd: process.cwd(),
+        paperclipAuthMode: "subscription",
+        env: {
+          ANTHROPIC_API_KEY: "",
+        },
+      },
+    });
+
+    expect(
+      result.checks.some(
+        (check) =>
+          check.code === "claude_subscription_override_active" &&
+          check.level === "info",
+      ),
+    ).toBe(true);
+    expect(
+      result.checks.some(
+        (check) => check.code === "claude_anthropic_api_key_overrides_subscription",
+      ),
+    ).toBe(false);
+  });
+
   it("creates a missing working directory when cwd is absolute", async () => {
     const cwd = path.join(
       os.tmpdir(),

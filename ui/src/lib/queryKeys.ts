@@ -56,6 +56,9 @@ export const queryKeys = {
   auth: {
     session: ["auth", "session"] as const,
   },
+  instance: {
+    settings: ["instance", "settings"] as const,
+  },
   health: ["health"] as const,
   secrets: {
     list: (companyId: string) => ["secrets", companyId] as const,

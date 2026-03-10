@@ -33,6 +33,7 @@ export const help: Record<string, string> = {
   dangerouslySkipPermissions: "Run Claude without permission prompts. Required for unattended operation.",
   dangerouslyBypassSandbox: "Run Codex without sandbox restrictions. Required for filesystem/network access.",
   search: "Enable Codex web search capability during runs.",
+  authMode: "Choose whether this agent follows the instance default, forces the instance API key, or forces local CLI subscription/login auth.",
   maxTurnsPerRun: "Maximum number of agentic turns (tool calls) per heartbeat run.",
   command: "The command to execute (e.g. node, python).",
   localCommand: "Override the path to the CLI command you want the adapter to call (e.g. /usr/local/bin/claude, codex, opencode).",

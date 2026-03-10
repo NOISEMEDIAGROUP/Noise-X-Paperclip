@@ -23,7 +23,7 @@ export interface AdapterModel {
   label: string;
 }
 
-export interface ClaudeLoginResult {
+export interface LocalCliLoginResult {
   exitCode: number | null;
   signal: string | null;
   timedOut: boolean;
@@ -143,5 +143,7 @@ export const agentsApi = {
     companyId?: string,
   ) => api.post<HeartbeatRun | { status: "skipped" }>(agentPath(id, companyId, "/wakeup"), data),
   loginWithClaude: (id: string, companyId?: string) =>
-    api.post<ClaudeLoginResult>(agentPath(id, companyId, "/claude-login"), {}),
+    api.post<LocalCliLoginResult>(agentPath(id, companyId, "/claude-login"), {}),
+  loginWithCodex: (id: string, companyId?: string) =>
+    api.post<LocalCliLoginResult>(agentPath(id, companyId, "/codex-login"), {}),
 };

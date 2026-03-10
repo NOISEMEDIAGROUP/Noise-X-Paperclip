@@ -25,7 +25,7 @@ import { loadConfig } from "./config.js";
 import { logger } from "./middleware/logger.js";
 import { setupLiveEventsWebSocketServer } from "./realtime/live-events-ws.js";
 import { heartbeatService, restoreAgentRuntimeFromS3, syncAgentRuntimeToS3 } from "./services/index.js";
-import { createStorageServiceFromConfig } from "./storage/index.js";
+import { createDynamicStorageService } from "./storage/index.js";
 import { printStartupBanner } from "./startup-banner.js";
 import { getBoardClaimWarningUrl, initializeBoardClaimChallenge } from "./board-claim.js";
 
@@ -457,7 +457,7 @@ if (config.deploymentMode === "authenticated") {
 }
 
 const uiMode = config.uiDevMiddleware ? "vite-dev" : config.serveUi ? "static" : "none";
-const storageService = createStorageServiceFromConfig(config);
+const storageService = createDynamicStorageService();
 const app = await createApp(db as any, {
   uiMode,
   storageService,

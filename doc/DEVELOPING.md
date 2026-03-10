@@ -69,6 +69,9 @@ pnpm paperclipai run
 
 ## Docker Quickstart (No local Node install)
 
+Use `docker-compose.quickstart.yml` as the canonical local Docker entrypoint for this repo.
+Do not create alternate day-to-day compose stacks from `docker-compose.yml`; keep any personal tweaks in an ignored override file such as `docker-compose.quickstart.local.yml`.
+
 Build and run Paperclip in Docker:
 
 ```sh
@@ -87,7 +90,16 @@ Or use Compose:
 docker compose -f docker-compose.quickstart.yml up --build
 ```
 
+Recommended local rule:
+
+- use `docker-compose.quickstart.yml` for containerized local runs
+- use `pnpm dev` only when you want watch mode / fast code iteration
+- keep local Docker overrides out of git
+
 See `doc/DOCKER.md` for API key wiring (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`) and persistence details.
+
+For `claude_local` / `codex_local`, `Local subscription / login` always happens in the Paperclip runtime environment.
+With `pnpm dev`, that is your local machine. With `docker-compose.quickstart.yml`, that is the Paperclip container/runtime, not your host shell session.
 
 ## Database in Dev (Auto-Handled)
 
@@ -115,6 +127,23 @@ Configure storage provider/settings:
 ```sh
 pnpm paperclipai configure --section storage
 ```
+
+You can also update instance-level settings from the board UI at `Settings`.
+
+Currently editable from the UI:
+
+- Storage provider, S3 bucket/region/endpoint/prefix, and local disk path
+- Optional static S3 credentials for the instance, with fallback to env / IAM when cleared
+- Automatic database backup schedule and backup directory
+- Heartbeat scheduler and agent runtime sync settings
+- Default auth mode for new `claude_local` and `codex_local` agents, including optional instance API keys
+- Default secrets provider, strict mode, and local encrypted key path
+
+Notes:
+
+- Existing agents are not migrated when you change instance auth defaults; only new agents pick up the new mode.
+- If you disable instance API-key usage for new Claude/Codex agents, Paperclip explicitly forces subscription/local-login auth for those newly created agents.
+- For S3, you can either store static credentials in instance settings or leave them empty to keep using env / IAM / the default AWS credential chain.
 
 ## Default Agent Workspaces
 

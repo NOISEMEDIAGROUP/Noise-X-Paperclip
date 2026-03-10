@@ -1,6 +1,10 @@
-export { execute } from "./execute.js";
+export { execute, runCodexLogin } from "./execute.js";
 export { testEnvironment } from "./test.js";
-export { parseCodexJsonl, isCodexUnknownSessionError } from "./parse.js";
+export {
+  parseCodexJsonl,
+  detectCodexAuthRequired,
+  isCodexUnknownSessionError
+} from "./parse.js";
 import type { AdapterSessionCodec } from "@paperclipai/adapter-utils";
 
 function readNonEmptyString(value: unknown): string | null {

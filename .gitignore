@@ -38,6 +38,12 @@ tmp/
 .claude/settings.local.json
 .paperclip-local/
 
+# Local Docker overrides. Keep docker-compose.quickstart.yml canonical.
+docker-compose.override.yml
+docker-compose.local.yml
+docker-compose.quickstart.override.yml
+docker-compose.quickstart.local.yml
+
 # Playwright
 tests/e2e/test-results/
 tests/e2e/playwright-report/

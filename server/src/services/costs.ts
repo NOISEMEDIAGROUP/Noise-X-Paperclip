@@ -8,6 +8,23 @@ export interface CostDateRange {
   to?: Date;
 }
 
+function effectiveCostCentsExpr() {
+  return sql<number>`case
+    when ${costEvents.billingType} = 'api'
+      and ${costEvents.costCents} = 0
+      and ${costEvents.calculatedCostCents} is not null
+    then ${costEvents.calculatedCostCents}
+    else ${costEvents.costCents}
+  end`;
+}
+
+function effectiveCostCentsValue(data: Pick<typeof costEvents.$inferInsert, "billingType" | "costCents" | "calculatedCostCents">) {
+  if (data.billingType === "api" && data.costCents === 0 && data.calculatedCostCents != null) {
+    return data.calculatedCostCents;
+  }
+  return data.costCents;
+}
+
 export function costService(db: Db) {
   return {
     createEvent: async (companyId: string, data: Omit<typeof costEvents.$inferInsert, "companyId">) => {
@@ -22,16 +39,41 @@ export function costService(db: Db) {
         throw unprocessable("Agent does not belong to company");
       }
 
+      if (data.runId) {
+        const run = await db
+          .select()
+          .from(heartbeatRuns)
+          .where(eq(heartbeatRuns.id, data.runId))
+          .then((rows) => rows[0] ?? null);
+
+        if (!run) throw notFound("Heartbeat run not found");
+        if (run.companyId !== companyId) {
+          throw unprocessable("Heartbeat run does not belong to company");
+        }
+        if (run.agentId !== data.agentId) {
+          throw unprocessable("Heartbeat run does not belong to agent");
+        }
+      }
+
+      const eventInsert = {
+        ...data,
+        companyId,
+        adapterType: data.adapterType ?? agent.adapterType ?? "unknown",
+        billingType: data.billingType ?? "unknown",
+      } satisfies typeof costEvents.$inferInsert;
+
       const event = await db
         .insert(costEvents)
-        .values({ ...data, companyId })
+        .values(eventInsert)
         .returning()
         .then((rows) => rows[0]);
+
+      const effectiveCostCents = effectiveCostCentsValue(event);
 
       await db
         .update(agents)
         .set({
-          spentMonthlyCents: sql`${agents.spentMonthlyCents} + ${event.costCents}`,
+          spentMonthlyCents: sql`${agents.spentMonthlyCents} + ${effectiveCostCents}`,
           updatedAt: new Date(),
         })
         .where(eq(agents.id, event.agentId));
@@ -39,7 +81,7 @@ export function costService(db: Db) {
       await db
         .update(companies)
         .set({
-          spentMonthlyCents: sql`${companies.spentMonthlyCents} + ${event.costCents}`,
+          spentMonthlyCents: sql`${companies.spentMonthlyCents} + ${effectiveCostCents}`,
           updatedAt: new Date(),
         })
         .where(eq(companies.id, companyId));
@@ -81,7 +123,7 @@ export function costService(db: Db) {
 
       const [{ total }] = await db
         .select({
-          total: sql<number>`coalesce(sum(${costEvents.costCents}), 0)::int`,
+          total: sql<number>`coalesce(sum(${effectiveCostCentsExpr()}), 0)::int`,
         })
         .from(costEvents)
         .where(and(...conditions));
@@ -105,52 +147,74 @@ export function costService(db: Db) {
       if (range?.from) conditions.push(gte(costEvents.occurredAt, range.from));
       if (range?.to) conditions.push(lte(costEvents.occurredAt, range.to));
 
+      const effectiveCost = effectiveCostCentsExpr();
+
       const costRows = await db
         .select({
           agentId: costEvents.agentId,
           agentName: agents.name,
           agentStatus: agents.status,
-          costCents: sql<number>`coalesce(sum(${costEvents.costCents}), 0)::int`,
+          agentAdapterType: sql<string>`coalesce(${costEvents.adapterType}, ${agents.adapterType}, 'unknown')`,
+          costCents: sql<number>`coalesce(sum(${effectiveCost}), 0)::int`,
           inputTokens: sql<number>`coalesce(sum(${costEvents.inputTokens}), 0)::int`,
           outputTokens: sql<number>`coalesce(sum(${costEvents.outputTokens}), 0)::int`,
+          apiRunCount:
+            sql<number>`coalesce(sum(case when ${costEvents.billingType} = 'api' then 1 else 0 end), 0)::int`,
+          subscriptionRunCount:
+            sql<number>`coalesce(sum(case when ${costEvents.billingType} = 'subscription' then 1 else 0 end), 0)::int`,
+          subscriptionInputTokens:
+            sql<number>`coalesce(sum(case when ${costEvents.billingType} = 'subscription' then ${costEvents.inputTokens} else 0 end), 0)::int`,
+          subscriptionOutputTokens:
+            sql<number>`coalesce(sum(case when ${costEvents.billingType} = 'subscription' then ${costEvents.outputTokens} else 0 end), 0)::int`,
         })
         .from(costEvents)
         .leftJoin(agents, eq(costEvents.agentId, agents.id))
         .where(and(...conditions))
-        .groupBy(costEvents.agentId, agents.name, agents.status)
-        .orderBy(desc(sql`coalesce(sum(${costEvents.costCents}), 0)::int`));
+        .groupBy(costEvents.agentId, agents.name, agents.status, costEvents.adapterType, agents.adapterType)
+        .orderBy(desc(sql`coalesce(sum(${effectiveCost}), 0)::int`));
 
-      const runConditions: ReturnType<typeof eq>[] = [eq(heartbeatRuns.companyId, companyId)];
-      if (range?.from) runConditions.push(gte(heartbeatRuns.finishedAt, range.from));
-      if (range?.to) runConditions.push(lte(heartbeatRuns.finishedAt, range.to));
+      return costRows;
+    },
 
-      const runRows = await db
+    byRuntime: async (companyId: string, range?: CostDateRange) => {
+      const conditions: ReturnType<typeof eq>[] = [eq(costEvents.companyId, companyId)];
+      if (range?.from) conditions.push(gte(costEvents.occurredAt, range.from));
+      if (range?.to) conditions.push(lte(costEvents.occurredAt, range.to));
+
+      const effectiveCost = effectiveCostCentsExpr();
+      const apiCostCentsExpr =
+        sql<number>`coalesce(sum(case when ${costEvents.billingType} = 'api' then ${effectiveCost} else 0 end), 0)::int`;
+      const totalRunCountExpr = sql<number>`count(*)::int`;
+
+      return db
         .select({
-          agentId: heartbeatRuns.agentId,
+          adapterType: costEvents.adapterType,
+          costCents: sql<number>`coalesce(sum(${effectiveCost}), 0)::int`,
+          apiCostCents: apiCostCentsExpr,
           apiRunCount:
-            sql<number>`coalesce(sum(case when coalesce((${heartbeatRuns.usageJson} ->> 'billingType'), 'unknown') = 'api' then 1 else 0 end), 0)::int`,
+            sql<number>`coalesce(sum(case when ${costEvents.billingType} = 'api' then 1 else 0 end), 0)::int`,
+          apiInputTokens:
+            sql<number>`coalesce(sum(case when ${costEvents.billingType} = 'api' then ${costEvents.inputTokens} else 0 end), 0)::int`,
+          apiOutputTokens:
+            sql<number>`coalesce(sum(case when ${costEvents.billingType} = 'api' then ${costEvents.outputTokens} else 0 end), 0)::int`,
           subscriptionRunCount:
-            sql<number>`coalesce(sum(case when coalesce((${heartbeatRuns.usageJson} ->> 'billingType'), 'unknown') = 'subscription' then 1 else 0 end), 0)::int`,
+            sql<number>`coalesce(sum(case when ${costEvents.billingType} = 'subscription' then 1 else 0 end), 0)::int`,
           subscriptionInputTokens:
-            sql<number>`coalesce(sum(case when coalesce((${heartbeatRuns.usageJson} ->> 'billingType'), 'unknown') = 'subscription' then coalesce((${heartbeatRuns.usageJson} ->> 'inputTokens')::int, 0) else 0 end), 0)::int`,
+            sql<number>`coalesce(sum(case when ${costEvents.billingType} = 'subscription' then ${costEvents.inputTokens} else 0 end), 0)::int`,
           subscriptionOutputTokens:
-            sql<number>`coalesce(sum(case when coalesce((${heartbeatRuns.usageJson} ->> 'billingType'), 'unknown') = 'subscription' then coalesce((${heartbeatRuns.usageJson} ->> 'outputTokens')::int, 0) else 0 end), 0)::int`,
+            sql<number>`coalesce(sum(case when ${costEvents.billingType} = 'subscription' then ${costEvents.outputTokens} else 0 end), 0)::int`,
+          unknownRunCount:
+            sql<number>`coalesce(sum(case when ${costEvents.billingType} not in ('api', 'subscription') then 1 else 0 end), 0)::int`,
+          unknownInputTokens:
+            sql<number>`coalesce(sum(case when ${costEvents.billingType} not in ('api', 'subscription') then ${costEvents.inputTokens} else 0 end), 0)::int`,
+          unknownOutputTokens:
+            sql<number>`coalesce(sum(case when ${costEvents.billingType} not in ('api', 'subscription') then ${costEvents.outputTokens} else 0 end), 0)::int`,
+          totalRunCount: totalRunCountExpr,
         })
-        .from(heartbeatRuns)
-        .where(and(...runConditions))
-        .groupBy(heartbeatRuns.agentId);
-
-      const runRowsByAgent = new Map(runRows.map((row) => [row.agentId, row]));
-      return costRows.map((row) => {
-        const runRow = runRowsByAgent.get(row.agentId);
-        return {
-          ...row,
-          apiRunCount: runRow?.apiRunCount ?? 0,
-          subscriptionRunCount: runRow?.subscriptionRunCount ?? 0,
-          subscriptionInputTokens: runRow?.subscriptionInputTokens ?? 0,
-          subscriptionOutputTokens: runRow?.subscriptionOutputTokens ?? 0,
-        };
-      });
+        .from(costEvents)
+        .where(and(...conditions))
+        .groupBy(costEvents.adapterType)
+        .orderBy(desc(apiCostCentsExpr), desc(totalRunCountExpr), costEvents.adapterType);
     },
 
     byProject: async (companyId: string, range?: CostDateRange) => {

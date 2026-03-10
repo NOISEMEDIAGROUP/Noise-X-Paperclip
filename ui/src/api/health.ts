@@ -3,8 +3,9 @@ export type HealthStatus = {
   deploymentMode?: "local_trusted" | "authenticated";
   deploymentExposure?: "private" | "public";
   authReady?: boolean;
-  bootstrapStatus?: "ready" | "bootstrap_pending";
+  bootstrapStatus?: "ready" | "bootstrap_pending" | "board_claim_required";
   bootstrapInviteActive?: boolean;
+  boardClaimPath?: string | null;
   features?: {
     companyDeletionEnabled?: boolean;
   };

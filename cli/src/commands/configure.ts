@@ -10,6 +10,7 @@ import { defaultSecretsConfig, promptSecrets } from "../prompts/secrets.js";
 import { defaultStorageConfig, promptStorage } from "../prompts/storage.js";
 import { promptServer } from "../prompts/server.js";
 import {
+  resolveDefaultAgentRuntimeDir,
   resolveDefaultBackupDir,
   resolveDefaultEmbeddedPostgresDir,
   resolveDefaultLogsDir,
@@ -64,7 +65,29 @@ function defaultConfig(): PaperclipConfig {
       disableSignUp: false,
     },
     storage: defaultStorageConfig(),
+    storageAuth: {
+      s3: {},
+    },
     secrets: defaultSecretsConfig(),
+    runtime: {
+      heartbeatScheduler: {
+        enabled: true,
+        intervalMs: 30000,
+      },
+      agentRuntime: {
+        dir: resolveDefaultAgentRuntimeDir(instanceId),
+        syncEnabled: true,
+        syncIntervalMs: 5 * 60 * 1000,
+      },
+    },
+    agentAuth: {
+      claudeLocal: {
+        useApiKey: false,
+      },
+      codexLocal: {
+        useApiKey: false,
+      },
+    },
   };
 }
 

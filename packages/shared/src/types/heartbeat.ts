@@ -4,6 +4,7 @@ import type {
   WakeupTriggerDetail,
   WakeupRequestStatus,
 } from "../constants.js";
+import type { StderrStats } from "../utils/stderr-classifier.js";
 
 export interface HeartbeatRun {
   id: string;
@@ -29,6 +30,7 @@ export interface HeartbeatRun {
   logCompressed: boolean;
   stdoutExcerpt: string | null;
   stderrExcerpt: string | null;
+  stderrStats?: StderrStats | null;
   errorCode: string | null;
   externalRunId: string | null;
   contextSnapshot: Record<string, unknown> | null;

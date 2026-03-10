@@ -1,12 +1,47 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { testEnvironment } from "@paperclipai/adapter-codex-local/server";
 
 const itWindows = process.platform === "win32" ? it : it.skip;
+const ORIGINAL_OPENAI = process.env.OPENAI_API_KEY;
+
+afterEach(() => {
+  if (ORIGINAL_OPENAI === undefined) {
+    delete process.env.OPENAI_API_KEY;
+  } else {
+    process.env.OPENAI_API_KEY = ORIGINAL_OPENAI;
+  }
+});
 
 describe("codex_local environment diagnostics", () => {
+  it("reports explicit subscription override separately from missing keys", async () => {
+    process.env.OPENAI_API_KEY = "sk-host";
+
+    const result = await testEnvironment({
+      companyId: "company-1",
+      adapterType: "codex_local",
+      config: {
+        command: process.execPath,
+        cwd: process.cwd(),
+        paperclipAuthMode: "subscription",
+        env: {
+          OPENAI_API_KEY: "",
+        },
+      },
+    });
+
+    expect(
+      result.checks.some(
+        (check) =>
+          check.code === "codex_subscription_override_active" &&
+          check.level === "info",
+      ),
+    ).toBe(true);
+    expect(result.checks.some((check) => check.code === "codex_openai_api_key_missing")).toBe(false);
+  });
+
   it("creates a missing working directory when cwd is absolute", async () => {
     const cwd = path.join(
       os.tmpdir(),

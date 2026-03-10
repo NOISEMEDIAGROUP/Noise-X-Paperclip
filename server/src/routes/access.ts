@@ -49,6 +49,9 @@ import {
   claimBoardOwnership,
   inspectBoardClaimChallenge
 } from "../board-claim.js";
+import {
+  LOCAL_BOARD_USER_ID
+} from "../services/instance-bootstrap.js";
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -1481,6 +1484,11 @@ export function accessRoutes(
     ) {
       throw unauthorized("Sign in before claiming board ownership");
     }
+    if (req.actor.userId === LOCAL_BOARD_USER_ID) {
+      throw conflict(
+        "Legacy local-board cannot claim ownership. Sign in with a real account first."
+      );
+    }
 
     const claimed = await claimBoardOwnership(db, {
       token,
@@ -1846,7 +1854,12 @@ export function accessRoutes(
             "Authenticated user required for bootstrap acceptance"
           );
         }
-        const userId = req.actor.userId ?? "local-board";
+        const userId = req.actor.userId ?? LOCAL_BOARD_USER_ID;
+        if (userId === LOCAL_BOARD_USER_ID) {
+          throw conflict(
+            "Bootstrap invite cannot be accepted by legacy local-board. Sign in with a real account or use the board-claim flow."
+          );
+        }
         const existingAdmin = await access.isInstanceAdmin(userId);
         if (!existingAdmin) {
           await access.promoteInstanceAdmin(userId);

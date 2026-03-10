@@ -192,6 +192,7 @@ export interface CLIAdapterModule {
 
 export interface CreateConfigValues {
   adapterType: string;
+  authMode: "automatic" | "instance_api_key" | "subscription";
   cwd: string;
   instructionsFilePath?: string;
   promptTemplate: string;

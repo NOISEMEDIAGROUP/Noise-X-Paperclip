@@ -92,6 +92,8 @@ const emptyOverlay: Overlay = {
   runtime: {},
 };
 
+type LocalAgentAuthMode = "automatic" | "instance_api_key" | "subscription";
+
 /** Stable empty object used as fallback for missing env config to avoid new-object-per-render. */
 const EMPTY_ENV: Record<string, EnvBinding> = {};
 
@@ -114,6 +116,44 @@ function parseCommaArgs(value: string): string[] {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function normalizeLocalAgentAuthMode(value: unknown): LocalAgentAuthMode {
+  return value === "instance_api_key" || value === "subscription"
+    ? value
+    : "automatic";
+}
+
+function localAgentAuthModePatchValue(
+  mode: LocalAgentAuthMode
+): "instance_api_key" | "subscription" | "" {
+  return mode === "automatic" ? "" : mode;
+}
+
+function buildPatchedAdapterConfig(
+  base: Record<string, unknown>,
+  patch: Record<string, unknown>
+): Record<string, unknown> {
+  const next = { ...base, ...patch };
+  if (patch.paperclipAuthMode === "") {
+    delete next.paperclipAuthMode;
+  }
+  return next;
+}
+
+function localAgentAuthModeDescription(
+  adapterType: string,
+  authMode: LocalAgentAuthMode
+) {
+  const providerLabel =
+    adapterType === "codex_local" ? "OpenAI" : "Anthropic";
+  if (authMode === "instance_api_key") {
+    return `Force this agent to use the instance ${providerLabel} API key when one is configured.`;
+  }
+  if (authMode === "subscription") {
+    return "Ignore inherited host/container API keys and rely on CLI login in the Paperclip runtime environment. In Docker, that happens inside the container/runtime, not your Mac host shell.";
+  }
+  return "Existing agents keep their current legacy behavior. New agents still follow the current instance default on create.";
 }
 
 function formatArgList(value: unknown): string {
@@ -233,10 +273,10 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
       patch.adapterType = overlay.adapterType;
       // When adapter type changes, send only the new config — don't merge
       // with old config since old adapter fields are meaningless for the new type
-      patch.adapterConfig = overlay.adapterConfig;
+      patch.adapterConfig = buildPatchedAdapterConfig({}, overlay.adapterConfig);
     } else if (Object.keys(overlay.adapterConfig).length > 0) {
       const existing = (agent.adapterConfig ?? {}) as Record<string, unknown>;
-      patch.adapterConfig = { ...existing, ...overlay.adapterConfig };
+      patch.adapterConfig = buildPatchedAdapterConfig(existing, overlay.adapterConfig);
     }
     if (Object.keys(overlay.heartbeat).length > 0) {
       const existingRc = (agent.runtimeConfig ?? {}) as Record<string, unknown>;
@@ -322,7 +362,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
       return uiAdapter.buildAdapterConfig(val!);
     }
     const base = config as Record<string, unknown>;
-    return { ...base, ...overlay.adapterConfig };
+    return buildPatchedAdapterConfig(base, overlay.adapterConfig);
   }
 
   const testEnvironment = useMutation({
@@ -373,6 +413,15 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
   const codexSearchEnabled = adapterType === "codex_local"
     ? (isCreate ? Boolean(val!.search) : eff("adapterConfig", "search", Boolean(config.search)))
     : false;
+  const supportsExplicitAuthMode =
+    adapterType === "claude_local" || adapterType === "codex_local";
+  const currentAuthMode: LocalAgentAuthMode = supportsExplicitAuthMode
+    ? (isCreate
+        ? normalizeLocalAgentAuthMode(val!.authMode)
+        : normalizeLocalAgentAuthMode(
+            eff("adapterConfig", "paperclipAuthMode", config.paperclipAuthMode),
+          ))
+    : "automatic";
 
   return (
     <div className={cn("relative", cards && "space-y-6")}>
@@ -510,6 +559,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                       modelReasoningEffort: "",
                       variant: "",
                       mode: "",
+                      paperclipAuthMode: "",
                       ...(t === "codex_local"
                         ? {
                             dangerouslyBypassApprovalsAndSandbox:
@@ -650,6 +700,26 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                 open={thinkingEffortOpen}
                 onOpenChange={setThinkingEffortOpen}
               />
+              {supportsExplicitAuthMode && (
+                <Field label="Auth mode" hint={help.authMode}>
+                  <LocalAgentAuthModeDropdown
+                    value={currentAuthMode}
+                    adapterType={adapterType}
+                    onChange={(modeValue) =>
+                      isCreate
+                        ? set!({ authMode: modeValue })
+                        : mark(
+                            "adapterConfig",
+                            "paperclipAuthMode",
+                            localAgentAuthModePatchValue(modeValue),
+                          )
+                    }
+                  />
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {localAgentAuthModeDescription(adapterType, currentAuthMode)}
+                  </p>
+                </Field>
+              )}
               {adapterType === "codex_local" &&
                 codexSearchEnabled &&
                 currentThinkingEffort === "minimal" && (
@@ -1378,5 +1448,80 @@ function ThinkingEffortDropdown({
         </PopoverContent>
       </Popover>
     </Field>
+  );
+}
+
+const LOCAL_AGENT_AUTH_MODE_OPTIONS: Array<{
+  value: LocalAgentAuthMode;
+  label: string;
+  detail: string;
+}> = [
+  {
+    value: "automatic",
+    label: "Automatic",
+    detail: "Use legacy behavior on existing agents or the current instance default on create.",
+  },
+  {
+    value: "instance_api_key",
+    label: "Instance API key",
+    detail: "Force API-key auth using the instance-level stored key.",
+  },
+  {
+    value: "subscription",
+    label: "Local subscription / login",
+    detail: "Force CLI login/subscription auth and ignore inherited API keys.",
+  },
+];
+
+function LocalAgentAuthModeDropdown({
+  value,
+  adapterType,
+  onChange,
+}: {
+  value: LocalAgentAuthMode;
+  adapterType: string;
+  onChange: (value: LocalAgentAuthMode) => void;
+}) {
+  const selected =
+    LOCAL_AGENT_AUTH_MODE_OPTIONS.find((option) => option.value === value) ??
+    LOCAL_AGENT_AUTH_MODE_OPTIONS[0];
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent/50 transition-colors w-full justify-between">
+          <span className={cn(!value && "text-muted-foreground")}>
+            {selected?.label ?? "Automatic"}
+          </span>
+          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-1" align="start">
+        {LOCAL_AGENT_AUTH_MODE_OPTIONS.map((option) => (
+          <button
+            key={option.value}
+            className={cn(
+              "flex items-start justify-between gap-2 w-full px-2 py-1.5 text-sm rounded hover:bg-accent/50 text-left",
+              option.value === value && "bg-accent",
+            )}
+            onClick={() => onChange(option.value)}
+          >
+            <span>
+              <span className="block">{option.label}</span>
+              <span className="block text-[11px] text-muted-foreground">
+                {option.detail}
+              </span>
+              {option.value === "subscription" ? (
+                <span className="block text-[11px] text-muted-foreground">
+                  {adapterType === "codex_local"
+                    ? "Codex login happens in the Paperclip runtime environment and uses the agent runtime state when available."
+                    : "Claude login happens in the Paperclip runtime environment; Docker does not reuse your host session automatically."}
+                </span>
+              ) : null}
+            </span>
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
   );
 }

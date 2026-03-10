@@ -22,6 +22,7 @@ import { activityRoutes } from "./routes/activity.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { sidebarBadgeRoutes } from "./routes/sidebar-badges.js";
 import { llmRoutes } from "./routes/llms.js";
+import { instanceSettingsRoutes } from "./routes/instance-settings.js";
 import { assetRoutes } from "./routes/assets.js";
 import { accessRoutes } from "./routes/access.js";
 import { agentRuntimeRoutes } from "./routes/agent-runtime.js";
@@ -101,6 +102,7 @@ export async function createApp(
       companyDeletionEnabled: opts.companyDeletionEnabled,
     }),
   );
+  api.use(instanceSettingsRoutes(db));
   api.use("/companies", companyRoutes(db));
   api.use(agentRoutes(db));
   api.use(assetRoutes(db, opts.storageService));

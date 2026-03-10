@@ -3,8 +3,10 @@ import { and, eq } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { companies, companyMemberships, instanceUserRoles } from "@paperclipai/db";
 import type { DeploymentMode } from "@paperclipai/shared";
-
-const LOCAL_BOARD_USER_ID = "local-board";
+import {
+  getInstanceBootstrapState,
+  LOCAL_BOARD_USER_ID
+} from "./services/instance-bootstrap.js";
 const CLAIM_TTL_MS = 1000 * 60 * 60 * 24;
 
 type ChallengeStatus = "available" | "claimed" | "expired" | "invalid";
@@ -49,13 +51,8 @@ export async function initializeBoardClaimChallenge(
     return;
   }
 
-  const admins = await db
-    .select({ userId: instanceUserRoles.userId })
-    .from(instanceUserRoles)
-    .where(eq(instanceUserRoles.role, "instance_admin"));
-
-  const onlyLocalBoardAdmin = admins.length === 1 && admins[0]?.userId === LOCAL_BOARD_USER_ID;
-  if (!onlyLocalBoardAdmin) {
+  const bootstrapState = await getInstanceBootstrapState(db);
+  if (bootstrapState.status !== "board_claim_required") {
     activeChallenge = null;
     return;
   }
@@ -70,6 +67,12 @@ export function getBoardClaimWarningUrl(host: string, port: number): string | nu
   if (activeChallenge.claimedAt || activeChallenge.expiresAt.getTime() <= Date.now()) return null;
   const visibleHost = host === "0.0.0.0" ? "localhost" : host;
   return `http://${visibleHost}:${port}/board-claim/${activeChallenge.token}?code=${activeChallenge.code}`;
+}
+
+export function getBoardClaimPath(): string | null {
+  if (!activeChallenge) return null;
+  if (activeChallenge.claimedAt || activeChallenge.expiresAt.getTime() <= Date.now()) return null;
+  return `/board-claim/${activeChallenge.token}?code=${activeChallenge.code}`;
 }
 
 export function inspectBoardClaimChallenge(token: string, code: string | undefined) {
@@ -88,6 +91,7 @@ export async function claimBoardOwnership(
 ): Promise<{ status: ChallengeStatus; claimedByUserId?: string }> {
   const status = getChallengeStatus(opts.token, opts.code);
   if (status !== "available") return { status };
+  if (opts.userId === LOCAL_BOARD_USER_ID) return { status: "invalid" };
 
   await db.transaction(async (tx) => {
     const existingTargetAdmin = await tx

@@ -26,6 +26,7 @@ import { evaluateCircuitBreaker, tripCircuitBreaker } from "./circuit-breaker.js
 import { isPaperclipWorktree, gitRepoRoot, removeGitWorktree, pruneGitWorktrees } from "@paperclipai/adapter-utils/git-worktree";
 import { secretService } from "./secrets.js";
 import { resolveDefaultAgentWorkspaceDir } from "../home-paths.js";
+import { applyInstanceAgentRuntimeAuth } from "./instance-agent-auth.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
@@ -1007,6 +1008,9 @@ export function heartbeatService(db: Db) {
       const costs = costService(db);
       await costs.createEvent(agent.companyId, {
         agentId: agent.id,
+        runId: run.id,
+        adapterType: agent.adapterType ?? "unknown",
+        billingType: result.billingType ?? "unknown",
         provider: result.provider ?? "unknown",
         model: result.model ?? "unknown",
         inputTokens,
@@ -1328,6 +1332,7 @@ export function heartbeatService(db: Db) {
         agent.companyId,
         mergedConfig,
       );
+      const effectiveResolvedConfig = applyInstanceAgentRuntimeAuth(agent.adapterType, resolvedConfig);
       const onAdapterMeta = async (meta: AdapterInvocationMeta) => {
         if (meta.env && secretKeys.size > 0) {
           for (const key of secretKeys) {
@@ -1362,7 +1367,7 @@ export function heartbeatService(db: Db) {
         runId: run.id,
         agent,
         runtime: runtimeForAdapter,
-        config: resolvedConfig,
+        config: effectiveResolvedConfig,
         context,
         onLog,
         onMeta: onAdapterMeta,

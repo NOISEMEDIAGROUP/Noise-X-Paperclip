@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
-import type { IssueComment, Agent } from "@paperclipai/shared";
+import type { IssueComment, Agent, StderrStats } from "@paperclipai/shared";
 import { Button } from "@/components/ui/button";
 import { Check, Copy, Paperclip } from "lucide-react";
 import { Identity } from "./Identity";
@@ -8,6 +8,7 @@ import { InlineEntitySelector, type InlineEntityOption } from "./InlineEntitySel
 import { MarkdownBody } from "./MarkdownBody";
 import { MarkdownEditor, type MarkdownEditorRef, type MentionOption } from "./MarkdownEditor";
 import { StatusBadge } from "./StatusBadge";
+import { RunWarningBadge } from "./RunWarningBadge";
 import { AgentIcon } from "./AgentIconPicker";
 import { formatDateTime } from "../lib/utils";
 
@@ -22,6 +23,7 @@ interface LinkedRunItem {
   agentId: string;
   createdAt: Date | string;
   startedAt: Date | string | null;
+  stderrStats?: StderrStats | null;
 }
 
 interface CommentReassignment {
@@ -155,6 +157,7 @@ const TimelineList = memo(function TimelineList({
                   {run.runId.slice(0, 8)}
                 </Link>
                 <StatusBadge status={run.status} />
+                <RunWarningBadge stderrStats={run.stderrStats} />
               </div>
             </div>
           );

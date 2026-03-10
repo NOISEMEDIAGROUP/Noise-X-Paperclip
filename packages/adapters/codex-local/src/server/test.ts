@@ -14,7 +14,7 @@ import {
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import path from "node:path";
-import { parseCodexJsonl } from "./parse.js";
+import { detectCodexAuthRequired, parseCodexJsonl } from "./parse.js";
 
 function summarizeStatus(checks: AdapterEnvironmentCheck[]): AdapterEnvironmentTestResult["status"] {
   if (checks.some((check) => check.level === "error")) return "fail";
@@ -47,9 +47,6 @@ function summarizeProbeDetail(stdout: string, stderr: string, parsedError: strin
   const max = 240;
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
 }
-
-const CODEX_AUTH_REQUIRED_RE =
-  /(?:not\s+logged\s+in|login\s+required|authentication\s+required|unauthorized|invalid(?:\s+or\s+missing)?\s+api(?:[_\s-]?key)?|openai[_\s-]?api[_\s-]?key|api[_\s-]?key.*required|please\s+run\s+`?codex\s+login`?)/i;
 
 export async function testEnvironment(
   ctx: AdapterEnvironmentTestContext,
@@ -99,20 +96,40 @@ export async function testEnvironment(
 
   const configOpenAiKey = env.OPENAI_API_KEY;
   const hostOpenAiKey = process.env.OPENAI_API_KEY;
-  if (isNonEmpty(configOpenAiKey) || isNonEmpty(hostOpenAiKey)) {
+  const authMode = asString(config.paperclipAuthMode, "").trim();
+  const explicitSubscriptionOverride =
+    authMode === "subscription" &&
+    typeof configOpenAiKey === "string" &&
+    configOpenAiKey.trim().length === 0;
+  if (explicitSubscriptionOverride) {
+    checks.push({
+      code: "codex_subscription_override_active",
+      level: "info",
+      message:
+        "Codex is explicitly set to local subscription/login. Inherited OPENAI_API_KEY will be ignored.",
+      detail: isNonEmpty(hostOpenAiKey)
+        ? "A server/container OPENAI_API_KEY is present, but this agent override blanks it at runtime."
+        : "No OPENAI_API_KEY will be passed; Codex must rely on login/session auth in the Paperclip runtime environment.",
+      hint: "In Docker, local login happens inside the Paperclip container/runtime, not your host shell.",
+    });
+  } else if (isNonEmpty(configOpenAiKey) || isNonEmpty(hostOpenAiKey)) {
     const source = isNonEmpty(configOpenAiKey) ? "adapter config env" : "server environment";
     checks.push({
       code: "codex_openai_api_key_present",
       level: "info",
       message: "OPENAI_API_KEY is set for Codex authentication.",
-      detail: `Detected in ${source}.`,
+      detail:
+        source === "server environment"
+          ? "Detected in the Paperclip server/container environment."
+          : `Detected in ${source}.`,
     });
   } else {
     checks.push({
       code: "codex_openai_api_key_missing",
       level: "warn",
       message: "OPENAI_API_KEY is not set. Codex runs may fail until authentication is configured.",
-      hint: "Set OPENAI_API_KEY in adapter env, shell environment, or Codex auth configuration.",
+      hint:
+        "Set OPENAI_API_KEY in adapter env/server env, or run `codex login` in the Paperclip runtime environment.",
     });
   }
 
@@ -194,13 +211,20 @@ export async function testEnvironment(
                 hint: "Try the probe manually (`codex exec --json -` then prompt: Respond with hello) to inspect full output.",
               }),
         });
-      } else if (CODEX_AUTH_REQUIRED_RE.test(authEvidence)) {
+      } else if (
+        detectCodexAuthRequired({
+          stdout: probe.stdout,
+          stderr: probe.stderr,
+          errorMessage: parsed.errorMessage,
+        })
+      ) {
         checks.push({
           code: "codex_hello_probe_auth_required",
           level: "warn",
           message: "Codex CLI is installed, but authentication is not ready.",
           ...(detail ? { detail } : {}),
-          hint: "Configure OPENAI_API_KEY in adapter env/shell or run `codex login`, then retry the probe.",
+          hint:
+            "Configure OPENAI_API_KEY in adapter env/server env or run `codex login` in the Paperclip runtime environment, then retry the probe.",
         });
       } else {
         checks.push({

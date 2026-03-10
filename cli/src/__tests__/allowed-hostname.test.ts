@@ -54,10 +54,32 @@ function writeBaseConfig(configPath: string) {
         forcePathStyle: false,
       },
     },
+    storageAuth: {
+      s3: {},
+    },
     secrets: {
       provider: "local_encrypted",
       strictMode: false,
       localEncrypted: { keyFilePath: "/tmp/paperclip-secrets/master.key" },
+    },
+    runtime: {
+      heartbeatScheduler: {
+        enabled: true,
+        intervalMs: 30000,
+      },
+      agentRuntime: {
+        dir: "/tmp/paperclip-agent-runtime",
+        syncEnabled: true,
+        syncIntervalMs: 300000,
+      },
+    },
+    agentAuth: {
+      claudeLocal: {
+        useApiKey: false,
+      },
+      codexLocal: {
+        useApiKey: false,
+      },
     },
   };
   fs.writeFileSync(configPath, JSON.stringify(base, null, 2));

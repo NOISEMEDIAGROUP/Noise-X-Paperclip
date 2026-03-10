@@ -3,6 +3,14 @@ import type { Db } from "@paperclipai/db";
 import { agents, approvals, companies, costEvents, heartbeatRuns, issues } from "@paperclipai/db";
 import { notFound } from "../errors.js";
 
+const effectiveCostCentsExpr = sql<number>`case
+  when ${costEvents.billingType} = 'api'
+    and ${costEvents.costCents} = 0
+    and ${costEvents.calculatedCostCents} is not null
+  then ${costEvents.calculatedCostCents}
+  else ${costEvents.costCents}
+end`;
+
 export function dashboardService(db: Db) {
   return {
     summary: async (companyId: string) => {
@@ -76,7 +84,7 @@ export function dashboardService(db: Db) {
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
       const [{ monthSpend }] = await db
         .select({
-          monthSpend: sql<number>`coalesce(sum(${costEvents.costCents}), 0)::int`,
+          monthSpend: sql<number>`coalesce(sum(${effectiveCostCentsExpr}), 0)::int`,
         })
         .from(costEvents)
         .where(

@@ -59,12 +59,19 @@ export interface Config {
   storageS3Endpoint: string | undefined;
   storageS3Prefix: string;
   storageS3ForcePathStyle: boolean;
+  storageS3AccessKeyId: string | undefined;
+  storageS3SecretAccessKey: string | undefined;
+  storageS3SessionToken: string | undefined;
   heartbeatSchedulerEnabled: boolean;
   heartbeatSchedulerIntervalMs: number;
   companyDeletionEnabled: boolean;
   agentRuntimeDir: string;
   agentRuntimeSyncEnabled: boolean;
   agentRuntimeSyncIntervalMs: number;
+  claudeInstanceUseApiKey: boolean;
+  claudeInstanceApiKey: string | undefined;
+  codexInstanceUseApiKey: boolean;
+  codexInstanceApiKey: string | undefined;
 }
 
 export function loadConfig(): Config {
@@ -79,6 +86,9 @@ export function loadConfig(): Config {
   const fileDatabaseBackup = fileConfig?.database.backup;
   const fileSecrets = fileConfig?.secrets;
   const fileStorage = fileConfig?.storage;
+  const fileStorageAuth = fileConfig?.storageAuth;
+  const fileRuntime = fileConfig?.runtime;
+  const fileAgentAuth = fileConfig?.agentAuth;
   const strictModeFromEnv = process.env.PAPERCLIP_SECRETS_STRICT_MODE;
   const secretsStrictMode =
     strictModeFromEnv !== undefined
@@ -112,6 +122,22 @@ export function loadConfig(): Config {
     process.env.PAPERCLIP_STORAGE_S3_FORCE_PATH_STYLE !== undefined
       ? process.env.PAPERCLIP_STORAGE_S3_FORCE_PATH_STYLE === "true"
       : (fileStorage?.s3?.forcePathStyle ?? false);
+  const storageS3AccessKeyId =
+    process.env.AWS_ACCESS_KEY_ID?.trim() ||
+    fileStorageAuth?.s3?.accessKeyId?.trim() ||
+    undefined;
+  const storageS3SecretAccessKey =
+    process.env.AWS_SECRET_ACCESS_KEY?.trim() ||
+    fileStorageAuth?.s3?.secretAccessKey?.trim() ||
+    undefined;
+  const storageS3SessionToken =
+    process.env.AWS_SESSION_TOKEN?.trim() ||
+    fileStorageAuth?.s3?.sessionToken?.trim() ||
+    undefined;
+  const claudeInstanceUseApiKey = fileAgentAuth?.claudeLocal?.useApiKey ?? false;
+  const claudeInstanceApiKey = fileAgentAuth?.claudeLocal?.apiKey?.trim() || undefined;
+  const codexInstanceUseApiKey = fileAgentAuth?.codexLocal?.useApiKey ?? false;
+  const codexInstanceApiKey = fileAgentAuth?.codexLocal?.apiKey?.trim() || undefined;
 
   const deploymentModeFromEnvRaw = process.env.PAPERCLIP_DEPLOYMENT_MODE;
   const deploymentModeFromEnv =
@@ -244,13 +270,38 @@ export function loadConfig(): Config {
     storageS3Endpoint,
     storageS3Prefix,
     storageS3ForcePathStyle,
-    heartbeatSchedulerEnabled: process.env.HEARTBEAT_SCHEDULER_ENABLED !== "false",
-    heartbeatSchedulerIntervalMs: Math.max(10000, Number(process.env.HEARTBEAT_SCHEDULER_INTERVAL_MS) || 30000),
+    storageS3AccessKeyId,
+    storageS3SecretAccessKey,
+    storageS3SessionToken,
+    heartbeatSchedulerEnabled:
+      process.env.HEARTBEAT_SCHEDULER_ENABLED !== undefined
+        ? process.env.HEARTBEAT_SCHEDULER_ENABLED !== "false"
+        : (fileRuntime?.heartbeatScheduler.enabled ?? true),
+    heartbeatSchedulerIntervalMs: Math.max(
+      10000,
+      Number(process.env.HEARTBEAT_SCHEDULER_INTERVAL_MS) ||
+        fileRuntime?.heartbeatScheduler.intervalMs ||
+        30000,
+    ),
     companyDeletionEnabled,
     agentRuntimeDir: resolveHomeAwarePath(
-      process.env.PAPERCLIP_AGENT_RUNTIME_DIR ?? resolveDefaultAgentRuntimeDir(),
+      process.env.PAPERCLIP_AGENT_RUNTIME_DIR ??
+        fileRuntime?.agentRuntime.dir ??
+        resolveDefaultAgentRuntimeDir(),
     ),
-    agentRuntimeSyncEnabled: process.env.PAPERCLIP_AGENT_RUNTIME_SYNC_ENABLED !== "false",
-    agentRuntimeSyncIntervalMs: Math.max(60000, Number(process.env.PAPERCLIP_AGENT_RUNTIME_SYNC_INTERVAL_MS) || 5 * 60 * 1000),
+    agentRuntimeSyncEnabled:
+      process.env.PAPERCLIP_AGENT_RUNTIME_SYNC_ENABLED !== undefined
+        ? process.env.PAPERCLIP_AGENT_RUNTIME_SYNC_ENABLED !== "false"
+        : (fileRuntime?.agentRuntime.syncEnabled ?? true),
+    agentRuntimeSyncIntervalMs: Math.max(
+      60000,
+      Number(process.env.PAPERCLIP_AGENT_RUNTIME_SYNC_INTERVAL_MS) ||
+        fileRuntime?.agentRuntime.syncIntervalMs ||
+        5 * 60 * 1000,
+    ),
+    claudeInstanceUseApiKey,
+    claudeInstanceApiKey,
+    codexInstanceUseApiKey,
+    codexInstanceApiKey,
   };
 }

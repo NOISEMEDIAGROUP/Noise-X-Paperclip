@@ -17,7 +17,11 @@ import {
   renderTemplate,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
-import { parseCodexJsonl, isCodexUnknownSessionError } from "./parse.js";
+import {
+  detectCodexAuthRequired,
+  parseCodexJsonl,
+  isCodexUnknownSessionError
+} from "./parse.js";
 
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const PAPERCLIP_SKILLS_CANDIDATES = [
@@ -104,23 +108,45 @@ async function ensureCodexSkillsInjected(onLog: AdapterExecutionContext["onLog"]
   }
 }
 
-export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
-  const { runId, agent, runtime, config, context, onLog, onMeta, authToken } = ctx;
+type CodexExecutionInput = Pick<
+  AdapterExecutionContext,
+  "runId" | "agent" | "config" | "context" | "authToken" | "onLog"
+>;
 
-  const promptTemplate = asString(
-    config.promptTemplate,
-    "You are agent {{agent.id}} ({{agent.name}}). Continue your Paperclip work.",
-  );
+type CodexRuntimeConfig = {
+  command: string;
+  model: string;
+  modelReasoningEffort: string;
+  search: boolean;
+  bypass: boolean;
+  cwd: string;
+  env: Record<string, string>;
+  timeoutSec: number;
+  graceSec: number;
+  extraArgs: string[];
+  workspaceId: string;
+  workspaceRepoUrl: string;
+  workspaceRepoRef: string;
+  runtimeSessionId: string;
+  runtimeSessionCwd: string;
+  billingType: "api" | "subscription";
+};
+
+async function buildCodexRuntimeConfig(
+  input: CodexExecutionInput
+): Promise<CodexRuntimeConfig> {
+  const { runId, agent, config, context, authToken, onLog } = input;
+
   const command = asString(config.command, "codex");
   const model = asString(config.model, "");
   const modelReasoningEffort = asString(
     config.modelReasoningEffort,
-    asString(config.reasoningEffort, ""),
+    asString(config.reasoningEffort, "")
   );
   const search = asBoolean(config.search, false);
   const bypass = asBoolean(
     config.dangerouslyBypassApprovalsAndSandbox,
-    asBoolean(config.dangerouslyBypassSandbox, false),
+    asBoolean(config.dangerouslyBypassSandbox, false)
   );
 
   const workspaceContext = parseObject(context.paperclipWorkspace);
@@ -131,75 +157,72 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const workspaceRepoRef = asString(workspaceContext.repoRef, "");
   const workspaceHints = Array.isArray(context.paperclipWorkspaces)
     ? context.paperclipWorkspaces.filter(
-        (value): value is Record<string, unknown> => typeof value === "object" && value !== null,
+        (value): value is Record<string, unknown> =>
+          typeof value === "object" && value !== null
       )
     : [];
   const configuredCwd = asString(config.cwd, "");
-  const useConfiguredInsteadOfAgentHome = workspaceSource === "agent_home" && configuredCwd.length > 0;
+  const useConfiguredInsteadOfAgentHome =
+    workspaceSource === "agent_home" && configuredCwd.length > 0;
   const effectiveWorkspaceCwd = useConfiguredInsteadOfAgentHome ? "" : workspaceCwd;
   const cwd = effectiveWorkspaceCwd || configuredCwd || process.cwd();
   await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
+
   const envConfig = parseObject(config.env);
   const hasExplicitApiKey =
-    typeof envConfig.PAPERCLIP_API_KEY === "string" && envConfig.PAPERCLIP_API_KEY.trim().length > 0;
+    typeof envConfig.PAPERCLIP_API_KEY === "string" &&
+    envConfig.PAPERCLIP_API_KEY.trim().length > 0;
   const env: Record<string, string> = { ...buildPaperclipEnv(agent) };
   env.PAPERCLIP_RUN_ID = runId;
+
   const wakeTaskId =
-    (typeof context.taskId === "string" && context.taskId.trim().length > 0 && context.taskId.trim()) ||
-    (typeof context.issueId === "string" && context.issueId.trim().length > 0 && context.issueId.trim()) ||
+    (typeof context.taskId === "string" &&
+      context.taskId.trim().length > 0 &&
+      context.taskId.trim()) ||
+    (typeof context.issueId === "string" &&
+      context.issueId.trim().length > 0 &&
+      context.issueId.trim()) ||
     null;
   const wakeReason =
     typeof context.wakeReason === "string" && context.wakeReason.trim().length > 0
       ? context.wakeReason.trim()
       : null;
   const wakeCommentId =
-    (typeof context.wakeCommentId === "string" && context.wakeCommentId.trim().length > 0 && context.wakeCommentId.trim()) ||
-    (typeof context.commentId === "string" && context.commentId.trim().length > 0 && context.commentId.trim()) ||
+    (typeof context.wakeCommentId === "string" &&
+      context.wakeCommentId.trim().length > 0 &&
+      context.wakeCommentId.trim()) ||
+    (typeof context.commentId === "string" &&
+      context.commentId.trim().length > 0 &&
+      context.commentId.trim()) ||
     null;
   const approvalId =
     typeof context.approvalId === "string" && context.approvalId.trim().length > 0
       ? context.approvalId.trim()
       : null;
   const approvalStatus =
-    typeof context.approvalStatus === "string" && context.approvalStatus.trim().length > 0
+    typeof context.approvalStatus === "string" &&
+    context.approvalStatus.trim().length > 0
       ? context.approvalStatus.trim()
       : null;
   const linkedIssueIds = Array.isArray(context.issueIds)
-    ? context.issueIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    ? context.issueIds.filter(
+        (value): value is string =>
+          typeof value === "string" && value.trim().length > 0
+      )
     : [];
-  if (wakeTaskId) {
-    env.PAPERCLIP_TASK_ID = wakeTaskId;
-  }
-  if (wakeReason) {
-    env.PAPERCLIP_WAKE_REASON = wakeReason;
-  }
-  if (wakeCommentId) {
-    env.PAPERCLIP_WAKE_COMMENT_ID = wakeCommentId;
-  }
-  if (approvalId) {
-    env.PAPERCLIP_APPROVAL_ID = approvalId;
-  }
-  if (approvalStatus) {
-    env.PAPERCLIP_APPROVAL_STATUS = approvalStatus;
-  }
+  if (wakeTaskId) env.PAPERCLIP_TASK_ID = wakeTaskId;
+  if (wakeReason) env.PAPERCLIP_WAKE_REASON = wakeReason;
+  if (wakeCommentId) env.PAPERCLIP_WAKE_COMMENT_ID = wakeCommentId;
+  if (approvalId) env.PAPERCLIP_APPROVAL_ID = approvalId;
+  if (approvalStatus) env.PAPERCLIP_APPROVAL_STATUS = approvalStatus;
   if (linkedIssueIds.length > 0) {
     env.PAPERCLIP_LINKED_ISSUE_IDS = linkedIssueIds.join(",");
   }
-  if (effectiveWorkspaceCwd) {
-    env.PAPERCLIP_WORKSPACE_CWD = effectiveWorkspaceCwd;
-  }
-  if (workspaceSource) {
-    env.PAPERCLIP_WORKSPACE_SOURCE = workspaceSource;
-  }
-  if (workspaceId) {
-    env.PAPERCLIP_WORKSPACE_ID = workspaceId;
-  }
-  if (workspaceRepoUrl) {
-    env.PAPERCLIP_WORKSPACE_REPO_URL = workspaceRepoUrl;
-  }
-  if (workspaceRepoRef) {
-    env.PAPERCLIP_WORKSPACE_REPO_REF = workspaceRepoRef;
-  }
+  if (effectiveWorkspaceCwd) env.PAPERCLIP_WORKSPACE_CWD = effectiveWorkspaceCwd;
+  if (workspaceSource) env.PAPERCLIP_WORKSPACE_SOURCE = workspaceSource;
+  if (workspaceId) env.PAPERCLIP_WORKSPACE_ID = workspaceId;
+  if (workspaceRepoUrl) env.PAPERCLIP_WORKSPACE_REPO_URL = workspaceRepoUrl;
+  if (workspaceRepoRef) env.PAPERCLIP_WORKSPACE_REPO_REF = workspaceRepoRef;
   if (workspaceHints.length > 0) {
     env.PAPERCLIP_WORKSPACES_JSON = JSON.stringify(workspaceHints);
   }
@@ -209,10 +232,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (!hasExplicitApiKey && authToken) {
     env.PAPERCLIP_API_KEY = authToken;
   }
-  // Phase 2: Inject AGENT_HOME so agents can find their role folder without
-  // wasting the first commands discovering the path.
-  // Derived from the instructionsFilePath parent dir name (slug) to match the
-  // runtime dir convention. Falls back to agent.id when no instructions file is set.
+
   const agentRuntimeBaseDir = process.env.PAPERCLIP_AGENT_RUNTIME_DIR;
   if (agentRuntimeBaseDir && !hasNonEmptyEnvValue(env, "AGENT_HOME")) {
     const instructionsPathForHome = asString(config.instructionsFilePath, "").trim();
@@ -224,9 +244,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     await fs.mkdir(agentHome, { recursive: true }).catch(() => {});
   }
 
-  // Phase 1: Isolate Codex from the operator's personal ~/.codex config.
-  // Set CODEX_HOME to a subdir of AGENT_HOME so all per-agent state (memory,
-  // notes, and Codex CLI internals) lives under one tree that S3 syncs together.
   if (!hasNonEmptyEnvValue(env, "CODEX_HOME") && env.AGENT_HOME) {
     const codexHome = path.join(env.AGENT_HOME, ".codex");
     env.CODEX_HOME = codexHome;
@@ -234,8 +251,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   }
   await ensureCodexSkillsInjected(onLog, env.CODEX_HOME);
 
-  // Phase 7: Fall through to server-level OPENAI_API_KEY when adapter config has no key.
-  // Handles Docker-level env vars and acts as a global default for all codex_local agents.
   if (!hasNonEmptyEnvValue(env, "OPENAI_API_KEY")) {
     const globalKey = process.env.OPENAI_API_KEY;
     if (globalKey && globalKey.trim().length > 0) {
@@ -254,9 +269,108 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     return asStringArray(config.args);
   })();
 
-  const runtimeSessionParams = parseObject(runtime.sessionParams);
-  const runtimeSessionId = asString(runtimeSessionParams.sessionId, runtime.sessionId ?? "");
+  const runtimeSessionParams = parseObject((input as AdapterExecutionContext).runtime?.sessionParams);
+  const runtimeSessionId = asString(
+    runtimeSessionParams.sessionId,
+    (input as AdapterExecutionContext).runtime?.sessionId ?? ""
+  );
   const runtimeSessionCwd = asString(runtimeSessionParams.cwd, "");
+
+  return {
+    command,
+    model,
+    modelReasoningEffort,
+    search,
+    bypass,
+    cwd,
+    env,
+    timeoutSec,
+    graceSec,
+    extraArgs,
+    workspaceId,
+    workspaceRepoUrl,
+    workspaceRepoRef,
+    runtimeSessionId,
+    runtimeSessionCwd,
+    billingType
+  };
+}
+
+function buildLoginResult(proc: {
+  exitCode: number | null;
+  signal: string | null;
+  timedOut: boolean;
+  stdout: string;
+  stderr: string;
+}) {
+  return {
+    exitCode: proc.exitCode,
+    signal: proc.signal,
+    timedOut: proc.timedOut,
+    loginUrl: null,
+    stdout: proc.stdout,
+    stderr: proc.stderr
+  };
+}
+
+export async function runCodexLogin(input: {
+  runId: string;
+  agent: AdapterExecutionContext["agent"];
+  config: Record<string, unknown>;
+  context?: Record<string, unknown>;
+  authToken?: string;
+  onLog?: (stream: "stdout" | "stderr", chunk: string) => Promise<void>;
+}) {
+  const onLog = input.onLog ?? (async () => {});
+  const runtime = await buildCodexRuntimeConfig({
+    runId: input.runId,
+    agent: input.agent,
+    config: input.config,
+    context: input.context ?? {},
+    authToken: input.authToken,
+    onLog,
+  } as CodexExecutionInput);
+
+  const proc = await runChildProcess(input.runId, runtime.command, ["login"], {
+    cwd: runtime.cwd,
+    env: runtime.env,
+    timeoutSec: runtime.timeoutSec,
+    graceSec: runtime.graceSec,
+    onLog,
+  });
+
+  return buildLoginResult({
+    ...proc,
+    stderr: stripCodexRolloutNoise(proc.stderr),
+  });
+}
+
+export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
+  const { runId, agent, runtime, config, context, onLog, onMeta, authToken } = ctx;
+
+  const promptTemplate = asString(
+    config.promptTemplate,
+    "You are agent {{agent.id}} ({{agent.name}}). Continue your Paperclip work.",
+  );
+  const runtimeConfig = await buildCodexRuntimeConfig(ctx);
+  const {
+    command,
+    model,
+    modelReasoningEffort,
+    search,
+    bypass,
+    cwd,
+    env,
+    timeoutSec,
+    graceSec,
+    extraArgs,
+    workspaceId,
+    workspaceRepoUrl,
+    workspaceRepoRef,
+    runtimeSessionId,
+    runtimeSessionCwd,
+    billingType,
+  } = runtimeConfig;
   const canResumeSession =
     runtimeSessionId.length > 0 &&
     (runtimeSessionCwd.length === 0 || path.resolve(runtimeSessionCwd) === path.resolve(cwd));
@@ -399,6 +513,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       parsedError ||
       stderrLine ||
       `Codex exited with code ${attempt.proc.exitCode ?? -1}`;
+    const authRequired = detectCodexAuthRequired({
+      stdout: attempt.proc.stdout,
+      stderr: `${attempt.proc.stderr}\n${attempt.rawStderr}`,
+      errorMessage: parsedError || null,
+    });
 
     return {
       exitCode: attempt.proc.exitCode,
@@ -408,6 +527,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         (attempt.proc.exitCode ?? 0) === 0
           ? null
           : fallbackErrorMessage,
+      errorCode:
+        (attempt.proc.exitCode ?? 0) === 0
+          ? null
+          : authRequired
+            ? "codex_auth_required"
+            : null,
       usage: attempt.parsed.usage,
       sessionId: resolvedSessionId,
       sessionParams: resolvedSessionParams,

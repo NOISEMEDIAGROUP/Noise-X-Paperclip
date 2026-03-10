@@ -9,6 +9,7 @@ import { PageSkeleton } from "../components/PageSkeleton";
 import { formatCents, formatTokens } from "../lib/utils";
 import { Identity } from "../components/Identity";
 import { StatusBadge } from "../components/StatusBadge";
+import { adapterLabels } from "../components/agent-config-primitives";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DollarSign } from "lucide-react";
@@ -51,6 +52,11 @@ function computeRange(preset: DatePreset): { from: string; to: string } {
   }
 }
 
+function formatAdapterLabel(adapterType?: string | null): string {
+  if (!adapterType) return "Unknown runtime";
+  return adapterLabels[adapterType] ?? adapterType;
+}
+
 export function Costs() {
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
@@ -76,12 +82,13 @@ export function Costs() {
   const { data, isLoading, error } = useQuery({
     queryKey: queryKeys.costs(selectedCompanyId!, from || undefined, to || undefined),
     queryFn: async () => {
-      const [summary, byAgent, byProject] = await Promise.all([
+      const [summary, byRuntime, byAgent, byProject] = await Promise.all([
         costsApi.summary(selectedCompanyId!, from || undefined, to || undefined),
+        costsApi.byRuntime(selectedCompanyId!, from || undefined, to || undefined),
         costsApi.byAgent(selectedCompanyId!, from || undefined, to || undefined),
         costsApi.byProject(selectedCompanyId!, from || undefined, to || undefined),
       ]);
-      return { summary, byAgent, byProject };
+      return { summary, byRuntime, byAgent, byProject };
     },
     enabled: !!selectedCompanyId,
   });
@@ -169,41 +176,40 @@ export function Costs() {
             </CardContent>
           </Card>
 
-          {/* By Agent / By Project */}
           <div className="grid md:grid-cols-2 gap-4">
             <Card>
               <CardContent className="p-4">
-                <h3 className="text-sm font-semibold mb-3">By Agent</h3>
-                {data.byAgent.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No cost events yet.</p>
+                <h3 className="text-sm font-semibold mb-3">By Runtime</h3>
+                {data.byRuntime.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No runtime-attributed runs yet.</p>
                 ) : (
-                  <div className="space-y-2">
-                    {data.byAgent.map((row) => (
+                  <div className="space-y-3">
+                    {data.byRuntime.map((row) => (
                       <div
-                        key={row.agentId}
-                        className="flex items-start justify-between text-sm"
+                        key={row.adapterType}
+                        className="flex items-start justify-between gap-3 text-sm"
                       >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Identity
-                            name={row.agentName ?? row.agentId}
-                            size="sm"
-                          />
-                          {row.agentStatus === "terminated" && (
-                            <StatusBadge status="terminated" />
-                          )}
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{formatAdapterLabel(row.adapterType)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {row.totalRunCount} run{row.totalRunCount === 1 ? "" : "s"}
+                          </p>
                         </div>
-                        <div className="text-right shrink-0 ml-2">
-                          <span className="font-medium block">{formatCents(row.costCents)}</span>
-                          <span className="text-xs text-muted-foreground block">
-                            in {formatTokens(row.inputTokens)} / out {formatTokens(row.outputTokens)} tok
-                          </span>
-                          {(row.apiRunCount > 0 || row.subscriptionRunCount > 0) && (
+                        <div className="text-right shrink-0">
+                          <span className="font-medium block">{formatCents(row.apiCostCents)}</span>
+                          {row.apiRunCount > 0 && (
                             <span className="text-xs text-muted-foreground block">
-                              {row.apiRunCount > 0 ? `api runs: ${row.apiRunCount}` : null}
-                              {row.apiRunCount > 0 && row.subscriptionRunCount > 0 ? " | " : null}
-                              {row.subscriptionRunCount > 0
-                                ? `subscription runs: ${row.subscriptionRunCount} (${formatTokens(row.subscriptionInputTokens)} in / ${formatTokens(row.subscriptionOutputTokens)} out tok)`
-                                : null}
+                              API: {row.apiRunCount} run{row.apiRunCount === 1 ? "" : "s"} ({formatTokens(row.apiInputTokens)} in / {formatTokens(row.apiOutputTokens)} out tok)
+                            </span>
+                          )}
+                          {row.subscriptionRunCount > 0 && (
+                            <span className="text-xs text-muted-foreground block">
+                              Local subscription: {row.subscriptionRunCount} run{row.subscriptionRunCount === 1 ? "" : "s"} ({formatTokens(row.subscriptionInputTokens)} in / {formatTokens(row.subscriptionOutputTokens)} out tok)
+                            </span>
+                          )}
+                          {row.unknownRunCount > 0 && (
+                            <span className="text-xs text-muted-foreground block">
+                              Other: {row.unknownRunCount} run{row.unknownRunCount === 1 ? "" : "s"} ({formatTokens(row.unknownInputTokens)} in / {formatTokens(row.unknownOutputTokens)} out tok)
                             </span>
                           )}
                         </div>
@@ -237,6 +243,57 @@ export function Costs() {
               </CardContent>
             </Card>
           </div>
+
+          <Card>
+            <CardContent className="p-4">
+              <h3 className="text-sm font-semibold mb-3">By Agent</h3>
+              {data.byAgent.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No agent cost or usage data yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {data.byAgent.map((row) => (
+                    <div
+                      key={row.agentId}
+                      className="flex items-start justify-between gap-3 text-sm"
+                    >
+                      <div className="flex items-start gap-2 min-w-0">
+                        <Identity
+                          name={row.agentName ?? row.agentId}
+                          size="sm"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate">{row.agentName ?? row.agentId}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {formatAdapterLabel(row.agentAdapterType)}
+                          </p>
+                        </div>
+                        {row.agentStatus === "terminated" && (
+                          <StatusBadge status="terminated" />
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="font-medium block">{formatCents(row.costCents)}</span>
+                        {(row.inputTokens > 0 || row.outputTokens > 0) && (
+                          <span className="text-xs text-muted-foreground block">
+                            Tokens: {formatTokens(row.inputTokens)} in / {formatTokens(row.outputTokens)} out
+                          </span>
+                        )}
+                        {(row.apiRunCount > 0 || row.subscriptionRunCount > 0) && (
+                          <span className="text-xs text-muted-foreground block">
+                            {row.apiRunCount > 0 ? `API: ${row.apiRunCount}` : null}
+                            {row.apiRunCount > 0 && row.subscriptionRunCount > 0 ? " | " : null}
+                            {row.subscriptionRunCount > 0
+                              ? `local subscription: ${row.subscriptionRunCount} (${formatTokens(row.subscriptionInputTokens)} in / ${formatTokens(row.subscriptionOutputTokens)} out tok)`
+                              : null}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </>
       )}
     </div>

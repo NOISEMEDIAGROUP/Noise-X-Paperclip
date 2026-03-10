@@ -33,7 +33,7 @@ export type {
   CompanySecret,
   SecretProviderDescriptor,
 } from "./secrets.js";
-export type { CostEvent, CostSummary, CostByAgent } from "./cost.js";
+export type { CostEvent, CostSummary, CostByAgent, CostByRuntime } from "./cost.js";
 export type {
   HeartbeatRun,
   HeartbeatRunEvent,
@@ -44,6 +44,13 @@ export type {
 export type { LiveEvent } from "./live.js";
 export type { DashboardSummary } from "./dashboard.js";
 export type { ActivityEvent } from "./activity.js";
+export type {
+  InstanceSettingsResponse,
+  InstanceSettingsMetrics,
+  InstanceSettingsStorageEnvOverrides,
+  UpdateInstanceStorageAuthSettings,
+  UpdateInstanceAgentAuthSettings,
+} from "./instance-settings.js";
 export type { SidebarBadges } from "./sidebar-badges.js";
 export type {
   CompanyMembership,

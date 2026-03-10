@@ -11,6 +11,11 @@ export interface RunForIssue {
   invocationSource: string;
   usageJson: Record<string, unknown> | null;
   resultJson: Record<string, unknown> | null;
+  stderrStats?: {
+    benignCount: number;
+    errorCount: number;
+    totalCount: number;
+  } | null;
 }
 
 export interface IssueForRun {

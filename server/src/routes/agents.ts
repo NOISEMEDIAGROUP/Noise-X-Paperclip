@@ -36,8 +36,14 @@ import {
   DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX,
   DEFAULT_CODEX_LOCAL_MODEL,
 } from "@paperclipai/adapter-codex-local";
+import { runCodexLogin } from "@paperclipai/adapter-codex-local/server";
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "@paperclipai/adapter-cursor-local";
 import { ensureOpenCodeModelConfiguredAndAvailable } from "@paperclipai/adapter-opencode-local/server";
+import { loadHeartbeatRunStderrStats } from "../services/heartbeat-run-stderr.js";
+import {
+  applyInstanceAgentCreateDefaults,
+  applyInstanceAgentRuntimeAuth,
+} from "../services/instance-agent-auth.js";
 
 export function agentRoutes(db: Db) {
   const DEFAULT_INSTRUCTIONS_PATH_KEYS: Record<string, string> = {
@@ -415,20 +421,25 @@ export function agentRoutes(db: Db) {
 
       const inputAdapterConfig =
         (req.body?.adapterConfig ?? {}) as Record<string, unknown>;
+      const requestedAdapterConfig = applyInstanceAgentCreateDefaults(
+        type,
+        applyCreateDefaultsByAdapterType(type, inputAdapterConfig),
+      );
       const normalizedAdapterConfig = await secretsSvc.normalizeAdapterConfigForPersistence(
         companyId,
-        inputAdapterConfig,
+        requestedAdapterConfig,
         { strictMode: strictSecretsMode },
       );
       const { config: runtimeAdapterConfig } = await secretsSvc.resolveAdapterConfigForRuntime(
         companyId,
         normalizedAdapterConfig,
       );
+      const effectiveRuntimeAdapterConfig = applyInstanceAgentRuntimeAuth(type, runtimeAdapterConfig);
 
       const result = await adapter.testEnvironment({
         companyId,
         adapterType: type,
-        config: runtimeAdapterConfig,
+        config: effectiveRuntimeAdapterConfig,
       });
 
       res.json(result);
@@ -642,9 +653,13 @@ export function agentRoutes(db: Db) {
       hireInput.adapterType,
       ((hireInput.adapterConfig ?? {}) as Record<string, unknown>),
     );
+    const requestedAdapterConfigWithInstanceDefaults = applyInstanceAgentCreateDefaults(
+      hireInput.adapterType,
+      requestedAdapterConfig,
+    );
     const normalizedAdapterConfig = await secretsSvc.normalizeAdapterConfigForPersistence(
       companyId,
-      requestedAdapterConfig,
+      requestedAdapterConfigWithInstanceDefaults,
       { strictMode: strictSecretsMode },
     );
     await assertAdapterConfigConstraints(
@@ -782,9 +797,13 @@ export function agentRoutes(db: Db) {
       req.body.adapterType,
       ((req.body.adapterConfig ?? {}) as Record<string, unknown>),
     );
+    const requestedAdapterConfigWithInstanceDefaults = applyInstanceAgentCreateDefaults(
+      req.body.adapterType,
+      requestedAdapterConfig,
+    );
     const normalizedAdapterConfig = await secretsSvc.normalizeAdapterConfigForPersistence(
       companyId,
-      requestedAdapterConfig,
+      requestedAdapterConfigWithInstanceDefaults,
       { strictMode: strictSecretsMode },
     );
     await assertAdapterConfigConstraints(
@@ -1265,6 +1284,7 @@ export function agentRoutes(db: Db) {
 
     const config = asRecord(agent.adapterConfig) ?? {};
     const { config: runtimeConfig } = await secretsSvc.resolveAdapterConfigForRuntime(agent.companyId, config);
+    const effectiveRuntimeConfig = applyInstanceAgentRuntimeAuth(agent.adapterType, runtimeConfig);
     const result = await runClaudeLogin({
       runId: `claude-login-${randomUUID()}`,
       agent: {
@@ -1274,7 +1294,39 @@ export function agentRoutes(db: Db) {
         adapterType: agent.adapterType,
         adapterConfig: agent.adapterConfig,
       },
-      config: runtimeConfig,
+      config: effectiveRuntimeConfig,
+    });
+
+    res.json(result);
+  });
+
+  router.post("/agents/:id/codex-login", async (req, res) => {
+    assertBoard(req);
+    const id = req.params.id as string;
+    const agent = await svc.getById(id);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    assertCompanyAccess(req, agent.companyId);
+    if (agent.adapterType !== "codex_local") {
+      res.status(400).json({ error: "Login is only supported for codex_local agents" });
+      return;
+    }
+
+    const config = asRecord(agent.adapterConfig) ?? {};
+    const { config: runtimeConfig } = await secretsSvc.resolveAdapterConfigForRuntime(agent.companyId, config);
+    const effectiveRuntimeConfig = applyInstanceAgentRuntimeAuth(agent.adapterType, runtimeConfig);
+    const result = await runCodexLogin({
+      runId: `codex-login-${randomUUID()}`,
+      agent: {
+        id: agent.id,
+        companyId: agent.companyId,
+        name: agent.name,
+        adapterType: agent.adapterType,
+        adapterConfig: agent.adapterConfig,
+      },
+      config: effectiveRuntimeConfig,
     });
 
     res.json(result);
@@ -1287,7 +1339,11 @@ export function agentRoutes(db: Db) {
     const limitParam = req.query.limit as string | undefined;
     const limit = limitParam ? Math.max(1, Math.min(1000, parseInt(limitParam, 10) || 200)) : undefined;
     const runs = await heartbeat.list(companyId, agentId, limit);
-    res.json(runs);
+    const stderrStatsByRunId = await loadHeartbeatRunStderrStats(db, runs.map((run) => run.id));
+    res.json(runs.map((run) => ({
+      ...run,
+      stderrStats: stderrStatsByRunId.get(run.id) ?? null,
+    })));
   });
 
   router.get("/companies/:companyId/live-runs", async (req, res) => {
