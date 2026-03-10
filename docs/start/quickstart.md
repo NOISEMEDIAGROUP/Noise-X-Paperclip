@@ -26,6 +26,8 @@ This starts the API server and UI at [http://localhost:3100](http://localhost:31
 
 No external database required — Paperclip uses an embedded PostgreSQL instance by default.
 
+The UI currently supports English and Chinese. Use the language toggle in the left sidebar footer to switch languages (your choice is saved in your browser).
+
 ## One-Command Bootstrap
 
 ```sh
@@ -47,4 +49,8 @@ Once Paperclip is running:
 
 <Card title="Core Concepts" href="/start/core-concepts">
   Learn the key concepts behind Paperclip
+</Card>
+
+<Card title="Roadmap (V1)" href="/start/roadmap-v1">
+  See the V1 milestones and exit criteria
 </Card>

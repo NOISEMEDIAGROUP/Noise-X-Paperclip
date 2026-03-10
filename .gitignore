@@ -35,9 +35,12 @@ tmp/
 # Editor / tool temp files
 *.tmp
 .vscode/
+.idea/
 .claude/settings.local.json
 .paperclip-local/
 
 # Playwright
 tests/e2e/test-results/
 tests/e2e/playwright-report/
+tests/e2e/.paperclip-data/
+tests/e2e/.paperclip-home/
