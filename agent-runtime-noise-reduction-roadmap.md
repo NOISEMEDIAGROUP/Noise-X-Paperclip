@@ -216,14 +216,16 @@ Stop spawning the adapter subprocess when there is nothing to do.
 
 ---
 
-### Phase 5 — Stderr Classification and UI Presentation
+### Phase 5 — Stderr Classification and UI Presentation ✅ Backend Done
 
 Distinguish real failures from benign runtime noise.
 
-- Classify known benign stderr patterns separately from fatal errors.
-- Render successful runs with warning annotations instead of error-style emphasis.
+- ✅ `packages/shared/src/utils/stderr-classifier.ts` — `classifyStderrLine()` + `accumulateStderrStats()` exported from `@paperclipai/shared`.
+- ✅ Known benign pattern groups: `mcp_auth_noise` (`rmcp::` transport logs), `node_deprecation`, `node_experimental`, `codex_session_debug`, `rust_tracing_info`, `claude_session_persistence`, `paperclip_retry`, `update_notice`.
+- ✅ `heartbeat.ts` `onLog` accumulates `stderrStats` (`benignCount / errorCount / totalCount`) per run.
+- ✅ Final lifecycle/error run event payload includes `stderrStats` so the UI can distinguish warning noise from real failures.
+- 🔲 UI: render successful runs with warning annotations (yellow badge) when `stderrStats.errorCount === 0 && stderrStats.benignCount > 0`. Runs with `errorCount > 0` keep error styling. (Frontend work — user to implement.)
 - Keep full raw logs available for deep debugging.
-- Add short operator-facing explanations for common warning classes.
 
 **Outcome:** Operators can scan runs faster. Successful work is not overshadowed by low-signal warnings.
 
@@ -282,10 +284,10 @@ Track before/after for:
 | 4 | Phase 1 runtime isolation | ✅ Done |
 | 5 | Phase 2 env injection | ✅ Done |
 | 6 | Phase 8 runtime centralization + S3 | ✅ Done |
-| 7 | Phase 3 session resume hardening | 🔲 Next |
-| 8 | Phase 5 stderr classification (backend + UI) | 🔲 |
-| 9 | Phase 9 auth bootstrap integrity | 🔲 |
-| 10 | Phase 6 observability metrics | 🔲 |
+| 7 | Phase 3 session resume hardening | ✅ Done |
+| 8 | Phase 5 stderr classification (backend ✅, UI 🔲) | ✅ Backend Done |
+| 9 | Phase 9 auth bootstrap integrity | ✅ Done |
+| 10 | Phase 6 observability metrics | 🔲 Next |
 | 11 | Integrate circuit breaker (#390) | 🔲 After noise baseline is clean |
 
 ## Acceptance Criteria
@@ -295,7 +297,7 @@ Track before/after for:
 3. ✅ Successful runs no longer emit personal-MCP auth noise by default.
 4. ✅ Agents that rely on role folders receive `AGENT_HOME` consistently.
 5. ✅ Timer wakes without concrete issue work use materially fewer input tokens.
-6. 🔲 Successful runs show warnings separately from failures in the UI. *(Phase 5)*
+6. ✅ Backend: successful runs carry `stderrStats` in run event payload so UI can distinguish benign warnings from real failures. 🔲 UI rendering pending. *(Phase 5)*
 7. ✅ Operators can reproduce agent runtime behavior without depending on personal CLI state.
 
 ---

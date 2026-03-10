@@ -21,7 +21,7 @@ import type { AdapterExecutionResult, AdapterInvocationMeta, AdapterSessionCodec
 import { createLocalAgentJwt } from "../agent-auth-jwt.js";
 import { parseObject, asBoolean, asNumber, appendWithCap, MAX_EXCERPT_BYTES } from "../adapters/utils.js";
 import { costService } from "./costs.js";
-import { calculateTokenCostCents } from "@paperclipai/shared";
+import { calculateTokenCostCents, accumulateStderrStats, type StderrStats } from "@paperclipai/shared";
 import { isPaperclipWorktree, gitRepoRoot, removeGitWorktree, pruneGitWorktrees } from "@paperclipai/adapter-utils/git-worktree";
 import { secretService } from "./secrets.js";
 import { resolveDefaultAgentWorkspaceDir } from "../home-paths.js";
@@ -1213,6 +1213,7 @@ export function heartbeatService(db: Db) {
     let handle: RunLogHandle | null = null;
     let stdoutExcerpt = "";
     let stderrExcerpt = "";
+    let stderrStats: StderrStats = { benignCount: 0, errorCount: 0, totalCount: 0 };
 
     try {
       const startedAt = run.startedAt ?? new Date();
@@ -1272,7 +1273,10 @@ export function heartbeatService(db: Db) {
 
       const onLog = async (stream: "stdout" | "stderr", chunk: string) => {
         if (stream === "stdout") stdoutExcerpt = appendExcerpt(stdoutExcerpt, chunk);
-        if (stream === "stderr") stderrExcerpt = appendExcerpt(stderrExcerpt, chunk);
+        if (stream === "stderr") {
+          stderrExcerpt = appendExcerpt(stderrExcerpt, chunk);
+          stderrStats = accumulateStderrStats(chunk, stderrStats);
+        }
 
         if (handle) {
           await runLogStore.append(handle, {
@@ -1435,6 +1439,7 @@ export function heartbeatService(db: Db) {
           payload: {
             status,
             exitCode: adapterResult.exitCode,
+            stderrStats: stderrStats.totalCount > 0 ? stderrStats : undefined,
           },
         });
         await releaseIssueExecutionAndPromote(finalizedRun);
@@ -1519,6 +1524,7 @@ export function heartbeatService(db: Db) {
           stream: "system",
           level: "error",
           message,
+          payload: stderrStats.totalCount > 0 ? { stderrStats } : undefined,
         });
         await releaseIssueExecutionAndPromote(failedRun);
 

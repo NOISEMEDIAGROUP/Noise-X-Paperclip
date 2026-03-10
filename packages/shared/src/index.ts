@@ -232,6 +232,13 @@ export {
 } from "./validators/index.js";
 
 export { API_PREFIX, API } from "./api.js";
+export {
+  classifyStderrLine,
+  accumulateStderrStats,
+  BENIGN_STDERR_PATTERNS,
+  type StderrLineClass,
+  type StderrStats,
+} from "./utils/stderr-classifier.js";
 export { calculateTokenCostCents, getModelPricing } from "./pricing/models.js";
 export { normalizeAgentUrlKey, deriveAgentUrlKey, isUuidLike } from "./agent-url-key.js";
 export { deriveProjectUrlKey, normalizeProjectUrlKey } from "./project-url-key.js";
