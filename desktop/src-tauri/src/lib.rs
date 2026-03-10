@@ -484,6 +484,16 @@ pub fn run() {
                 .inner_size(WINDOW_INITIAL_WIDTH, WINDOW_INITIAL_HEIGHT)
                 .resizable(false)
                 .center()
+                .on_navigation(|url| {
+                    let host = url.host_str().unwrap_or("");
+                    let is_local = matches!(host, "localhost" | "127.0.0.1" | "0.0.0.0" | "");
+                    if !is_local {
+                        let _ = open::that(url.as_str());
+                        false // prevent webview navigation, open in system browser
+                    } else {
+                        true
+                    }
+                })
                 .build()?;
 
             if let Some(config) = load_config() {
