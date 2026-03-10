@@ -301,7 +301,7 @@ When you have successfully completed your current task, do not just stop. You mu
     const args = buildArgs(resumeSessionId);
     if (onMeta) {
       await onMeta({
-        adapterType: "codex_local",
+        adapterType: "ollama_local",
         command,
         cwd,
         commandNotes,
