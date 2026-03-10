@@ -52,7 +52,7 @@ function summarizeEntry(entry: TranscriptEntry): { text: string; tone: FeedTone 
   }
   if (entry.kind === "thinking") {
     const text = entry.text.trim();
-    return text ? { text: `[thinking] ${text}`, tone: "info" } : null;
+    return text ? { text: `[思考] ${text}`, tone: "info" } : null;
   }
   if (entry.kind === "tool_call") {
     return { text: `tool ${entry.name}`, tone: "tool" };
@@ -60,7 +60,7 @@ function summarizeEntry(entry: TranscriptEntry): { text: string; tone: FeedTone 
   if (entry.kind === "tool_result") {
     const base = entry.content.trim();
     return {
-      text: entry.isError ? `tool error: ${base}` : `tool result: ${base}`,
+      text: entry.isError ? `工具错误：${base}` : `工具结果：${base}`,
       tone: entry.isError ? "error" : "tool",
     };
   }
@@ -141,7 +141,7 @@ function parseStdoutChunk(
       if (last && last.streamingKind === "thinking") {
         last.text += text;
       } else {
-        summarized.push({ text: `[thinking] ${text}`, tone: "info", streamingKind: "thinking" });
+        summarized.push({ text: `[思考] ${text}`, tone: "info", streamingKind: "thinking" });
       }
       return;
     }
@@ -557,7 +557,7 @@ export function LiveRunWidget({ issueId, companyId }: LiveRunWidgetProps) {
               </span>
             </div>
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-muted-foreground">Run</span>
+              <span className="text-muted-foreground">运行</span>
               <Link
                 to={`/agents/${run.agentId}/runs/${run.id}`}
                 className="inline-flex items-center rounded-md border border-border bg-accent/40 px-2 py-1 font-mono text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
@@ -572,13 +572,13 @@ export function LiveRunWidget({ issueId, companyId }: LiveRunWidgetProps) {
                   className="inline-flex items-center gap-1 text-[10px] text-red-600 hover:text-red-500 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
                 >
                   <Square className="h-2 w-2" fill="currentColor" />
-                  {cancellingRunIds.has(run.id) ? "Stopping…" : "Stop"}
+                  {cancellingRunIds.has(run.id) ? "停止中…" : "停止"}
                 </button>
                 <Link
                   to={`/agents/${run.agentId}/runs/${run.id}`}
                   className="inline-flex items-center gap-1 text-[10px] text-cyan-600 hover:text-cyan-500 dark:text-cyan-300 dark:hover:text-cyan-200"
                 >
-                  Open run
+                  查看运行
                   <ExternalLink className="h-2.5 w-2.5" />
                 </Link>
               </div>
@@ -587,13 +587,13 @@ export function LiveRunWidget({ issueId, companyId }: LiveRunWidgetProps) {
         ))
       ) : (
         <div className="flex items-center px-3 py-2 border-b border-border/50">
-          <span className="text-xs font-medium text-muted-foreground">Recent run updates</span>
+          <span className="text-xs font-medium text-muted-foreground">最近运行更新</span>
         </div>
       )}
 
       <div ref={bodyRef} className="max-h-[220px] overflow-y-auto p-2 font-mono text-[11px] space-y-1">
         {recent.length === 0 && (
-          <div className="text-xs text-muted-foreground">Waiting for run output...</div>
+          <div className="text-xs text-muted-foreground">等待运行输出中...</div>
         )}
         {recent.map((item, index) => (
           <div

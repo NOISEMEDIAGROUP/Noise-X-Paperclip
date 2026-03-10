@@ -23,7 +23,7 @@ export function InlineEditor({
   onSave,
   as: Tag = "span",
   className,
-  placeholder = "Click to edit...",
+  placeholder = "点击编辑...",
   multiline = false,
   imageUploadHandler,
   mentions,

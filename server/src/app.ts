@@ -5,7 +5,15 @@ import { fileURLToPath } from "node:url";
 import type { Db } from "@paperclipai/db";
 import type { DeploymentExposure, DeploymentMode } from "@paperclipai/shared";
 import type { StorageService } from "./storage/types.js";
-import { httpLogger, errorHandler } from "./middleware/index.js";
+import {
+  apiEnvelopeMiddleware,
+  apiRateLimit,
+  createApiMetricsRegistry,
+  errorHandler,
+  httpLogger,
+  requestContextMiddleware,
+  securityBaseline,
+} from "./middleware/index.js";
 import { actorMiddleware } from "./middleware/auth.js";
 import { boardMutationGuard } from "./middleware/board-mutation-guard.js";
 import { privateHostnameGuard, resolvePrivateHostnameAllowSet } from "./middleware/private-hostname-guard.js";
@@ -24,6 +32,8 @@ import { sidebarBadgeRoutes } from "./routes/sidebar-badges.js";
 import { llmRoutes } from "./routes/llms.js";
 import { assetRoutes } from "./routes/assets.js";
 import { accessRoutes } from "./routes/access.js";
+import { openApiRoutes } from "./routes/openapi.js";
+import { metricsRoutes } from "./routes/metrics.js";
 import type { BetterAuthSessionResult } from "./auth/better-auth.js";
 
 type UiMode = "none" | "static" | "vite-dev";
@@ -39,6 +49,7 @@ export async function createApp(
     bindHost: string;
     authReady: boolean;
     companyDeletionEnabled: boolean;
+    authPublicBaseUrl?: string;
     betterAuthHandler?: express.RequestHandler;
     resolveSession?: (req: ExpressRequest) => Promise<BetterAuthSessionResult | null>;
   },
@@ -46,6 +57,14 @@ export async function createApp(
   const app = express();
 
   app.use(express.json());
+  app.use(requestContextMiddleware());
+  app.use(
+    securityBaseline({
+      allowedHostnames: opts.allowedHostnames,
+      bindHost: opts.bindHost,
+      authPublicBaseUrl: opts.authPublicBaseUrl,
+    }),
+  );
   app.use(httpLogger);
   const privateHostnameGateEnabled =
     opts.deploymentMode === "authenticated" && opts.deploymentExposure === "private";
@@ -66,6 +85,10 @@ export async function createApp(
       resolveSession: opts.resolveSession,
     }),
   );
+  app.use(apiRateLimit());
+  app.use(apiEnvelopeMiddleware());
+  const apiMetrics = createApiMetricsRegistry();
+  app.use(apiMetrics.middleware);
   app.get("/api/auth/get-session", (req, res) => {
     if (req.actor.type !== "board" || !req.actor.userId) {
       res.status(401).json({ error: "Unauthorized" });
@@ -91,6 +114,8 @@ export async function createApp(
   // Mount API routes
   const api = Router();
   api.use(boardMutationGuard());
+  api.use(openApiRoutes({ publicBaseUrl: opts.authPublicBaseUrl }));
+  api.use(metricsRoutes({ deploymentMode: opts.deploymentMode, renderPrometheus: apiMetrics.renderPrometheus }));
   api.use(
     "/health",
     healthRoutes(db, {

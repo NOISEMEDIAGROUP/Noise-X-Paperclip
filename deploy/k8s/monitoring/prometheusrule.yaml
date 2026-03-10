@@ -1,0 +1,52 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: paperclip-alerts
+  namespace: paperclip
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: paperclip.availability
+      rules:
+        - alert: PaperclipHighErrorRate
+          expr: |
+            (
+              sum(rate(paperclip_http_request_errors_total{route!="/api/health"}[5m]))
+              /
+              clamp_min(sum(rate(paperclip_http_requests_total{route!="/api/health"}[5m])), 1)
+            ) > 0.05
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Paperclip error rate > 5%"
+            description: "Error rate has been above 5% for 10 minutes."
+
+        - alert: PaperclipVeryHighErrorRate
+          expr: |
+            (
+              sum(rate(paperclip_http_request_errors_total{route!="/api/health"}[5m]))
+              /
+              clamp_min(sum(rate(paperclip_http_requests_total{route!="/api/health"}[5m])), 1)
+            ) > 0.15
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Paperclip error rate > 15%"
+            description: "Critical error-rate regression detected."
+
+        - alert: PaperclipHighLatencyAvg
+          expr: |
+            (
+              sum(rate(paperclip_http_request_duration_ms_sum{route!="/api/health"}[5m]))
+              /
+              clamp_min(sum(rate(paperclip_http_request_duration_ms_count{route!="/api/health"}[5m])), 1)
+            ) > 1000
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Paperclip average latency > 1s"
+            description: "Average API latency has exceeded 1000ms for 10 minutes."

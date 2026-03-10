@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: paperclip-config
+  namespace: paperclip
+data:
+  NODE_ENV: "production"
+  HOST: "0.0.0.0"
+  PORT: "3100"
+  PAPERCLIP_DEPLOYMENT_MODE: "authenticated"
+  PAPERCLIP_DEPLOYMENT_EXPOSURE: "private"
+  PAPERCLIP_RATE_LIMIT_ENABLED: "true"
+  PAPERCLIP_RATE_LIMIT_PER_MINUTE: "240"
+  PAPERCLIP_API_ENVELOPE_DEFAULT: "true"
+  PAPERCLIP_METRICS_ALLOW_ANONYMOUS: "false"

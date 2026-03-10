@@ -39,6 +39,7 @@ export function Layout() {
   const lastMainScrollTop = useRef(0);
   const [mobileNavVisible, setMobileNavVisible] = useState(true);
   const nextTheme = theme === "dark" ? "light" : "dark";
+  const nextThemeLabel = nextTheme === "light" ? "浅色" : "深色";
   const { data: health } = useQuery({
     queryKey: queryKeys.health,
     queryFn: () => healthApi.get(),
@@ -189,7 +190,7 @@ export function Layout() {
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[200] focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        Skip to Main Content
+        跳转到主内容
       </a>
       {/* Mobile backdrop */}
       {isMobile && sidebarOpen && (
@@ -197,7 +198,7 @@ export function Layout() {
           type="button"
           className="fixed inset-0 z-40 bg-black/50"
           onClick={() => setSidebarOpen(false)}
-          aria-label="Close sidebar"
+          aria-label="关闭侧边栏"
         />
       )}
 
@@ -217,7 +218,7 @@ export function Layout() {
             <div className="flex items-center gap-1">
               <SidebarNavItem
                 to="/docs"
-                label="Documentation"
+                label="文档"
                 icon={BookOpen}
                 className="flex-1 min-w-0"
               />
@@ -227,8 +228,8 @@ export function Layout() {
                 size="icon-sm"
                 className="text-muted-foreground shrink-0"
                 onClick={toggleTheme}
-                aria-label={`Switch to ${nextTheme} mode`}
-                title={`Switch to ${nextTheme} mode`}
+                aria-label={`切换到${nextThemeLabel}模式`}
+                title={`切换到${nextThemeLabel}模式`}
               >
                 {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
@@ -252,7 +253,7 @@ export function Layout() {
             <div className="flex items-center gap-1">
               <SidebarNavItem
                 to="/docs"
-                label="Documentation"
+                label="文档"
                 icon={BookOpen}
                 className="flex-1 min-w-0"
               />
@@ -262,8 +263,8 @@ export function Layout() {
                 size="icon-sm"
                 className="text-muted-foreground shrink-0"
                 onClick={toggleTheme}
-                aria-label={`Switch to ${nextTheme} mode`}
-                title={`Switch to ${nextTheme} mode`}
+                aria-label={`切换到${nextThemeLabel}模式`}
+                title={`切换到${nextThemeLabel}模式`}
               >
                 {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>

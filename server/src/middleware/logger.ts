@@ -58,17 +58,23 @@ export const httpLogger = pinoHttp({
     return `${req.method} ${req.url} ${res.statusCode} — ${errMsg}`;
   },
   customProps(req, res) {
+    const props: Record<string, unknown> = {};
+    if ((req as any).traceId) {
+      props.traceId = (req as any).traceId;
+    }
+
     if (res.statusCode >= 400) {
       const ctx = (res as any).__errorContext;
       if (ctx) {
         return {
+          ...props,
           errorContext: ctx.error,
           reqBody: ctx.reqBody,
           reqParams: ctx.reqParams,
           reqQuery: ctx.reqQuery,
         };
       }
-      const props: Record<string, unknown> = {};
+
       const { body, params, query } = req as any;
       if (body && typeof body === "object" && Object.keys(body).length > 0) {
         props.reqBody = body;
@@ -82,8 +88,8 @@ export const httpLogger = pinoHttp({
       if ((req as any).route?.path) {
         props.routePath = (req as any).route.path;
       }
-      return props;
     }
-    return {};
+
+    return props;
   },
 });

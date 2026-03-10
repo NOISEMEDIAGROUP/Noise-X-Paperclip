@@ -17,11 +17,11 @@ import { ExternalLink, Github, Plus, Trash2, X } from "lucide-react";
 import { ChoosePathButton } from "./PathInstructionsModal";
 
 const PROJECT_STATUSES = [
-  { value: "backlog", label: "Backlog" },
-  { value: "planned", label: "Planned" },
-  { value: "in_progress", label: "In Progress" },
-  { value: "completed", label: "Completed" },
-  { value: "cancelled", label: "Cancelled" },
+  { value: "backlog", label: "待办池" },
+  { value: "planned", label: "已规划" },
+  { value: "in_progress", label: "进行中" },
+  { value: "completed", label: "已完成" },
+  { value: "cancelled", label: "已取消" },
 ];
 
 interface ProjectPropertiesProps {
@@ -163,7 +163,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
   const deriveWorkspaceNameFromPath = (value: string) => {
     const normalized = value.trim().replace(/[\\/]+$/, "");
     const segments = normalized.split(/[\\/]/).filter(Boolean);
-    return segments[segments.length - 1] ?? "Local folder";
+    return segments[segments.length - 1] ?? "本地目录";
   };
 
   const deriveWorkspaceNameFromRepo = (value: string) => {
@@ -171,9 +171,9 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
       const parsed = new URL(value);
       const segments = parsed.pathname.split("/").filter(Boolean);
       const repo = segments[segments.length - 1]?.replace(/\.git$/i, "") ?? "";
-      return repo || "GitHub repo";
+      return repo || "GitHub 仓库";
     } catch {
-      return "GitHub repo";
+      return "GitHub 仓库";
     }
   };
 
@@ -194,7 +194,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
   const submitLocalWorkspace = () => {
     const cwd = workspaceCwd.trim();
     if (!isAbsolutePath(cwd)) {
-      setWorkspaceError("Local folder must be a full absolute path.");
+      setWorkspaceError("本地目录必须为完整绝对路径。");
       return;
     }
     setWorkspaceError(null);
@@ -207,7 +207,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
   const submitRepoWorkspace = () => {
     const repoUrl = workspaceRepoUrl.trim();
     if (!isGitHubRepoUrl(repoUrl)) {
-      setWorkspaceError("Repo workspace must use a valid GitHub repo URL.");
+      setWorkspaceError("仓库工作区必须使用有效的 GitHub 仓库 URL。");
       return;
     }
     setWorkspaceError(null);
@@ -221,8 +221,8 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
   const clearLocalWorkspace = (workspace: Project["workspaces"][number]) => {
     const confirmed = window.confirm(
       workspace.repoUrl
-        ? "Clear local folder from this workspace?"
-        : "Delete this workspace local folder?",
+        ? "要从此工作区移除本地目录吗？"
+        : "要删除此工作区的本地目录吗？",
     );
     if (!confirmed) return;
     if (workspace.repoUrl) {
@@ -239,8 +239,8 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
     const hasLocalFolder = Boolean(workspace.cwd && workspace.cwd !== REPO_ONLY_CWD_SENTINEL);
     const confirmed = window.confirm(
       hasLocalFolder
-        ? "Clear GitHub repo from this workspace?"
-        : "Delete this workspace repo?",
+        ? "要从此工作区移除 GitHub 仓库吗？"
+        : "要删除此工作区仓库吗？",
     );
     if (!confirmed) return;
     if (hasLocalFolder) {
@@ -256,7 +256,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
   return (
     <div className="space-y-4">
       <div className="space-y-1">
-        <PropertyRow label="Status">
+        <PropertyRow label="状态">
           {onUpdate ? (
             <ProjectStatusPicker
               status={project.status}
@@ -267,16 +267,16 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
           )}
         </PropertyRow>
         {project.leadAgentId && (
-          <PropertyRow label="Lead">
+          <PropertyRow label="负责人">
             <span className="text-sm font-mono">{project.leadAgentId.slice(0, 8)}</span>
           </PropertyRow>
         )}
         <div className="py-1.5">
           <div className="flex items-start justify-between gap-2">
-            <span className="text-xs text-muted-foreground">Goals</span>
+            <span className="text-xs text-muted-foreground">目标</span>
             <div className="flex flex-col items-end gap-1.5">
               {linkedGoals.length === 0 ? (
-                <span className="text-sm text-muted-foreground">None</span>
+                <span className="text-sm text-muted-foreground">无</span>
               ) : (
                 <div className="flex flex-wrap justify-end gap-1.5 max-w-[220px]">
                   {linkedGoals.map((goal) => (
@@ -292,7 +292,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
                           className="text-muted-foreground hover:text-foreground"
                           type="button"
                           onClick={() => removeGoal(goal.id)}
-                          aria-label={`Remove goal ${goal.title}`}
+                          aria-label={`移除目标 ${goal.title}`}
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -311,13 +311,13 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
                       disabled={availableGoals.length === 0}
                     >
                       <Plus className="h-3 w-3 mr-1" />
-                      Goal
+                      目标
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-56 p-1" align="end">
                     {availableGoals.length === 0 ? (
                       <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                        All goals linked.
+                        所有目标均已关联。
                       </div>
                     ) : (
                       availableGoals.map((goal) => (
@@ -337,7 +337,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
           </div>
         </div>
         {project.targetDate && (
-          <PropertyRow label="Target Date">
+          <PropertyRow label="目标日期">
             <span className="text-sm">{formatDate(project.targetDate)}</span>
           </PropertyRow>
         )}
@@ -348,25 +348,25 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
       <div className="space-y-1">
         <div className="py-1.5 space-y-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>Workspaces</span>
+            <span>工作区</span>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
                   className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-border text-[10px] text-muted-foreground hover:text-foreground"
-                  aria-label="Workspaces help"
+                  aria-label="工作区说明"
                 >
                   ?
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top">
-                Workspaces give your agents hints about where the work is
+                工作区会为智能体提供代码/任务所在位置的线索
               </TooltipContent>
             </Tooltip>
           </div>
           {workspaces.length === 0 ? (
             <p className="rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-              No workspace configured.
+              尚未配置工作区。
             </p>
           ) : (
             <div className="space-y-1">
@@ -379,7 +379,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
                         variant="ghost"
                         size="icon-xs"
                         onClick={() => clearLocalWorkspace(workspace)}
-                        aria-label="Delete local folder"
+                        aria-label="删除本地目录"
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
@@ -401,7 +401,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
                         variant="ghost"
                         size="icon-xs"
                         onClick={() => clearRepoWorkspace(workspace)}
-                        aria-label="Delete workspace repo"
+                        aria-label="删除工作区仓库"
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
@@ -421,7 +421,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
                 setWorkspaceError(null);
               }}
             >
-              Add workspace local folder
+              添加工作区本地目录
             </Button>
             <Button
               variant="outline"
@@ -432,7 +432,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
                 setWorkspaceError(null);
               }}
             >
-              Add workspace repo
+              添加工作区仓库
             </Button>
           </div>
           {workspaceMode === "local" && (
@@ -442,7 +442,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
                   className="w-full rounded border border-border bg-transparent px-2 py-1 text-xs font-mono outline-none"
                   value={workspaceCwd}
                   onChange={(e) => setWorkspaceCwd(e.target.value)}
-                  placeholder="/absolute/path/to/workspace"
+                  placeholder="/workspace/绝对路径"
                 />
                 <ChoosePathButton />
               </div>
@@ -454,7 +454,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
                   disabled={!workspaceCwd.trim() || createWorkspace.isPending}
                   onClick={submitLocalWorkspace}
                 >
-                  Save
+                  保存
                 </Button>
                 <Button
                   variant="ghost"
@@ -466,7 +466,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
                     setWorkspaceError(null);
                   }}
                 >
-                  Cancel
+                  取消
                 </Button>
               </div>
             </div>
@@ -487,7 +487,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
                   disabled={!workspaceRepoUrl.trim() || createWorkspace.isPending}
                   onClick={submitRepoWorkspace}
                 >
-                  Save
+                  保存
                 </Button>
                 <Button
                   variant="ghost"
@@ -499,7 +499,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
                     setWorkspaceError(null);
                   }}
                 >
-                  Cancel
+                  取消
                 </Button>
               </div>
             </div>
@@ -508,22 +508,22 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
             <p className="text-xs text-destructive">{workspaceError}</p>
           )}
           {createWorkspace.isError && (
-            <p className="text-xs text-destructive">Failed to save workspace.</p>
+            <p className="text-xs text-destructive">保存工作区失败。</p>
           )}
           {removeWorkspace.isError && (
-            <p className="text-xs text-destructive">Failed to delete workspace.</p>
+            <p className="text-xs text-destructive">删除工作区失败。</p>
           )}
           {updateWorkspace.isError && (
-            <p className="text-xs text-destructive">Failed to update workspace.</p>
+            <p className="text-xs text-destructive">更新工作区失败。</p>
           )}
         </div>
 
         <Separator />
 
-        <PropertyRow label="Created">
+        <PropertyRow label="创建时间">
           <span className="text-sm">{formatDate(project.createdAt)}</span>
         </PropertyRow>
-        <PropertyRow label="Updated">
+        <PropertyRow label="更新时间">
           <span className="text-sm">{formatDate(project.updatedAt)}</span>
         </PropertyRow>
       </div>

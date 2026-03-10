@@ -1,0 +1,93 @@
+name: Deploy Kustomize (Template)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target overlay (staging|production|canary)"
+        required: true
+        default: "staging"
+      image_tag:
+        description: "Container image tag"
+        required: true
+        default: "latest"
+      image_repository:
+        description: "Image repository (optional, defaults to ghcr.io/<owner>/<repo>)"
+        required: false
+        default: ""
+      namespace:
+        description: "Namespace override (optional, inferred from environment when empty)"
+        required: false
+        default: ""
+      kube_context:
+        description: "kubectl context name (optional)"
+        required: false
+        default: ""
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Setup kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      - name: Validate overlay
+        run: |
+          case "${{ github.event.inputs.environment }}" in
+            staging|production|canary) ;;
+            *) echo "Unsupported environment"; exit 1 ;;
+          esac
+
+      - name: Render manifests
+        run: |
+          environment="${{ github.event.inputs.environment }}"
+          overlay="deploy/k8s/overlays/${environment}"
+
+          image_repo="${{ github.event.inputs.image_repository }}"
+          if [ -z "$image_repo" ]; then
+            image_repo="ghcr.io/${{ github.repository }}"
+          fi
+          image_tag="${{ github.event.inputs.image_tag }}"
+
+          namespace_override="${{ github.event.inputs.namespace }}"
+          if [ -z "$namespace_override" ]; then
+            case "$environment" in
+              staging) namespace_override="paperclip-staging" ;;
+              production|canary) namespace_override="paperclip" ;;
+              *) namespace_override="paperclip" ;;
+            esac
+          fi
+
+          kustomize build "$overlay" \
+            | sed -E "s|image:[[:space:]]*[^[:space:]]+|image: ${image_repo}:${image_tag}|g" \
+            > /tmp/manifests.yaml
+
+          sed -E -i.bak "s|namespace:[[:space:]]*[a-z0-9-]+|namespace: ${namespace_override}|g" /tmp/manifests.yaml
+
+          echo "Resolved image: ${image_repo}:${image_tag}"
+          echo "Resolved namespace: ${namespace_override}"
+          head -n 140 /tmp/manifests.yaml
+
+      - name: Apply manifests
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG_DATA }}
+        run: |
+          if [ -z "$KUBECONFIG_DATA" ]; then
+            echo "KUBECONFIG_DATA secret is required"
+            exit 1
+          fi
+          echo "$KUBECONFIG_DATA" | base64 -d > /tmp/kubeconfig
+          export KUBECONFIG=/tmp/kubeconfig
+
+          kube_context="${{ github.event.inputs.kube_context }}"
+          if [ -n "$kube_context" ]; then
+            kubectl config use-context "$kube_context"
+          fi
+
+          kubectl apply -f /tmp/manifests.yaml

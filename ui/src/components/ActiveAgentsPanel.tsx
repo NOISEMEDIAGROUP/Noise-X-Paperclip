@@ -41,15 +41,15 @@ function summarizeEntry(entry: TranscriptEntry): { text: string; tone: FeedTone 
   }
   if (entry.kind === "thinking") {
     const text = entry.text.trim();
-    return text ? { text: `[thinking] ${text}`, tone: "info" } : null;
+    return text ? { text: `[思考] ${text}`, tone: "info" } : null;
   }
   if (entry.kind === "tool_call") {
-    return { text: `tool ${entry.name}`, tone: "tool" };
+    return { text: `工具 ${entry.name}`, tone: "tool" };
   }
   if (entry.kind === "tool_result") {
     const base = entry.content.trim();
     return {
-      text: entry.isError ? `tool error: ${base}` : `tool result: ${base}`,
+      text: entry.isError ? `工具错误：${base}` : `工具结果：${base}`,
       tone: entry.isError ? "error" : "tool",
     };
   }
@@ -130,7 +130,7 @@ function parseStdoutChunk(
       if (last && last.streamingKind === "thinking") {
         last.text += text;
       } else {
-        summarized.push({ text: `[thinking] ${text}`, tone: "info", streamingKind: "thinking" });
+        summarized.push({ text: `[思考] ${text}`, tone: "info", streamingKind: "thinking" });
       }
       return;
     }
@@ -383,7 +383,7 @@ export function ActiveAgentsPanel({ companyId }: ActiveAgentsPanelProps) {
       </h3>
       {runs.length === 0 ? (
         <div className="border border-border rounded-lg p-4">
-          <p className="text-sm text-muted-foreground">No recent agent runs.</p>
+          <p className="text-sm text-muted-foreground">暂无最近智能体运行。</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 sm:gap-4">
@@ -444,7 +444,7 @@ function AgentRunCard({
           )}
           <Identity name={run.agentName} size="sm" />
           {isActive && (
-            <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400">Live</span>
+            <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400">实时</span>
           )}
         </div>
         <Link
@@ -475,11 +475,11 @@ function AgentRunCard({
       {/* Feed body */}
       <div ref={bodyRef} className="flex-1 max-h-[140px] overflow-y-auto p-2 font-mono text-[11px] space-y-1">
         {isActive && recent.length === 0 && (
-          <div className="text-xs text-muted-foreground">Waiting for output...</div>
+          <div className="text-xs text-muted-foreground">等待输出中...</div>
         )}
         {!isActive && recent.length === 0 && (
           <div className="text-xs text-muted-foreground">
-            {run.finishedAt ? `Finished ${relativeTime(run.finishedAt)}` : `Started ${relativeTime(run.createdAt)}`}
+            {run.finishedAt ? `结束于 ${relativeTime(run.finishedAt)}` : `开始于 ${relativeTime(run.createdAt)}`}
           </div>
         )}
         {recent.map((item, index) => (

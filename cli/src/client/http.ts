@@ -1,5 +1,14 @@
 import { URL } from "node:url";
 
+const ENVELOPE_HEADER = "x-paperclip-api-envelope";
+
+type ApiEnvelope<T> = {
+  trace_id: string;
+  code: number;
+  message: string;
+  data: T;
+};
+
 export class ApiRequestError extends Error {
   status: number;
   details?: unknown;
@@ -39,17 +48,25 @@ export class PaperclipApiClient {
   }
 
   post<T>(path: string, body?: unknown, opts?: RequestOptions): Promise<T | null> {
-    return this.request<T>(path, {
-      method: "POST",
-      body: body === undefined ? undefined : JSON.stringify(body),
-    }, opts);
+    return this.request<T>(
+      path,
+      {
+        method: "POST",
+        body: body === undefined ? undefined : JSON.stringify(body),
+      },
+      opts,
+    );
   }
 
   patch<T>(path: string, body?: unknown, opts?: RequestOptions): Promise<T | null> {
-    return this.request<T>(path, {
-      method: "PATCH",
-      body: body === undefined ? undefined : JSON.stringify(body),
-    }, opts);
+    return this.request<T>(
+      path,
+      {
+        method: "PATCH",
+        body: body === undefined ? undefined : JSON.stringify(body),
+      },
+      opts,
+    );
   }
 
   delete<T>(path: string, opts?: RequestOptions): Promise<T | null> {
@@ -61,6 +78,7 @@ export class PaperclipApiClient {
 
     const headers: Record<string, string> = {
       accept: "application/json",
+      [ENVELOPE_HEADER]: "v1",
       ...toStringRecord(init.headers),
     };
 
@@ -85,20 +103,24 @@ export class PaperclipApiClient {
       return null;
     }
 
+    const parsedBody = await readBody(response);
+
     if (!response.ok) {
-      throw await toApiError(response);
+      throw toApiError(response.status, parsedBody);
     }
 
-    if (response.status === 204) {
+    if (response.status === 204 || parsedBody == null) {
       return null;
     }
 
-    const text = await response.text();
-    if (!text.trim()) {
-      return null;
+    if (isApiEnvelope<T>(parsedBody)) {
+      if (parsedBody.code !== 0) {
+        throw new ApiRequestError(response.status, parsedBody.message || `Request failed with status ${response.status}`, parsedBody.data, parsedBody);
+      }
+      return parsedBody.data;
     }
 
-    return safeParseJson(text) as T;
+    return parsedBody as T;
   }
 }
 
@@ -119,21 +141,41 @@ function safeParseJson(text: string): unknown {
   }
 }
 
-async function toApiError(response: Response): Promise<ApiRequestError> {
+async function readBody(response: Response): Promise<unknown> {
   const text = await response.text();
-  const parsed = safeParseJson(text);
+  if (!text.trim()) return null;
+  return safeParseJson(text);
+}
 
-  if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-    const body = parsed as Record<string, unknown>;
-    const message =
-      (typeof body.error === "string" && body.error.trim()) ||
-      (typeof body.message === "string" && body.message.trim()) ||
-      `Request failed with status ${response.status}`;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
-    return new ApiRequestError(response.status, message, body.details, parsed);
+function isApiEnvelope<T>(value: unknown): value is ApiEnvelope<T> {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.trace_id === "string" &&
+    typeof value.code === "number" &&
+    typeof value.message === "string" &&
+    Object.prototype.hasOwnProperty.call(value, "data")
+  );
+}
+
+function toApiError(status: number, parsed: unknown): ApiRequestError {
+  if (isApiEnvelope(parsed)) {
+    return new ApiRequestError(status, parsed.message || `Request failed with status ${status}`, parsed.data, parsed);
   }
 
-  return new ApiRequestError(response.status, `Request failed with status ${response.status}`, undefined, parsed);
+  if (isRecord(parsed)) {
+    const message =
+      (typeof parsed.error === "string" && parsed.error.trim()) ||
+      (typeof parsed.message === "string" && parsed.message.trim()) ||
+      `Request failed with status ${status}`;
+
+    return new ApiRequestError(status, message, parsed.details, parsed);
+  }
+
+  return new ApiRequestError(status, `Request failed with status ${status}`, undefined, parsed);
 }
 
 function toStringRecord(headers: HeadersInit | undefined): Record<string, string> {
@@ -144,7 +186,5 @@ function toStringRecord(headers: HeadersInit | undefined): Record<string, string
   if (headers instanceof Headers) {
     return Object.fromEntries(headers.entries());
   }
-  return Object.fromEntries(
-    Object.entries(headers).map(([key, value]) => [key, String(value)]),
-  );
+  return Object.fromEntries(Object.entries(headers).map(([key, value]) => [key, String(value)]));
 }

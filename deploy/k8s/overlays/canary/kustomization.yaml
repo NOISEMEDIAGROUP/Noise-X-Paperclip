@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base/namespace.yaml
+  - ../../base/configmap.yaml
+  - ../../canary
+  - ../../monitoring
+
+namespace: paperclip
+
+images:
+  - name: ghcr.io/your-org/paperclip
+    newTag: canary
+
+patches:
+  - path: patch-configmap.yaml

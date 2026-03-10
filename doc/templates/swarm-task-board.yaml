@@ -1,0 +1,60 @@
+version: 1
+run_id: example-20260310T000000Z
+
+agents:
+  - id: architect-lead
+    role: architecture + integration governance
+  - id: security-reviewer
+    role: authz/authn and abuse prevention
+  - id: backend-executor
+    role: server/api implementation
+  - id: frontend-executor
+    role: ui/client integration
+  - id: data-executor
+    role: db/shared contract synchronization
+  - id: qa-release
+    role: verification and release gating
+
+tasks:
+  - id: A-001
+    title: Topology and trust-boundary analysis
+    owner_agent: architect-lead
+    status: pending
+    depends_on: []
+    scope_paths:
+      - doc/
+      - server/
+      - ui/
+      - packages/
+    acceptance_checks:
+      - analysis.md contains topology/auth/data/dependency/risk sections
+      - migration strategy includes rollback path
+
+  - id: A-002
+    title: Security risk review for auth and company boundaries
+    owner_agent: security-reviewer
+    status: pending
+    depends_on:
+      - A-001
+    scope_paths:
+      - server/src/
+      - packages/shared/src/
+    acceptance_checks:
+      - mutation routes enforce company boundary
+      - privileged operations have explicit guard rails
+
+  - id: A-003
+    title: Integration and verification gate
+    owner_agent: qa-release
+    status: pending
+    depends_on:
+      - A-002
+    scope_paths:
+      - server/
+      - ui/
+      - cli/
+      - packages/
+    acceptance_checks:
+      - pnpm -r typecheck passes
+      - pnpm build passes
+      - test execution result documented (pass or constrained)

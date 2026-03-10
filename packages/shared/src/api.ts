@@ -17,4 +17,6 @@ export const API = {
   joinRequests: `${API_PREFIX}/join-requests`,
   members: `${API_PREFIX}/members`,
   admin: `${API_PREFIX}/admin`,
+  openApi: `${API_PREFIX}/openapi.json`,
+  metrics: `${API_PREFIX}/metrics`,
 } as const;

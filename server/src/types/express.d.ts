@@ -3,6 +3,7 @@ export {};
 declare global {
   namespace Express {
     interface Request {
+      traceId?: string;
       actor: {
         type: "board" | "agent" | "none";
         userId?: string;

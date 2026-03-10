@@ -54,21 +54,21 @@ function OverviewContent({
         onSave={(description) => onUpdate({ description })}
         as="p"
         className="text-sm text-muted-foreground"
-        placeholder="Add a description..."
+        placeholder="添加描述..."
         multiline
         imageUploadHandler={imageUploadHandler}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
         <div>
-          <span className="text-muted-foreground">Status</span>
+          <span className="text-muted-foreground">状态</span>
           <div className="mt-1">
             <StatusBadge status={project.status} />
           </div>
         </div>
         {project.targetDate && (
           <div>
-            <span className="text-muted-foreground">Target Date</span>
+            <span className="text-muted-foreground">目标日期</span>
             <p>{project.targetDate}</p>
           </div>
         )}
@@ -106,7 +106,7 @@ function ColorPicker({
         onClick={() => setOpen(!open)}
         className="shrink-0 h-5 w-5 rounded-md cursor-pointer hover:ring-2 hover:ring-foreground/20 transition-[box-shadow]"
         style={{ backgroundColor: currentColor }}
-        aria-label="Change project color"
+        aria-label="修改项目颜色"
       />
       {open && (
         <div className="absolute top-full left-0 mt-2 p-2 bg-popover border border-border rounded-lg shadow-lg z-50 w-max">
@@ -124,7 +124,7 @@ function ColorPicker({
                     : "hover:ring-2 hover:ring-foreground/30"
                 }`}
                 style={{ backgroundColor: color }}
-                aria-label={`Select color ${color}`}
+                aria-label={`选择颜色 ${color}`}
               />
             ))}
           </div>
@@ -245,15 +245,15 @@ export function ProjectDetail() {
 
   const uploadImage = useMutation({
     mutationFn: async (file: File) => {
-      if (!resolvedCompanyId) throw new Error("No company selected");
+      if (!resolvedCompanyId) throw new Error("未选择公司");
       return assetsApi.uploadImage(resolvedCompanyId, file, `projects/${projectLookupRef || "draft"}`);
     },
   });
 
   useEffect(() => {
     setBreadcrumbs([
-      { label: "Projects", href: "/projects" },
-      { label: project?.name ?? routeProjectRef ?? "Project" },
+      { label: "项目", href: "/projects" },
+      { label: project?.name ?? routeProjectRef ?? "项目" },
     ]);
   }, [setBreadcrumbs, project, routeProjectRef]);
 
@@ -319,7 +319,7 @@ export function ProjectDetail() {
           size="icon-xs"
           className="ml-auto md:hidden shrink-0"
           onClick={() => setMobilePropsOpen(true)}
-          title="Properties"
+          title="属性"
         >
           <SlidersHorizontal className="h-4 w-4" />
         </Button>
@@ -331,7 +331,7 @@ export function ProjectDetail() {
             panelVisible ? "opacity-0 pointer-events-none w-0 overflow-hidden" : "opacity-100",
           )}
           onClick={() => setPanelVisible(true)}
-          title="Show properties"
+          title="显示属性"
         >
           <SlidersHorizontal className="h-4 w-4" />
         </Button>
@@ -347,7 +347,7 @@ export function ProjectDetail() {
           }`}
           onClick={() => handleTabChange("overview")}
         >
-          Overview
+          概览
         </button>
         <button
           className={`px-3 py-2 text-sm font-medium transition-colors border-b-2 ${
@@ -357,7 +357,7 @@ export function ProjectDetail() {
           }`}
           onClick={() => handleTabChange("list")}
         >
-          List
+          列表
         </button>
       </div>
 
@@ -381,7 +381,7 @@ export function ProjectDetail() {
       <Sheet open={mobilePropsOpen} onOpenChange={setMobilePropsOpen}>
         <SheetContent side="bottom" className="max-h-[85dvh] pb-[env(safe-area-inset-bottom)]">
           <SheetHeader>
-            <SheetTitle className="text-sm">Properties</SheetTitle>
+            <SheetTitle className="text-sm">属性</SheetTitle>
           </SheetHeader>
           <ScrollArea className="flex-1 overflow-y-auto">
             <div className="px-4 pb-4">

@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: paperclip-canary-analysis
+  namespace: paperclip
+spec:
+  metrics:
+    - name: error-rate
+      interval: 1m
+      successCondition: result[0] < 0.05
+      failureLimit: 2
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc.cluster.local:9090
+          query: |
+            sum(rate(paperclip_http_request_errors_total{route!="/api/health"}[5m]))
+            /
+            clamp_min(sum(rate(paperclip_http_requests_total{route!="/api/health"}[5m])), 1)

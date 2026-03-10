@@ -314,3 +314,130 @@ Networking behavior for this smoke script:
 - auto-detects and prints a Paperclip host URL reachable from inside OpenClaw Docker
 - default container-side host alias is `host.docker.internal` (override with `PAPERCLIP_HOST_FROM_CONTAINER` / `PAPERCLIP_HOST_PORT`)
 - if Paperclip rejects container hostnames in authenticated/private mode, allow `host.docker.internal` via `pnpm paperclipai allowed-hostname host.docker.internal` and restart Paperclip
+
+## API Envelope / Trace ID
+
+Paperclip now supports the unified response envelope:
+
+```json
+{
+  "trace_id": "...",
+  "code": 0,
+  "message": "ok",
+  "data": {}
+}
+```
+
+Enable client-side envelope decoding by sending:
+
+```http
+x-paperclip-api-envelope: v1
+```
+
+Notes:
+
+- UI and CLI clients already send this header by default.
+- Server always emits `x-trace-id` for request correlation.
+
+## OpenAPI Contract
+
+OpenAPI JSON is exposed at:
+
+- `GET /api/openapi.json`
+
+Simple docs landing page:
+
+- `GET /api/docs`
+
+## Prometheus Metrics
+
+Prometheus exposition endpoint:
+
+- `GET /api/metrics`
+
+In `authenticated` mode, this endpoint requires board actor auth.
+
+Key metrics:
+
+- `paperclip_http_requests_total`
+- `paperclip_http_request_errors_total`
+- `paperclip_http_request_duration_ms_sum`
+- `paperclip_http_metrics_series`
+
+## Rate Limiting
+
+API rate limiting is enabled by default outside test mode.
+
+Environment flags:
+
+- `PAPERCLIP_RATE_LIMIT_ENABLED=true|false`
+- `PAPERCLIP_RATE_LIMIT_PER_MINUTE=<number>`
+
+## Kubernetes / Canary Templates
+
+Production-grade deployment templates are provided under:
+
+- `deploy/k8s/base/`
+- `deploy/k8s/canary/`
+
+Canary deployment workflow template:
+
+- `.github/workflows/deploy-canary-template.yml`
+
+It expects:
+
+- `KUBECONFIG_DATA` (base64 kubeconfig secret)
+- image tag input for rollout
+
+Metrics auth options:
+
+- `PAPERCLIP_METRICS_ALLOW_ANONYMOUS=true` for private-network scrapes
+- `PAPERCLIP_METRICS_BEARER_TOKEN=<token>` to protect scrape endpoint with bearer token
+
+Kubernetes deploy quickstart (kustomize):
+
+```sh
+kubectl apply -k deploy/k8s/overlays/staging
+kubectl apply -k deploy/k8s/overlays/production
+kubectl apply -k deploy/k8s/overlays/canary
+```
+
+See full runbook: `deploy/k8s/README.md`.
+
+GitHub Actions deploy templates now auto-resolve image repository to current repo (`ghcr.io/<owner>/<repo>`) when `image_repository` is left empty.
+They also support optional `namespace` and `kube_context` inputs for multi-cluster setups.
+
+## Swarm Delivery Workflow
+
+Paperclip now includes a file-based swarm workflow to support multi-agent delivery across analysis, planning, assignment, aggregation, integration, testing, and release handoff.
+
+Primary playbook:
+
+- `doc/SWARM-DELIVERY.md`
+
+Templates:
+
+- `doc/templates/swarm-analysis.md`
+- `doc/templates/swarm-plan.md`
+- `doc/templates/swarm-task-board.yaml`
+- `doc/templates/swarm-agent-report.md`
+- `doc/templates/swarm-aggregation-report.md`
+- `doc/templates/swarm-integration-report.md`
+- `doc/templates/swarm-release-checklist.md`
+
+Commands:
+
+```sh
+pnpm swarm:init [run_id]
+pnpm swarm:split [run_id]
+pnpm swarm:collect [run_id]
+pnpm swarm:integrate [run_id]
+pnpm swarm:verify [run_id] [--full]
+pnpm swarm:deliver [run_id]
+```
+
+Runtime artifacts are generated under:
+
+- `.paperclip-local/swarm/<run_id>/`
+
+This keeps execution state out of tracked source while preserving deterministic templates and operator workflow in-repo.

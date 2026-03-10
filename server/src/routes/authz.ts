@@ -1,25 +1,27 @@
 import type { Request } from "express";
 import { forbidden, unauthorized } from "../errors.js";
+import { evaluatePolicy } from "../policy/engine.js";
 
-export function assertBoard(req: Request) {
-  if (req.actor.type !== "board") {
-    throw forbidden("Board access required");
-  }
-}
-
-export function assertCompanyAccess(req: Request, companyId: string) {
+function throwFromDecision(req: Request, decision: { allow: boolean; reason: string }) {
+  if (decision.allow) return;
   if (req.actor.type === "none") {
     throw unauthorized();
   }
-  if (req.actor.type === "agent" && req.actor.companyId !== companyId) {
-    throw forbidden("Agent key cannot access another company");
-  }
-  if (req.actor.type === "board" && req.actor.source !== "local_implicit" && !req.actor.isInstanceAdmin) {
-    const allowedCompanies = req.actor.companyIds ?? [];
-    if (!allowedCompanies.includes(companyId)) {
-      throw forbidden("User does not have access to this company");
-    }
-  }
+  throw forbidden(decision.reason || "Forbidden");
+}
+
+export function assertBoard(req: Request) {
+  const decision = evaluatePolicy({ actor: req.actor, action: "board:access" });
+  throwFromDecision(req, decision);
+}
+
+export function assertCompanyAccess(req: Request, companyId: string) {
+  const decision = evaluatePolicy({
+    actor: req.actor,
+    action: req.method.toUpperCase() === "GET" ? "company:read" : "company:write",
+    companyId,
+  });
+  throwFromDecision(req, decision);
 }
 
 export function getActorInfo(req: Request) {

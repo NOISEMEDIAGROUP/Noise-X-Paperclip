@@ -161,7 +161,7 @@ export function OrgChart() {
   }, [agents]);
 
   useEffect(() => {
-    setBreadcrumbs([{ label: "Org Chart" }]);
+    setBreadcrumbs([{ label: "组织架构" }]);
   }, [setBreadcrumbs]);
 
   // Layout computation
@@ -254,7 +254,7 @@ export function OrgChart() {
   }, [zoom, pan]);
 
   if (!selectedCompanyId) {
-    return <EmptyState icon={Network} message="Select a company to view the org chart." />;
+    return <EmptyState icon={Network} message="请先选择公司以查看组织架构。" />;
   }
 
   if (isLoading) {
@@ -262,7 +262,7 @@ export function OrgChart() {
   }
 
   if (orgTree && orgTree.length === 0) {
-    return <EmptyState icon={Network} message="No organizational hierarchy defined." />;
+    return <EmptyState icon={Network} message="尚未定义组织层级。" />;
   }
 
   return (
@@ -291,7 +291,7 @@ export function OrgChart() {
             }
             setZoom(newZoom);
           }}
-          aria-label="Zoom in"
+          aria-label="放大"
         >
           +
         </button>
@@ -308,7 +308,7 @@ export function OrgChart() {
             }
             setZoom(newZoom);
           }}
-          aria-label="Zoom out"
+          aria-label="缩小"
         >
           &minus;
         </button>
@@ -326,10 +326,10 @@ export function OrgChart() {
             setZoom(fitZoom);
             setPan({ x: (cW - chartW) / 2, y: (cH - chartH) / 2 });
           }}
-          title="Fit to screen"
-          aria-label="Fit chart to screen"
+          title="适应屏幕"
+          aria-label="图表适应屏幕"
         >
-          Fit
+          适配
         </button>
       </div>
 

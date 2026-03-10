@@ -10,7 +10,7 @@ import { ChoosePathButton } from "../../components/PathInstructionsModal";
 const inputClass =
   "w-full rounded-md border border-border px-2.5 py-1.5 bg-transparent outline-none text-sm font-mono placeholder:text-muted-foreground/40";
 const instructionsFileHint =
-  "Absolute path to a markdown file (e.g. AGENTS.md) that defines this agent's behavior. Injected into the system prompt at runtime.";
+  "用于定义智能体行为的 Markdown 文件绝对路径（如 AGENTS.md）。运行时会注入到系统提示词中。";
 
 export function CodexLocalConfigFields({
   isCreate,
@@ -25,7 +25,7 @@ export function CodexLocalConfigFields({
 
   return (
     <>
-      <Field label="Agent instructions file" hint={instructionsFileHint}>
+      <Field label="智能体指令文件" hint={instructionsFileHint}>
         <div className="flex items-center gap-2">
           <DraftInput
             value={
@@ -50,7 +50,7 @@ export function CodexLocalConfigFields({
         </div>
       </Field>
       <ToggleField
-        label="Bypass sandbox"
+        label="绕过沙箱"
         hint={help.dangerouslyBypassSandbox}
         checked={
           isCreate
@@ -68,7 +68,7 @@ export function CodexLocalConfigFields({
         }
       />
       <ToggleField
-        label="Enable search"
+        label="启用搜索"
         hint={help.search}
         checked={
           isCreate

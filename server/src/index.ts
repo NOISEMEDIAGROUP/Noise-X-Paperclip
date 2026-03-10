@@ -416,12 +416,9 @@ if (config.deploymentMode === "authenticated") {
     resolveBetterAuthSession,
     resolveBetterAuthSessionFromHeaders,
   } = await import("./auth/better-auth.js");
-  const betterAuthSecret =
-    process.env.BETTER_AUTH_SECRET?.trim() ?? process.env.PAPERCLIP_AGENT_JWT_SECRET?.trim();
+  const betterAuthSecret = process.env.BETTER_AUTH_SECRET?.trim();
   if (!betterAuthSecret) {
-    throw new Error(
-      "authenticated mode requires BETTER_AUTH_SECRET (or PAPERCLIP_AGENT_JWT_SECRET) to be set",
-    );
+    throw new Error("authenticated mode requires BETTER_AUTH_SECRET to be set");
   }
   const derivedTrustedOrigins = deriveAuthTrustedOrigins(config);
   const envTrustedOrigins = (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")
@@ -460,6 +457,7 @@ const app = await createApp(db as any, {
   bindHost: config.host,
   authReady,
   companyDeletionEnabled: config.companyDeletionEnabled,
+  authPublicBaseUrl: config.authPublicBaseUrl,
   betterAuthHandler,
   resolveSession,
 });

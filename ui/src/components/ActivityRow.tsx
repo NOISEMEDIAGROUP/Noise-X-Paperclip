@@ -2,48 +2,50 @@ import { Link } from "@/lib/router";
 import { Identity } from "./Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { cn } from "../lib/utils";
+import { priorityLabel, statusLabel } from "../lib/labels";
 import { deriveProjectUrlKey, type ActivityEvent, type Agent } from "@paperclipai/shared";
 
 const ACTION_VERBS: Record<string, string> = {
-  "issue.created": "created",
-  "issue.updated": "updated",
-  "issue.checked_out": "checked out",
-  "issue.released": "released",
-  "issue.comment_added": "commented on",
-  "issue.attachment_added": "attached file to",
-  "issue.attachment_removed": "removed attachment from",
-  "issue.commented": "commented on",
-  "issue.deleted": "deleted",
-  "agent.created": "created",
-  "agent.updated": "updated",
-  "agent.paused": "paused",
-  "agent.resumed": "resumed",
-  "agent.terminated": "terminated",
-  "agent.key_created": "created API key for",
-  "agent.budget_updated": "updated budget for",
-  "agent.runtime_session_reset": "reset session for",
-  "heartbeat.invoked": "invoked heartbeat for",
-  "heartbeat.cancelled": "cancelled heartbeat for",
-  "approval.created": "requested approval",
-  "approval.approved": "approved",
-  "approval.rejected": "rejected",
-  "project.created": "created",
-  "project.updated": "updated",
-  "project.deleted": "deleted",
-  "goal.created": "created",
-  "goal.updated": "updated",
-  "goal.deleted": "deleted",
-  "cost.reported": "reported cost for",
-  "cost.recorded": "recorded cost for",
-  "company.created": "created company",
-  "company.updated": "updated company",
-  "company.archived": "archived",
-  "company.budget_updated": "updated budget for",
+  "issue.created": "创建了",
+  "issue.updated": "更新了",
+  "issue.checked_out": "签出了",
+  "issue.released": "释放了",
+  "issue.comment_added": "评论了",
+  "issue.attachment_added": "添加了附件到",
+  "issue.attachment_removed": "从任务移除了附件",
+  "issue.commented": "评论了",
+  "issue.deleted": "删除了",
+  "agent.created": "创建了",
+  "agent.updated": "更新了",
+  "agent.paused": "暂停了",
+  "agent.resumed": "恢复了",
+  "agent.terminated": "终止了",
+  "agent.key_created": "为其创建了 API Key",
+  "agent.budget_updated": "更新了预算",
+  "agent.runtime_session_reset": "重置了会话",
+  "heartbeat.invoked": "触发了心跳",
+  "heartbeat.cancelled": "取消了心跳",
+  "approval.created": "发起了审批请求",
+  "approval.approved": "通过了",
+  "approval.rejected": "拒绝了",
+  "project.created": "创建了",
+  "project.updated": "更新了",
+  "project.deleted": "删除了",
+  "goal.created": "创建了",
+  "goal.updated": "更新了",
+  "goal.deleted": "删除了",
+  "cost.reported": "上报了成本",
+  "cost.recorded": "记录了成本",
+  "company.created": "创建了公司",
+  "company.updated": "更新了公司",
+  "company.archived": "归档了",
+  "company.budget_updated": "更新了公司预算",
 };
 
 function humanizeValue(value: unknown): string {
-  if (typeof value !== "string") return String(value ?? "none");
-  return value.replace(/_/g, " ");
+  if (typeof value !== "string") return String(value ?? "无");
+  if (value in { critical: 1, high: 1, medium: 1, low: 1 }) return priorityLabel(value);
+  return statusLabel(value);
 }
 
 function formatVerb(action: string, details?: Record<string, unknown> | null): string {
@@ -52,14 +54,14 @@ function formatVerb(action: string, details?: Record<string, unknown> | null): s
     if (details.status !== undefined) {
       const from = previous.status;
       return from
-        ? `changed status from ${humanizeValue(from)} to ${humanizeValue(details.status)} on`
-        : `changed status to ${humanizeValue(details.status)} on`;
+        ? `将状态从 ${humanizeValue(from)} 改为 ${humanizeValue(details.status)}`
+        : `将状态改为 ${humanizeValue(details.status)}`;
     }
     if (details.priority !== undefined) {
       const from = previous.priority;
       return from
-        ? `changed priority from ${humanizeValue(from)} to ${humanizeValue(details.priority)} on`
-        : `changed priority to ${humanizeValue(details.priority)} on`;
+        ? `将优先级从 ${humanizeValue(from)} 改为 ${humanizeValue(details.priority)}`
+        : `将优先级改为 ${humanizeValue(details.priority)}`;
     }
   }
   return ACTION_VERBS[action] ?? action.replace(/[._]/g, " ");
@@ -103,7 +105,7 @@ export function ActivityRow({ event, agentMap, entityNameMap, entityTitleMap, cl
     : entityLink(event.entityType, event.entityId, name);
 
   const actor = event.actorType === "agent" ? agentMap.get(event.actorId) : null;
-  const actorName = actor?.name ?? (event.actorType === "system" ? "System" : event.actorType === "user" ? "Board" : event.actorId || "Unknown");
+  const actorName = actor?.name ?? (event.actorType === "system" ? "系统" : event.actorType === "user" ? "看板" : event.actorId || "未知");
 
   const inner = (
     <div className="flex gap-3">

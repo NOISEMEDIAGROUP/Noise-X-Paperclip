@@ -92,8 +92,8 @@ export function NewAgent() {
 
   useEffect(() => {
     setBreadcrumbs([
-      { label: "Agents", href: "/agents" },
-      { label: "New Agent" },
+      { label: "智能体", href: "/agents" },
+      { label: "新建智能体" },
     ]);
   }, [setBreadcrumbs]);
 
@@ -125,7 +125,7 @@ export function NewAgent() {
       navigate(agentUrl(result.agent));
     },
     onError: (error) => {
-      setFormError(error instanceof Error ? error.message : "Failed to create agent");
+      setFormError(error instanceof Error ? error.message : "创建智能体失败");
     },
   });
 
@@ -140,27 +140,27 @@ export function NewAgent() {
     if (configValues.adapterType === "opencode_local") {
       const selectedModel = configValues.model.trim();
       if (!selectedModel) {
-        setFormError("OpenCode requires an explicit model in provider/model format.");
+        setFormError("OpenCode 需要显式指定 provider/model 格式的模型。");
         return;
       }
       if (adapterModelsError) {
         setFormError(
           adapterModelsError instanceof Error
             ? adapterModelsError.message
-            : "Failed to load OpenCode models.",
+            : "加载 OpenCode 模型失败。",
         );
         return;
       }
       if (adapterModelsLoading || adapterModelsFetching) {
-        setFormError("OpenCode models are still loading. Please wait and try again.");
+        setFormError("OpenCode 模型仍在加载，请稍后重试。");
         return;
       }
       const discovered = adapterModels ?? [];
       if (!discovered.some((entry) => entry.id === selectedModel)) {
         setFormError(
           discovered.length === 0
-            ? "No OpenCode models discovered. Run `opencode models` and authenticate providers."
-            : `Configured OpenCode model is unavailable: ${selectedModel}`,
+            ? "未发现 OpenCode 模型，请先运行 `opencode models` 并完成 provider 认证。"
+            : `当前配置的 OpenCode 模型不可用：${selectedModel}`,
         );
         return;
       }
@@ -190,9 +190,9 @@ export function NewAgent() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-lg font-semibold">New Agent</h1>
+        <h1 className="text-lg font-semibold">新建智能体</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Advanced agent configuration
+          高级智能体配置
         </p>
       </div>
 
@@ -201,7 +201,7 @@ export function NewAgent() {
         <div className="px-4 pt-4 pb-2">
           <input
             className="w-full text-lg font-semibold bg-transparent outline-none placeholder:text-muted-foreground/50"
-            placeholder="Agent name"
+            placeholder="智能体名称"
             value={name}
             onChange={(e) => setName(e.target.value)}
             autoFocus
@@ -212,7 +212,7 @@ export function NewAgent() {
         <div className="px-4 pb-2">
           <input
             className="w-full bg-transparent outline-none text-sm text-muted-foreground placeholder:text-muted-foreground/40"
-            placeholder="Title (e.g. VP of Engineering)"
+            placeholder="头衔（例如：工程副总裁）"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
@@ -261,12 +261,12 @@ export function NewAgent() {
                 {currentReportsTo ? (
                   <>
                     <AgentIcon icon={currentReportsTo.icon} className="h-3 w-3 text-muted-foreground" />
-                    {`Reports to ${currentReportsTo.name}`}
+                    {`汇报给 ${currentReportsTo.name}`}
                   </>
                 ) : (
                   <>
                     <User className="h-3 w-3 text-muted-foreground" />
-                    {isFirstAgent ? "Reports to: N/A (CEO)" : "Reports to..."}
+                    {isFirstAgent ? "汇报对象：不适用（CEO）" : "汇报给..."}
                   </>
                 )}
               </button>
@@ -279,7 +279,7 @@ export function NewAgent() {
                 )}
                 onClick={() => { setReportsTo(""); setReportsToOpen(false); }}
               >
-                No manager
+                无直属上级
               </button>
               {(agents ?? []).map((a) => (
                 <button
@@ -310,21 +310,21 @@ export function NewAgent() {
         {/* Footer */}
         <div className="border-t border-border px-4 py-3">
           {isFirstAgent && (
-            <p className="text-xs text-muted-foreground mb-2">This will be the CEO</p>
+            <p className="text-xs text-muted-foreground mb-2">该成员将作为 CEO</p>
           )}
           {formError && (
             <p className="text-xs text-destructive mb-2">{formError}</p>
           )}
           <div className="flex items-center justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate("/agents")}>
-              Cancel
+              取消
             </Button>
             <Button
               size="sm"
               disabled={!name.trim() || createAgent.isPending}
               onClick={handleSubmit}
             >
-              {createAgent.isPending ? "Creating…" : "Create agent"}
+              {createAgent.isPending ? "创建中…" : "创建智能体"}
             </Button>
           </div>
         </div>

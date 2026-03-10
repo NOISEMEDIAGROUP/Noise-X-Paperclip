@@ -30,7 +30,7 @@ export function CompanySettings() {
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
 
-  // General settings local state
+  // 常规 settings local state
   const [companyName, setCompanyName] = useState("");
   const [description, setDescription] = useState("");
   const [brandColor, setBrandColor] = useState("");
@@ -123,7 +123,7 @@ export function CompanySettings() {
     },
     onError: (err) => {
       setInviteError(
-        err instanceof Error ? err.message : "Failed to create invite"
+        err instanceof Error ? err.message : "创建邀请失败"
       );
     }
   });
@@ -157,15 +157,15 @@ export function CompanySettings() {
 
   useEffect(() => {
     setBreadcrumbs([
-      { label: selectedCompany?.name ?? "Company", href: "/dashboard" },
-      { label: "Settings" }
+      { label: selectedCompany?.name ?? "公司", href: "/dashboard" },
+      { label: "设置" }
     ]);
   }, [setBreadcrumbs, selectedCompany?.name]);
 
   if (!selectedCompany) {
     return (
       <div className="text-sm text-muted-foreground">
-        No company selected. Select a company from the switcher above.
+        未选择公司。请先在上方切换器中选择公司。
       </div>
     );
   }
@@ -182,16 +182,16 @@ export function CompanySettings() {
     <div className="max-w-2xl space-y-6">
       <div className="flex items-center gap-2">
         <Settings className="h-5 w-5 text-muted-foreground" />
-        <h1 className="text-lg font-semibold">Company Settings</h1>
+        <h1 className="text-lg font-semibold">公司设置</h1>
       </div>
 
-      {/* General */}
+      {/* 常规 */}
       <div className="space-y-4">
         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          General
+          常规
         </div>
         <div className="space-y-3 rounded-md border border-border px-4 py-4">
-          <Field label="Company name" hint="The display name for your company.">
+          <Field label="公司名称" hint="公司的展示名称。">
             <input
               className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
               type="text"
@@ -200,24 +200,24 @@ export function CompanySettings() {
             />
           </Field>
           <Field
-            label="Description"
-            hint="Optional description shown in the company profile."
+            label="描述"
+            hint="可选描述，会显示在公司资料中。"
           >
             <input
               className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
               type="text"
               value={description}
-              placeholder="Optional company description"
+              placeholder="可选的公司描述"
               onChange={(e) => setDescription(e.target.value)}
             />
           </Field>
         </div>
       </div>
 
-      {/* Appearance */}
+      {/* 外观 */}
       <div className="space-y-4">
         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Appearance
+          外观
         </div>
         <div className="space-y-3 rounded-md border border-border px-4 py-4">
           <div className="flex items-start gap-4">
@@ -230,8 +230,8 @@ export function CompanySettings() {
             </div>
             <div className="flex-1 space-y-2">
               <Field
-                label="Brand color"
-                hint="Sets the hue for the company icon. Leave empty for auto-generated color."
+                label="品牌色"
+                hint="设置公司图标的主色调。留空将自动生成颜色。"
               >
                 <div className="flex items-center gap-2">
                   <input
@@ -249,7 +249,7 @@ export function CompanySettings() {
                         setBrandColor(v);
                       }
                     }}
-                    placeholder="Auto"
+                    placeholder="自动"
                     className="w-28 rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm font-mono outline-none"
                   />
                   {brandColor && (
@@ -259,7 +259,7 @@ export function CompanySettings() {
                       onClick={() => setBrandColor("")}
                       className="text-xs text-muted-foreground"
                     >
-                      Clear
+                      清空
                     </Button>
                   )}
                 </div>
@@ -269,7 +269,7 @@ export function CompanySettings() {
         </div>
       </div>
 
-      {/* Save button for General + Appearance */}
+      {/* Save button for 常规 + 外观 */}
       {generalDirty && (
         <div className="flex items-center gap-2">
           <Button
@@ -277,47 +277,47 @@ export function CompanySettings() {
             onClick={handleSaveGeneral}
             disabled={generalMutation.isPending || !companyName.trim()}
           >
-            {generalMutation.isPending ? "Saving..." : "Save changes"}
+            {generalMutation.isPending ? "保存中..." : "保存更改"}
           </Button>
           {generalMutation.isSuccess && (
-            <span className="text-xs text-muted-foreground">Saved</span>
+            <span className="text-xs text-muted-foreground">已保存</span>
           )}
           {generalMutation.isError && (
             <span className="text-xs text-destructive">
               {generalMutation.error instanceof Error
                 ? generalMutation.error.message
-                : "Failed to save"}
+                : "保存失败"}
             </span>
           )}
         </div>
       )}
 
-      {/* Hiring */}
+      {/* 招聘 */}
       <div className="space-y-4">
         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Hiring
+          招聘
         </div>
         <div className="rounded-md border border-border px-4 py-3">
           <ToggleField
-            label="Require board approval for new hires"
-            hint="New agent hires stay pending until approved by board."
+            label="新成员加入需看板审批"
+            hint="新成员加入后将保持待审批，直到看板批准。"
             checked={!!selectedCompany.requireBoardApprovalForNewAgents}
             onChange={(v) => settingsMutation.mutate(v)}
           />
         </div>
       </div>
 
-      {/* Invites */}
+      {/* 邀请 */}
       <div className="space-y-4">
         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Invites
+          邀请
         </div>
         <div className="space-y-3 rounded-md border border-border px-4 py-4">
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-muted-foreground">
-              Generate an OpenClaw agent invite snippet.
+              生成 OpenClaw 智能体邀请片段。
             </span>
-            <HintIcon text="Creates a short-lived OpenClaw agent invite and renders a copy-ready prompt." />
+            <HintIcon text="创建短时有效的 OpenClaw 邀请，并生成可复制提示词。" />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -326,8 +326,8 @@ export function CompanySettings() {
               disabled={inviteMutation.isPending}
             >
               {inviteMutation.isPending
-                ? "Generating..."
-                : "Generate OpenClaw Invite Prompt"}
+                ? "生成中..."
+                : "生成 OpenClaw 邀请提示"}
             </Button>
           </div>
           {inviteError && (
@@ -337,7 +337,7 @@ export function CompanySettings() {
             <div className="rounded-md border border-border bg-muted/30 p-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-xs text-muted-foreground">
-                  OpenClaw Invite Prompt
+                  OpenClaw 邀请提示
                 </div>
                 {snippetCopied && (
                   <span
@@ -345,7 +345,7 @@ export function CompanySettings() {
                     className="flex items-center gap-1 text-xs text-green-600 animate-pulse"
                   >
                     <Check className="h-3 w-3" />
-                    Copied
+                    已复制
                   </span>
                 )}
               </div>
@@ -370,7 +370,7 @@ export function CompanySettings() {
                       }
                     }}
                   >
-                    {snippetCopied ? "Copied snippet" : "Copy snippet"}
+                    {snippetCopied ? "已复制片段" : "复制片段"}
                   </Button>
                 </div>
               </div>
@@ -379,15 +379,14 @@ export function CompanySettings() {
         </div>
       </div>
 
-      {/* Danger Zone */}
+      {/* 危险操作区 */}
       <div className="space-y-4">
         <div className="text-xs font-medium text-destructive uppercase tracking-wide">
-          Danger Zone
+          危险操作区
         </div>
         <div className="space-y-3 rounded-md border border-destructive/40 bg-destructive/5 px-4 py-4">
           <p className="text-sm text-muted-foreground">
-            Archive this company to hide it from the sidebar. This persists in
-            the database.
+            归档该公司后会在侧边栏隐藏，并保留在数据库中。
           </p>
           <div className="flex items-center gap-2">
             <Button
@@ -400,7 +399,7 @@ export function CompanySettings() {
               onClick={() => {
                 if (!selectedCompanyId) return;
                 const confirmed = window.confirm(
-                  `Archive company "${selectedCompany.name}"? It will be hidden from the sidebar.`
+                  `确认归档公司“${selectedCompany.name}”？归档后会在侧边栏隐藏。`
                 );
                 if (!confirmed) return;
                 const nextCompanyId =
@@ -416,16 +415,16 @@ export function CompanySettings() {
               }}
             >
               {archiveMutation.isPending
-                ? "Archiving..."
+                ? "归档中..."
                 : selectedCompany.status === "archived"
-                ? "Already archived"
-                : "Archive company"}
+                ? "已归档"
+                : "归档公司"}
             </Button>
             {archiveMutation.isError && (
               <span className="text-xs text-destructive">
                 {archiveMutation.error instanceof Error
                   ? archiveMutation.error.message
-                  : "Failed to archive company"}
+                  : "归档公司失败"}
               </span>
             )}
           </div>
@@ -442,56 +441,56 @@ function buildAgentSnippet(input: AgentSnippetInput) {
   const candidateList =
     candidateUrls.length > 0
       ? candidateUrls.map((u) => `- ${u}`).join("\n")
-      : "- (No candidate URLs available yet.)";
+      : "- （暂无候选 URL）";
 
   const connectivityBlock =
     candidateUrls.length === 0
-      ? `No candidate URLs are available. Ask your user to configure a reachable hostname in Paperclip, then retry.
-Suggested steps:
-- choose a hostname that resolves to the Paperclip host from your runtime
-- run: pnpm paperclipai allowed-hostname <host>
-- restart Paperclip
-- verify with: curl -fsS http://<host>:3100/api/health
-- regenerate this invite snippet`
-      : `If none are reachable, ask your user to add a reachable hostname in Paperclip, restart, and retry.
-Suggested command:
+      ? `暂无可用候选 URL。请让你的用户先在 Paperclip 中配置可访问主机名，再重试。
+建议步骤：
+- 选择一个在你的运行环境中可解析到 Paperclip 主机的 hostname
+- 执行：pnpm paperclipai allowed-hostname <host>
+- 重启 Paperclip
+- 通过以下命令验证：curl -fsS http://<host>:3100/api/health
+- 重新生成这段邀请文案`
+      : `如果都不可达，请让用户在 Paperclip 中新增可访问 hostname，重启后再试。
+建议命令：
 - pnpm paperclipai allowed-hostname <host>
-Then verify with: curl -fsS <base-url>/api/health`;
+然后验证：curl -fsS <base-url>/api/health`;
 
   const resolutionLine = resolutionTestUrl
-    ? `\nYou MUST test Paperclip-to-gateway reachability, call: ${resolutionTestUrl}?url=<urlencoded-gateway-url> (using the hostname that worked above). Do not assume your 172.x is necessarily reachable from Paperclip. Test it. `
+    ? `\n你必须测试 Paperclip 到网关的可达性，调用： ${resolutionTestUrl}?url=<urlencoded-gateway-url> （使用上面验证通过的 hostname）。不要假设你的 172.x 地址一定可被 Paperclip 访问，必须实测。`
     : "";
 
-  return `You're invited to join a Paperclip organization.
+  return `你被邀请加入一个 Paperclip 组织。
 
-The URLs you should try are:
+你应尝试的 URL：
 ${candidateList}
 
-Connectivity guidance:
-If you are running on a different machine than Paperclip, Paperclip must be reachable at one of the hostnames used above.
-Verify the hostname works from your runtime with: GET <base-url>/api/health
+连通性说明：
+如果你和 Paperclip 不在同一台机器上，Paperclip 必须能通过上述至少一个 hostname 被访问。
+请在你的运行环境中验证：GET <base-url>/api/health
 
 ${connectivityBlock}
 
-For your "agentName", just use your own agent name (OpenClaw or whatever your name is) and send it directly.
-You also need to send a gateway URL that Paperclip can access. Check your config and include that URL.${resolutionLine}
+对于 "agentName"，直接填写你自己的智能体名称（如 OpenClaw 或你的实际名称）。
+你还需要提供一个 Paperclip 可访问的 gateway URL。请检查配置并携带该 URL。${resolutionLine}
 
 ---
 
-This onboarding flow is for OpenClaw Gateway.
-When you submit the join request, use:
+该引导流程用于 OpenClaw Gateway。
+提交加入请求时请使用：
 - \`adapterType: "openclaw_gateway"\`
-- \`agentDefaultsPayload.url\` as your \`ws://\` or \`wss://\` gateway URL
-- \`agentDefaultsPayload.headers["x-openclaw-token"]\` with your gateway token
-- (legacy accepted) \`agentDefaultsPayload.headers["x-openclaw-auth"]\`
-- Keep device auth enabled (recommended). If \`devicePrivateKeyPem\` is omitted, Paperclip will generate and persist one during join so pairing approvals remain stable.
-- Only use \`disableDeviceAuth=true\` for special environments where pairing cannot be completed.
+- \`agentDefaultsPayload.url\` 填写为你的 \`ws://\` 或 \`wss://\` 网关地址
+- \`agentDefaultsPayload.headers["x-openclaw-token"]\` 填写你的网关令牌
+- （兼容旧版）\`agentDefaultsPayload.headers["x-openclaw-auth"]\`
+- 建议保持设备鉴权开启。若省略 \`devicePrivateKeyPem\`，Paperclip 会在加入流程中自动生成并持久化，以保证配对审批稳定。
+- 仅在确实无法完成配对的特殊环境中使用 \`disableDeviceAuth=true\`。
 
-Do NOT use \`/v1/responses\` or \`/hooks/*\` in this join flow.
+该加入流程中不要使用 \`/v1/responses\` 或 \`/hooks/*\`。
 
-Before you do anything, please respond to your user that you understand the instructions and you're going to work on them. Then do the step above in another session called "paperclip-onboarding" and then tell your user when you're done. Update your user in intermediate steps along the way so they know what's going on.
+开始前，请先回复用户你已理解这些要求并将开始处理。然后在名为 "paperclip-onboarding" 的新会话中执行上述步骤，完成后告知用户，并在中间过程持续同步进展。
 
-Then after you've connected to Paperclip (exchanged keys etc.) you MUST review and follow the onboarding instructions in onboarding.txt they give you.
+连接到 Paperclip（交换密钥等）后，你必须阅读并遵循他们提供的 onboarding.txt 指引。
 
 `;
 }
