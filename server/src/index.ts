@@ -24,7 +24,7 @@ import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { logger } from "./middleware/logger.js";
 import { setupLiveEventsWebSocketServer } from "./realtime/live-events-ws.js";
-import { heartbeatService, syncAgentRuntimeToS3 } from "./services/index.js";
+import { heartbeatService, restoreAgentRuntimeFromS3, syncAgentRuntimeToS3 } from "./services/index.js";
 import { createStorageServiceFromConfig } from "./storage/index.js";
 import { printStartupBanner } from "./startup-banner.js";
 import { getBoardClaimWarningUrl, initializeBoardClaimChallenge } from "./board-claim.js";
@@ -569,6 +569,17 @@ if (config.databaseBackupEnabled) {
 }
 
 if (config.storageProvider === "s3" && config.agentRuntimeSyncEnabled) {
+  // Restore missing files from S3 before agents start running.
+  // Files that already exist locally are left untouched (local wins).
+  try {
+    const restoreResult = await restoreAgentRuntimeFromS3();
+    if (restoreResult.restored > 0 || restoreResult.errors > 0) {
+      logger.info(restoreResult, "agent runtime S3 restore complete");
+    }
+  } catch (err) {
+    logger.error({ err }, "agent runtime S3 restore failed");
+  }
+
   let syncInFlight = false;
 
   const runAgentRuntimeSync = async () => {
@@ -586,7 +597,7 @@ if (config.storageProvider === "s3" && config.agentRuntimeSyncEnabled) {
     }
   };
 
-  // Run once at startup, then on interval
+  // Run one upload pass immediately, then on interval
   void runAgentRuntimeSync();
   setInterval(() => {
     void runAgentRuntimeSync();

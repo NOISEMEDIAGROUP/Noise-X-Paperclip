@@ -72,6 +72,76 @@ async function syncFile(
   }
 }
 
+async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  await new Promise<void>((resolve, reject) => {
+    stream.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+    stream.on("end", resolve);
+    stream.on("error", reject);
+  });
+  return Buffer.concat(chunks);
+}
+
+/**
+ * Restore agent runtime files from S3 to the local runtime directory.
+ *
+ * Called once at server startup so that agent memory, notes, and plans survive
+ * container replacements. Files that already exist locally are left untouched —
+ * local state always wins (the live container may have written since the last
+ * sync; we never clobber uncommitted work).
+ */
+export async function restoreAgentRuntimeFromS3(): Promise<{
+  provider: string;
+  restored: number;
+  skipped: number;
+  errors: number;
+}> {
+  const config = loadConfig();
+
+  if (config.storageProvider !== "s3") {
+    return { provider: config.storageProvider, restored: 0, skipped: 0, errors: 0 };
+  }
+
+  const runtimeDir = config.agentRuntimeDir;
+  const provider = createStorageProviderFromConfig(config);
+  const instanceId = resolvePaperclipInstanceId();
+  const s3Prefix = `agent-runtime/${instanceId}`;
+
+  const objects = await provider.listObjects({ prefix: s3Prefix });
+
+  let restored = 0;
+  let skipped = 0;
+  let errors = 0;
+
+  for (const obj of objects) {
+    // obj.objectKey is relative to the provider's storage prefix, e.g.
+    // "agent-runtime/<instanceId>/ceo/memory/notes.md"
+    // Strip the instance prefix to get the path relative to runtimeDir.
+    const relativePath = obj.objectKey.slice(s3Prefix.length + 1);
+    if (!relativePath) continue;
+
+    const localPath = path.join(runtimeDir, relativePath.split("/").join(path.sep));
+
+    const localStat = await fs.stat(localPath).catch(() => null);
+    if (localStat) {
+      skipped++;
+      continue;
+    }
+
+    try {
+      const result = await provider.getObject({ objectKey: obj.objectKey });
+      const body = await streamToBuffer(result.stream);
+      await fs.mkdir(path.dirname(localPath), { recursive: true });
+      await fs.writeFile(localPath, body);
+      restored++;
+    } catch {
+      errors++;
+    }
+  }
+
+  return { provider: "s3", restored, skipped, errors };
+}
+
 export async function syncAgentRuntimeToS3(): Promise<{
   provider: string;
   uploaded: number;

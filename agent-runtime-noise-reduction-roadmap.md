@@ -44,6 +44,126 @@ Local-agent runs succeed but waste significant money and produce unnecessary noi
 
 ---
 
+## Architecture
+
+### Agent Runtime — Unified Folder Structure
+
+Every agent has a single home directory (`AGENT_HOME`) that holds both its instruction files (git-tracked) and its runtime artifacts (gitignored, S3-backed).
+
+```
+agents/                          ← host: git repo (public fork, generic)
+└── <slug>/                      ← AGENT_HOME (mounted into container)
+    ├── AGENTS.md                ← role instructions          [git-tracked]
+    ├── HEARTBEAT.md             ← execution checklist        [git-tracked]
+    ├── SOUL.md                  ← persona / values           [git-tracked]
+    ├── TOOLS.md                 ← tools reference            [git-tracked]
+    ├── memory/                  ← daily notes, timeline      [gitignored, S3-backed]
+    ├── notes/                   ← scratch notes              [gitignored, S3-backed]
+    ├── plans/                   ← active plans               [gitignored, S3-backed]
+    ├── life/                    ← CEO PARA knowledge graph   [gitignored, S3-backed]
+    ├── logs/                    ← execution logs             [gitignored, S3-backed]
+    └── .codex/                  ← Codex CLI config isolation [gitignored, S3-backed]
+```
+
+Container volume mounts:
+```
+Host path                             Container path          Purpose
+─────────────────────────────────────────────────────────────────────────────
+./agents/                        →  /paperclip-agents/       instruction files (R/W)
+~/.paperclip/                    →  /paperclip/              DB + Paperclip data
+$CALENBOOK_DIR/                  →  /workspace/calenbook/    agent working directory
+```
+
+---
+
+### S3 Sync — Bidirectional Lifecycle
+
+Private, operator-specific data (agent configs + runtime files) live in S3. The public repo stays generic.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  S3 Bucket: paperclip-agent-runtime                                     │
+│  Key prefix: agent-runtime/<instanceId>/<slug>/<...files>               │
+│                                                                         │
+│  ┌──────────────────────┐     ┌──────────────────────────────────────┐  │
+│  │  ceo/memory/         │     │  principal-architect/plans/          │  │
+│  │  ceo/life/           │     │  qa-architect/notes/                 │  │
+│  │  ceo/plans/          │     │  ...                                 │  │
+│  └──────────────────────┘     └──────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
+         ▲  upload (every 5 min, etag-deduplicated)
+         │
+         │  download (startup restore, skip existing local files)
+         ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Container: /paperclip-agents/<slug>/memory|notes|plans|...             │
+│  (= AGENT_HOME runtime subdirs, writable volume mount)                  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Startup sequence:**
+```
+Server starts
+  │
+  ├─ 1. restoreAgentRuntimeFromS3()
+  │       └─ list S3 objects under agent-runtime/<instanceId>/
+  │       └─ download each file that doesn't exist locally (local wins on conflict)
+  │       └─ log: "agent runtime S3 restore complete: restored=N skipped=M"
+  │
+  ├─ 2. Heartbeat scheduler starts (agents can now find their AGENT_HOME files)
+  │
+  └─ 3. syncAgentRuntimeToS3() on interval (every 5 min by default)
+          └─ walk local runtime dir, upload changed files (etag-deduplicated)
+          └─ log: "agent runtime S3 sync complete: uploaded=N skipped=M"
+```
+
+---
+
+### Adapter Pipeline — Environment Injection
+
+Both `claude_local` and `codex_local` adapters inject env vars before spawning the CLI subprocess:
+
+```
+Heartbeat fires
+  │
+  ▼
+buildClaudeRuntimeConfig() / buildCodexEnv()
+  │
+  ├─ Merge adapter-level envConfig entries
+  │
+  ├─ Inject AGENT_HOME  ←  PAPERCLIP_AGENT_RUNTIME_DIR / <slug>
+  │       └─ slug derived from instructionsFilePath parent dir name
+  │       └─ directory created if it doesn't exist (mkdir -p)
+  │
+  ├─ [codex_local only] Inject CODEX_HOME  ←  AGENT_HOME/.codex
+  │       └─ isolates Codex CLI from ~/.codex personal config
+  │
+  ├─ [claude_local only] Write mcp-config.json from adapter mcpServers
+  │       └─ --mcp-config <path> --strict-mcp-config
+  │       └─ blocks personal ~/.claude MCP servers unless explicitly allowed
+  │
+  └─ Spawn CLI subprocess with clean, reproducible environment
+```
+
+---
+
+### Public vs Private Separation
+
+```
+Public GitHub repo (paperclipai/paperclip)     Private / Operator-specific
+────────────────────────────────────────────   ──────────────────────────────
+Generic Paperclip server code                  AGENTS.md instruction files
+Adapter implementations                        HEARTBEAT.md / SOUL.md / TOOLS.md
+Docker Compose templates                       Agent memory, notes, plans
+Empty/example agents/ directory                Operator S3 bucket + credentials
+                                               .paperclip-local/docker-compose.env
+                                               ~/.paperclip/ (DB, agent homes)
+```
+
+Operators fork the public repo, add their own `agents/<slug>/AGENTS.md` files, configure S3 credentials, and all runtime data stays in S3 — never committed to source control.
+
+---
+
 ## Phases
 
 ### Phase 1 — Runtime Isolation for Local Adapters

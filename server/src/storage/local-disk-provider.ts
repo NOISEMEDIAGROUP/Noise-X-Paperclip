@@ -1,6 +1,6 @@
 import { createReadStream, promises as fs } from "node:fs";
 import path from "node:path";
-import type { StorageProvider, GetObjectResult, HeadObjectResult } from "./types.js";
+import type { StorageProvider, GetObjectResult, HeadObjectResult, ListObjectsEntry } from "./types.js";
 import { notFound, badRequest } from "../errors.js";
 
 function normalizeObjectKey(objectKey: string): string {
@@ -84,6 +84,31 @@ export function createLocalDiskStorageProvider(baseDir: string): StorageProvider
       } catch {
         // idempotent delete
       }
+    },
+
+    async listObjects(input): Promise<ListObjectsEntry[]> {
+      const basePrefix = input.prefix ? normalizeObjectKey(input.prefix) : "";
+      const searchDir = basePrefix ? resolveWithin(root, basePrefix) : root;
+      const stat = await statOrNull(searchDir);
+      if (!stat) return [];
+
+      async function walk(dir: string): Promise<ListObjectsEntry[]> {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        const results: ListObjectsEntry[] = [];
+        for (const entry of entries) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            results.push(...(await walk(full)));
+          } else if (entry.isFile()) {
+            const objectKey = path.relative(root, full).split(path.sep).join("/");
+            const fileStat = await statOrNull(full);
+            results.push({ objectKey, size: fileStat?.size });
+          }
+        }
+        return results;
+      }
+
+      return walk(searchDir);
     },
   };
 }

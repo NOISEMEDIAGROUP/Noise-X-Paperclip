@@ -3,10 +3,11 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { Readable } from "node:stream";
-import type { StorageProvider, GetObjectResult, HeadObjectResult } from "./types.js";
+import type { StorageProvider, GetObjectResult, HeadObjectResult, ListObjectsEntry } from "./types.js";
 import { notFound, unprocessable } from "../errors.js";
 
 interface S3ProviderConfig {
@@ -148,6 +149,33 @@ export function createS3StorageProvider(config: S3ProviderConfig): StorageProvid
           Key: key,
         }),
       );
+    },
+
+    async listObjects(input): Promise<ListObjectsEntry[]> {
+      const s3Prefix = buildKey(prefix, input.prefix ?? "");
+      const results: ListObjectsEntry[] = [];
+      let continuationToken: string | undefined;
+
+      do {
+        const output = await client.send(
+          new ListObjectsV2Command({
+            Bucket: bucket,
+            Prefix: s3Prefix || undefined,
+            ContinuationToken: continuationToken,
+          }),
+        );
+
+        for (const obj of output.Contents ?? []) {
+          if (!obj.Key) continue;
+          // Strip the provider-level prefix to get the caller-relative objectKey
+          const objectKey = prefix ? obj.Key.slice(prefix.length + 1) : obj.Key;
+          results.push({ objectKey, etag: obj.ETag, size: obj.Size });
+        }
+
+        continuationToken = output.IsTruncated ? output.NextContinuationToken : undefined;
+      } while (continuationToken);
+
+      return results;
     },
   };
 }

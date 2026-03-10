@@ -28,12 +28,23 @@ export interface HeadObjectResult {
   lastModified?: Date;
 }
 
+export interface ListObjectsInput {
+  prefix?: string;
+}
+
+export interface ListObjectsEntry {
+  objectKey: string;
+  etag?: string;
+  size?: number;
+}
+
 export interface StorageProvider {
   id: StorageProviderId;
   putObject(input: PutObjectInput): Promise<void>;
   getObject(input: GetObjectInput): Promise<GetObjectResult>;
   headObject(input: GetObjectInput): Promise<HeadObjectResult>;
   deleteObject(input: GetObjectInput): Promise<void>;
+  listObjects(input: ListObjectsInput): Promise<ListObjectsEntry[]>;
 }
 
 export interface PutFileInput {
