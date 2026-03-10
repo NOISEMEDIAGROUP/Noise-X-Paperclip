@@ -26,8 +26,10 @@ import { logger } from "../middleware/logger.js";
 import { forbidden, HttpError, unauthorized } from "../errors.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 import { shouldWakeAssigneeOnCheckout } from "./issues-checkout-wakeup.js";
+import { defaultPermissionsForRole, normalizeAgentPermissions } from "../services/agent-permissions.js";
 
 const MAX_ATTACHMENT_BYTES = Number(process.env.PAPERCLIP_ATTACHMENT_MAX_BYTES) || 10 * 1024 * 1024;
+const ALLOW_DEFAULT_AGENT_TASK_ASSIGNMENT = process.env.PAPERCLIP_ALLOW_DEFAULT_AGENT_TASK_ASSIGNMENT === "true";
 const ALLOWED_ATTACHMENT_CONTENT_TYPES = new Set([
   "image/png",
   "image/jpeg",
@@ -35,6 +37,29 @@ const ALLOWED_ATTACHMENT_CONTENT_TYPES = new Set([
   "image/webp",
   "image/gif",
 ]);
+
+export type AssignmentTargetType = "agent" | "user" | "unassigned";
+
+type AgentPermissionShape = {
+  role: string;
+  permissions: Record<string, unknown> | null | undefined;
+};
+
+export function hasDefaultAgentPermissionSet(agent: AgentPermissionShape) {
+  const defaults = defaultPermissionsForRole(agent.role);
+  const normalized = normalizeAgentPermissions(agent.permissions, agent.role);
+  return Object.entries(defaults).every(([key, value]) => normalized[key] === value);
+}
+
+export function canAssignTasksWithDefaultPermissionFlag(
+  agent: AgentPermissionShape,
+  assignmentTargetType: AssignmentTargetType,
+  flagEnabled = ALLOW_DEFAULT_AGENT_TASK_ASSIGNMENT,
+) {
+  if (!flagEnabled) return false;
+  if (assignmentTargetType !== "agent") return false;
+  return hasDefaultAgentPermissionSet(agent);
+}
 
 export function issueRoutes(db: Db, storage: StorageService) {
   const router = Router();
@@ -89,7 +114,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
     return Boolean((agent.permissions as Record<string, unknown>).canCreateAgents);
   }
 
-  async function assertCanAssignTasks(req: Request, companyId: string) {
+  async function assertCanAssignTasks(req: Request, companyId: string, assignmentTargetType: AssignmentTargetType) {
     assertCompanyAccess(req, companyId);
     if (req.actor.type === "board") {
       if (req.actor.source === "local_implicit" || req.actor.isInstanceAdmin) return;
@@ -103,6 +128,13 @@ export function issueRoutes(db: Db, storage: StorageService) {
       if (allowedByGrant) return;
       const actorAgent = await agentsSvc.getById(req.actor.agentId);
       if (actorAgent && actorAgent.companyId === companyId && canCreateAgentsLegacy(actorAgent)) return;
+      if (
+        actorAgent &&
+        actorAgent.companyId === companyId &&
+        canAssignTasksWithDefaultPermissionFlag(actorAgent, assignmentTargetType)
+      ) {
+        return;
+      }
       throw forbidden("Missing permission: tasks:assign");
     }
     throw unauthorized();
@@ -417,7 +449,8 @@ export function issueRoutes(db: Db, storage: StorageService) {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
     if (req.body.assigneeAgentId || req.body.assigneeUserId) {
-      await assertCanAssignTasks(req, companyId);
+      const assignmentTargetType: AssignmentTargetType = req.body.assigneeAgentId ? "agent" : "user";
+      await assertCanAssignTasks(req, companyId, assignmentTargetType);
     }
 
     const actor = getActorInfo(req);
@@ -479,7 +512,16 @@ export function issueRoutes(db: Db, storage: StorageService) {
 
     if (assigneeWillChange) {
       if (!isAgentReturningIssueToCreator) {
-        await assertCanAssignTasks(req, existing.companyId);
+        const nextAssigneeAgentId =
+          req.body.assigneeAgentId !== undefined ? req.body.assigneeAgentId : existing.assigneeAgentId;
+        const nextAssigneeUserId =
+          req.body.assigneeUserId !== undefined ? req.body.assigneeUserId : existing.assigneeUserId;
+        const assignmentTargetType: AssignmentTargetType = nextAssigneeAgentId
+          ? "agent"
+          : nextAssigneeUserId
+            ? "user"
+            : "unassigned";
+        await assertCanAssignTasks(req, existing.companyId, assignmentTargetType);
       }
     }
     if (!(await assertAgentRunCheckoutOwnership(req, res, existing))) return;
