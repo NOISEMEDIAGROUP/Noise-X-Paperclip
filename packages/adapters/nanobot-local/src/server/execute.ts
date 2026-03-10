@@ -91,7 +91,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     }
 
     if (!response.ok) {
-      const errorMsg = parsed?.error ?? text;
+      const errorMsg = typeof parsed?.error === "string" ? parsed.error : text;
       await ctx.onLog("stderr", `[nanobot-local] HTTP ${response.status}: ${errorMsg}\n`);
       return {
         exitCode: 1,
@@ -133,7 +133,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       timedOut: false,
       summary: responseText,
       usage,
-      costUsd: costUsd || undefined,
+      costUsd: costUsd ?? undefined,
       model: model || undefined,
       billingType: "api" as const,
       sessionParams: parsed?.sessionKey ? { sessionKey: parsed.sessionKey } : null,
