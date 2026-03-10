@@ -42,5 +42,12 @@ tmp/
 tests/e2e/test-results/
 tests/e2e/playwright-report/
 
-# Agent runtime artifacts — centralized, never in git
+# Agent runtime artifacts — written by agents, never in git
+# Instruction files (AGENTS.md, HEARTBEAT.md, SOUL.md, TOOLS.md) remain tracked.
 agent-runtime/
+agents/*/memory/
+agents/*/notes/
+agents/*/life/
+agents/*/plans/
+agents/*/logs/
+agents/*/.codex/
