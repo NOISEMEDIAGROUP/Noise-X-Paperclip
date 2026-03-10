@@ -56,3 +56,15 @@ export type CreateProject = z.infer<typeof createProjectSchema>;
 export const updateProjectSchema = z.object(projectFields).partial();
 
 export type UpdateProject = z.infer<typeof updateProjectSchema>;
+
+export const addProjectAgentSchema = z.object({
+  agentId: z.string().uuid(),
+});
+
+export type AddProjectAgent = z.infer<typeof addProjectAgentSchema>;
+
+export const removeProjectAgentSchema = z.object({
+  agentId: z.string().uuid(),
+});
+
+export type RemoveProjectAgent = z.infer<typeof removeProjectAgentSchema>;

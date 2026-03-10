@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
 import { agentsApi, type OrgNode } from "../api/agents";
+import { projectsApi } from "../api/projects";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
@@ -10,7 +11,7 @@ import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { AgentIcon } from "../components/AgentIconPicker";
 import { Network } from "lucide-react";
-import { AGENT_ROLE_LABELS, type Agent } from "@paperclipai/shared";
+import { AGENT_ROLE_LABELS, type Agent, type Project } from "@paperclipai/shared";
 
 // Layout constants
 const CARD_W = 200;
@@ -160,6 +161,12 @@ export function OrgChart() {
     return m;
   }, [agents]);
 
+  const { data: projectsList } = useQuery({
+    queryKey: queryKeys.projects.list(selectedCompanyId!),
+    queryFn: () => projectsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
   useEffect(() => {
     setBreadcrumbs([{ label: "Org Chart" }]);
   }, [setBreadcrumbs]);
@@ -179,6 +186,44 @@ export function OrgChart() {
     }
     return { width: maxX + PADDING, height: maxY + PADDING };
   }, [allNodes]);
+
+  // Compute project group regions
+  const projectRegions = useMemo(() => {
+    if (!projectsList || allNodes.length === 0) return [];
+    const nodeMap = new Map(allNodes.map((n) => [n.id, n]));
+    const regions: Array<{
+      project: Project;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }> = [];
+
+    for (const project of projectsList) {
+      if (project.archivedAt || !project.agentIds || project.agentIds.length === 0) continue;
+      const memberNodes = project.agentIds
+        .map((id) => nodeMap.get(id))
+        .filter((n): n is LayoutNode => Boolean(n));
+      if (memberNodes.length === 0) continue;
+
+      const pad = 16;
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const n of memberNodes) {
+        minX = Math.min(minX, n.x);
+        minY = Math.min(minY, n.y);
+        maxX = Math.max(maxX, n.x + CARD_W);
+        maxY = Math.max(maxY, n.y + CARD_H);
+      }
+      regions.push({
+        project,
+        x: minX - pad,
+        y: minY - pad - 16, // extra space for label
+        width: maxX - minX + pad * 2,
+        height: maxY - minY + pad * 2 + 16,
+      });
+    }
+    return regions;
+  }, [projectsList, allNodes]);
 
   // Pan & zoom state
   const containerRef = useRef<HTMLDivElement>(null);
@@ -370,6 +415,29 @@ export function OrgChart() {
           transformOrigin: "0 0",
         }}
       >
+        {/* Project group regions */}
+        {projectRegions.map(({ project, x, y, width, height }) => (
+          <div
+            key={`region-${project.id}`}
+            className="absolute rounded-lg pointer-events-none"
+            style={{
+              left: x,
+              top: y,
+              width,
+              height,
+              backgroundColor: `${project.color ?? "#6366f1"}10`,
+              border: `1px solid ${project.color ?? "#6366f1"}25`,
+            }}
+          >
+            <span
+              className="absolute top-1.5 left-3 text-[10px] font-medium leading-none"
+              style={{ color: project.color ?? "#6366f1" }}
+            >
+              {project.name}
+            </span>
+          </div>
+        ))}
+
         {allNodes.map((node) => {
           const agent = agentMap.get(node.id);
           const dotColor = statusDotColor[node.status] ?? defaultDotColor;

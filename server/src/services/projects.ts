@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { projects, projectGoals, goals, projectWorkspaces } from "@paperclipai/db";
+import { projects, projectGoals, goals, projectWorkspaces, projectAgents } from "@paperclipai/db";
 import {
   PROJECT_COLORS,
   deriveProjectUrlKey,
@@ -27,6 +27,7 @@ interface ProjectWithGoals extends ProjectRow {
   urlKey: string;
   goalIds: string[];
   goals: ProjectGoalRef[];
+  agentIds: string[];
   workspaces: ProjectWorkspace[];
   primaryWorkspace: ProjectWorkspace | null;
 }
@@ -74,7 +75,10 @@ async function attachGoals(db: Db, rows: ProjectRow[]): Promise<ProjectWithGoals
       urlKey: deriveProjectUrlKey(r.name, r.id),
       goalIds: g.map((x) => x.id),
       goals: g,
-    } as ProjectWithGoals;
+      agentIds: [] as string[],
+      workspaces: [] as ProjectWorkspace[],
+      primaryWorkspace: null,
+    } satisfies ProjectWithGoals;
   });
 }
 
@@ -130,6 +134,35 @@ async function attachWorkspaces(db: Db, rows: ProjectWithGoals[]): Promise<Proje
       primaryWorkspace: pickPrimaryWorkspace(projectWorkspaceRows),
     };
   });
+}
+
+/** Batch-load agent IDs for a set of projects. */
+async function attachAgentIds(db: Db, rows: ProjectWithGoals[]): Promise<ProjectWithGoals[]> {
+  if (rows.length === 0) return [];
+
+  const projectIds = rows.map((r) => r.id);
+  const links = await db
+    .select({
+      projectId: projectAgents.projectId,
+      agentId: projectAgents.agentId,
+    })
+    .from(projectAgents)
+    .where(inArray(projectAgents.projectId, projectIds));
+
+  const map = new Map<string, string[]>();
+  for (const link of links) {
+    let arr = map.get(link.projectId);
+    if (!arr) {
+      arr = [];
+      map.set(link.projectId, arr);
+    }
+    arr.push(link.agentId);
+  }
+
+  return rows.map((r) => ({
+    ...r,
+    agentIds: map.get(r.id) ?? [],
+  }));
 }
 
 /** Sync the project_goals join table for a single project. */
@@ -264,7 +297,8 @@ export function projectService(db: Db) {
     list: async (companyId: string): Promise<ProjectWithGoals[]> => {
       const rows = await db.select().from(projects).where(eq(projects.companyId, companyId));
       const withGoals = await attachGoals(db, rows);
-      return attachWorkspaces(db, withGoals);
+      const withWorkspaces = await attachWorkspaces(db, withGoals);
+      return attachAgentIds(db, withWorkspaces);
     },
 
     listByIds: async (companyId: string, ids: string[]): Promise<ProjectWithGoals[]> => {
@@ -276,7 +310,8 @@ export function projectService(db: Db) {
         .where(and(eq(projects.companyId, companyId), inArray(projects.id, dedupedIds)));
       const withGoals = await attachGoals(db, rows);
       const withWorkspaces = await attachWorkspaces(db, withGoals);
-      const byId = new Map(withWorkspaces.map((project) => [project.id, project]));
+      const withAgents = await attachAgentIds(db, withWorkspaces);
+      const byId = new Map(withAgents.map((project) => [project.id, project]));
       return dedupedIds.map((id) => byId.get(id)).filter((project): project is ProjectWithGoals => Boolean(project));
     },
 
@@ -289,7 +324,9 @@ export function projectService(db: Db) {
       if (!row) return null;
       const [withGoals] = await attachGoals(db, [row]);
       if (!withGoals) return null;
-      const [enriched] = await attachWorkspaces(db, [withGoals]);
+      const [withWorkspaces] = await attachWorkspaces(db, [withGoals]);
+      if (!withWorkspaces) return null;
+      const [enriched] = await attachAgentIds(db, [withWorkspaces]);
       return enriched ?? null;
     },
 
@@ -328,7 +365,8 @@ export function projectService(db: Db) {
       }
 
       const [withGoals] = await attachGoals(db, [row]);
-      const [enriched] = withGoals ? await attachWorkspaces(db, [withGoals]) : [];
+      const [withWorkspaces] = withGoals ? await attachWorkspaces(db, [withGoals]) : [];
+      const [enriched] = withWorkspaces ? await attachAgentIds(db, [withWorkspaces]) : [];
       return enriched!;
     },
 
@@ -381,7 +419,8 @@ export function projectService(db: Db) {
       }
 
       const [withGoals] = await attachGoals(db, [row]);
-      const [enriched] = withGoals ? await attachWorkspaces(db, [withGoals]) : [];
+      const [withWorkspaces] = withGoals ? await attachWorkspaces(db, [withGoals]) : [];
+      const [enriched] = withWorkspaces ? await attachAgentIds(db, [withWorkspaces]) : [];
       return enriched ?? null;
     },
 
@@ -634,6 +673,32 @@ export function projectService(db: Db) {
       });
 
       return removed ? toWorkspace(removed) : null;
+    },
+
+    listAgentIds: async (projectId: string): Promise<string[]> => {
+      const rows = await db
+        .select({ agentId: projectAgents.agentId })
+        .from(projectAgents)
+        .where(eq(projectAgents.projectId, projectId));
+      return rows.map((r) => r.agentId);
+    },
+
+    addAgent: async (projectId: string, agentId: string) => {
+      await db
+        .insert(projectAgents)
+        .values({ projectId, agentId })
+        .onConflictDoNothing();
+    },
+
+    removeAgent: async (projectId: string, agentId: string) => {
+      await db
+        .delete(projectAgents)
+        .where(
+          and(
+            eq(projectAgents.projectId, projectId),
+            eq(projectAgents.agentId, agentId),
+          ),
+        );
     },
 
     resolveByReference: async (companyId: string, reference: string) => {

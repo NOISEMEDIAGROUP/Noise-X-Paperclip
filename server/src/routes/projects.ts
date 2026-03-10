@@ -1,6 +1,7 @@
 import { Router, type Request } from "express";
 import type { Db } from "@paperclipai/db";
 import {
+  addProjectAgentSchema,
   createProjectSchema,
   createProjectWorkspaceSchema,
   isUuidLike,
@@ -8,7 +9,7 @@ import {
   updateProjectWorkspaceSchema,
 } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
-import { projectService, logActivity } from "../services/index.js";
+import { projectService, agentService, logActivity } from "../services/index.js";
 import { conflict } from "../errors.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 
@@ -256,6 +257,87 @@ export function projectRoutes(db: Db) {
     });
 
     res.json(workspace);
+  });
+
+  // ── Agent membership ──────────────────────────────────────────────────
+
+  const agentSvc = agentService(db);
+
+  router.get("/projects/:id/agents", async (req, res) => {
+    const id = req.params.id as string;
+    const existing = await svc.getById(id);
+    if (!existing) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+    assertCompanyAccess(req, existing.companyId);
+    const agentIds = await svc.listAgentIds(id);
+    if (agentIds.length === 0) {
+      res.json([]);
+      return;
+    }
+    const allAgents = await agentSvc.list(existing.companyId, { includeTerminated: true });
+    const agentIdSet = new Set(agentIds);
+    res.json(allAgents.filter((a) => agentIdSet.has(a.id)));
+  });
+
+  router.post("/projects/:id/agents", validate(addProjectAgentSchema), async (req, res) => {
+    const id = req.params.id as string;
+    const existing = await svc.getById(id);
+    if (!existing) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+    assertCompanyAccess(req, existing.companyId);
+    const { agentId } = req.body as { agentId: string };
+    const agent = await agentSvc.getById(agentId);
+    if (!agent || agent.companyId !== existing.companyId) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    await svc.addAgent(id, agentId);
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: existing.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      action: "project.agent_added",
+      entityType: "project",
+      entityId: id,
+      details: { agentId },
+    });
+
+    const project = await svc.getById(id);
+    res.status(201).json(project);
+  });
+
+  router.delete("/projects/:id/agents/:agentId", async (req, res) => {
+    const id = req.params.id as string;
+    const agentId = req.params.agentId as string;
+    const existing = await svc.getById(id);
+    if (!existing) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+    assertCompanyAccess(req, existing.companyId);
+    await svc.removeAgent(id, agentId);
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: existing.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      action: "project.agent_removed",
+      entityType: "project",
+      entityId: id,
+      details: { agentId },
+    });
+
+    const project = await svc.getById(id);
+    res.json(project);
   });
 
   router.delete("/projects/:id", async (req, res) => {

@@ -10,6 +10,7 @@ import {
   agentWakeupRequests,
   heartbeatRunEvents,
   heartbeatRuns,
+  projectAgents,
 } from "@paperclipai/db";
 import { isUuidLike, normalizeAgentUrlKey } from "@paperclipai/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
@@ -192,8 +193,40 @@ export function agentService(db: Db) {
   function normalizeAgentRow(row: typeof agents.$inferSelect) {
     return withUrlKey({
       ...row,
+      projectIds: [] as string[],
       permissions: normalizeAgentPermissions(row.permissions, row.role),
     });
+  }
+
+  type NormalizedAgentRow = ReturnType<typeof normalizeAgentRow>;
+
+  /** Batch-load project IDs for a set of agents. */
+  async function attachProjectIds(rows: NormalizedAgentRow[]): Promise<NormalizedAgentRow[]> {
+    if (rows.length === 0) return [];
+
+    const agentIds = rows.map((r) => r.id);
+    const links = await db
+      .select({
+        agentId: projectAgents.agentId,
+        projectId: projectAgents.projectId,
+      })
+      .from(projectAgents)
+      .where(inArray(projectAgents.agentId, agentIds));
+
+    const map = new Map<string, string[]>();
+    for (const link of links) {
+      let arr = map.get(link.agentId);
+      if (!arr) {
+        arr = [];
+        map.set(link.agentId, arr);
+      }
+      arr.push(link.projectId);
+    }
+
+    return rows.map((r) => ({
+      ...r,
+      projectIds: map.get(r.id) ?? [],
+    }));
   }
 
   async function getById(id: string) {
@@ -202,7 +235,10 @@ export function agentService(db: Db) {
       .from(agents)
       .where(eq(agents.id, id))
       .then((rows) => rows[0] ?? null);
-    return row ? normalizeAgentRow(row) : null;
+    if (!row) return null;
+    const normalized = normalizeAgentRow(row);
+    const [withProjects] = await attachProjectIds([normalized]);
+    return withProjects ?? normalized;
   }
 
   async function ensureManager(companyId: string, managerId: string) {
@@ -331,7 +367,8 @@ export function agentService(db: Db) {
         conditions.push(ne(agents.status, "terminated"));
       }
       const rows = await db.select().from(agents).where(and(...conditions));
-      return rows.map(normalizeAgentRow);
+      const normalized = rows.map(normalizeAgentRow);
+      return attachProjectIds(normalized);
     },
 
     getById,
@@ -420,6 +457,7 @@ export function agentService(db: Db) {
         await tx.delete(agentWakeupRequests).where(eq(agentWakeupRequests.agentId, id));
         await tx.delete(agentApiKeys).where(eq(agentApiKeys.agentId, id));
         await tx.delete(agentRuntimeState).where(eq(agentRuntimeState.agentId, id));
+        await tx.delete(projectAgents).where(eq(projectAgents.agentId, id));
         const deleted = await tx
           .delete(agents)
           .where(eq(agents.id, id))

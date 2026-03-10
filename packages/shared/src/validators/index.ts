@@ -53,6 +53,10 @@ export {
   type UpdateProject,
   type CreateProjectWorkspace,
   type UpdateProjectWorkspace,
+  addProjectAgentSchema,
+  type AddProjectAgent,
+  removeProjectAgentSchema,
+  type RemoveProjectAgent,
 } from "./project.js";
 
 export {
