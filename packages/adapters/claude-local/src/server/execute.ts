@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AdapterExecutionContext, AdapterExecutionResult } from "@paperclipai/adapter-utils";
 import type { RunProcessResult } from "@paperclipai/adapter-utils/server-utils";
+import { analyzePromptCacheability } from "@paperclipai/shared";
 import {
   asString,
   asNumber,
@@ -284,6 +285,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         `Injected agent instructions via --append-system-prompt-file ${instructionsFilePath} (with path directive appended)`,
       ]
     : [];
+  const promptCacheWarnings = analyzePromptCacheability(promptTemplate);
 
   const runtimeConfig = await buildClaudeRuntimeConfig({
     runId,
@@ -329,6 +331,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     await onLog(
       "stderr",
       `[paperclip] Claude session "${runtimeSessionId}" was saved for cwd "${runtimeSessionCwd}" and will not be resumed in "${cwd}".\n`,
+    );
+  }
+  for (const warning of promptCacheWarnings) {
+    await onLog(
+      "stderr",
+      `[paperclip] Prompt cache warning: {{ ${warning.variable} }} ${warning.message}\n`,
     );
   }
   const prompt = renderTemplate(promptTemplate, {
