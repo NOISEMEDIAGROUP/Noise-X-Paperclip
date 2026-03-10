@@ -23,8 +23,9 @@ const ALL_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "bloc
 
 /**
  * Check whether `@name` appears as a standalone mention in `body`.
- * The `@` must be at the start of the string or preceded by whitespace, and
- * the name must be followed by whitespace, punctuation, or end of string.
+ * The `@` must be at the start of the string or preceded by a non-alphanumeric
+ * character (whitespace, markdown formatting, punctuation). The name must be
+ * followed by whitespace, punctuation, markdown formatting, or end of string.
  * Matching is case-insensitive. Supports multi-word agent names.
  */
 export function bodyContainsMention(body: string, name: string): boolean {
@@ -32,9 +33,12 @@ export function bodyContainsMention(body: string, name: string): boolean {
   const needle = `@${name.toLowerCase()}`;
   let idx = bodyLower.indexOf(needle);
   while (idx !== -1) {
-    if (idx === 0 || /\s/.test(bodyLower[idx - 1])) {
+    // Allow @ after whitespace, start-of-string, or common markdown/punctuation
+    // characters (blockquote >, parens, bold/italic markers, etc.) to avoid
+    // false negatives while still rejecting email-style word@Name patterns.
+    if (idx === 0 || /[^a-z0-9]/.test(bodyLower[idx - 1])) {
       const afterPos = idx + needle.length;
-      if (afterPos >= bodyLower.length || /[\s,!?.;:\])}>]/.test(bodyLower[afterPos])) {
+      if (afterPos >= bodyLower.length || /[\s,!?.;:\])}>*_~`]/.test(bodyLower[afterPos])) {
         return true;
       }
     }

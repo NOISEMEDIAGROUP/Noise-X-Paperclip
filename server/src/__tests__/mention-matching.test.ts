@@ -84,6 +84,31 @@ describe("bodyContainsMention", () => {
     expect(bodyContainsMention("first line\n@Alice", "Alice")).toBe(true);
   });
 
+  // --- markdown formatting contexts ---
+  it("matches @Name in blockquote", () => {
+    expect(bodyContainsMention(">@Alice said something", "Alice")).toBe(true);
+    expect(bodyContainsMention("> @Alice said something", "Alice")).toBe(true);
+  });
+
+  it("matches @Name in parentheses", () => {
+    expect(bodyContainsMention("(cc @Alice)", "Alice")).toBe(true);
+    expect(bodyContainsMention("(@Alice)", "Alice")).toBe(true);
+  });
+
+  it("matches @Name after bold/italic markers", () => {
+    expect(bodyContainsMention("**@Alice** is great", "Alice")).toBe(true);
+    expect(bodyContainsMention("_@Alice_ is great", "Alice")).toBe(true);
+    expect(bodyContainsMention("*@Alice*", "Alice")).toBe(true);
+  });
+
+  it("matches @Name after list marker", () => {
+    expect(bodyContainsMention("- @Alice", "Alice")).toBe(true);
+  });
+
+  it("does not match when name is part of a hyphenated name", () => {
+    expect(bodyContainsMention("@Alice-bot", "Alice")).toBe(false);
+  });
+
   // --- edge: same-name prefix agents ---
   it("distinguishes between 'Al' and 'Alice'", () => {
     expect(bodyContainsMention("@Alice", "Al")).toBe(false);
