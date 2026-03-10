@@ -34,7 +34,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BRANCH="sync/upstream-$(date -u +%Y-%m-%d)"
+          BRANCH="sync/upstream-${{ steps.date.outputs.today }}"
           EXISTING=$(gh pr list \
             --repo "$GITHUB_REPOSITORY" \
             --head "$BRANCH" \
@@ -42,7 +42,7 @@ jobs:
             --json number \
             --jq '.[0].number // empty')
           if [ -n "$EXISTING" ]; then
-            echo "Sync PR #$EXISTING already exists for today — skipping."
+            echo "Sync PR #$EXISTING already exists for today -- skipping."
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -61,7 +61,7 @@ jobs:
           NEW_COMMITS=$(git rev-list HEAD..upstream/master --count)
           echo "new_commits=$NEW_COMMITS" >> "$GITHUB_OUTPUT"
           if [ "$NEW_COMMITS" -eq 0 ]; then
-            echo "No new upstream commits — nothing to sync."
+            echo "No new upstream commits -- nothing to sync."
           else
             echo "$NEW_COMMITS new upstream commit(s) found."
           fi
@@ -70,12 +70,11 @@ jobs:
         id: merge
         if: steps.check_pr.outputs.exists == 'false' && steps.check_commits.outputs.new_commits != '0'
         run: |
-          TODAY=$(date -u +%Y-%m-%d)
+          TODAY="${{ steps.date.outputs.today }}"
           BRANCH="sync/upstream-$TODAY"
           git checkout -b "$BRANCH"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
-          # Collect upstream commit list (capped at 50)
           git log HEAD..upstream/master --oneline --no-merges | head -50 > /tmp/commit_log.txt
           echo "Upstream commits to merge:"
           cat /tmp/commit_log.txt
@@ -88,67 +87,83 @@ jobs:
             git diff --name-only --diff-filter=U > /tmp/conflicted_files.txt
             echo "Merge conflicts detected:"
             cat /tmp/conflicted_files.txt
-            # Commit conflict markers so the branch can be pushed
             git add -A
             git commit --no-edit -m "chore: sync upstream paperclip $TODAY [conflicts]" || true
           fi
 
           git push origin "$BRANCH"
 
+      - name: Write PR body (clean merge)
+        if: steps.merge.outputs.merge_clean == 'true'
+        run: |
+          COMMIT_LOG=$(cat /tmp/commit_log.txt)
+          cat > /tmp/pr_body.md <<PREOF
+          ## Upstream sync -- ${{ steps.date.outputs.today }}
+
+          Automated daily sync from [paperclipai/paperclip](https://github.com/paperclipai/paperclip).
+
+          ### Upstream commits included
+
+          \`\`\`
+          ${COMMIT_LOG}
+          \`\`\`
+
+          ---
+          *Merged cleanly. Review and merge when ready -- branch protection still applies.*
+          PREOF
+          # Remove leading spaces added by heredoc indentation
+          sed -i 's/^          //' /tmp/pr_body.md
+
       - name: Create PR (clean merge)
         if: steps.merge.outputs.merge_clean == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          COMMIT_LOG=$(cat /tmp/commit_log.txt)
           gh pr create \
             --repo "$GITHUB_REPOSITORY" \
             --base master \
             --head "${{ steps.merge.outputs.branch }}" \
             --title "chore: sync upstream paperclip (${{ steps.date.outputs.today }})" \
-            --body "## Upstream sync — ${{ steps.date.outputs.today }}
-
-Automated daily sync from [paperclipai/paperclip](https://github.com/paperclipai/paperclip).
-
-### Upstream commits included
-
-\`\`\`
-${COMMIT_LOG}
-\`\`\`
-
----
-*Merged cleanly. Review and merge when ready — branch protection still applies.*" \
+            --body-file /tmp/pr_body.md \
             --assignee kaylenmistry
+
+      - name: Write PR body (conflicts)
+        if: steps.merge.outputs.merge_clean == 'false'
+        run: |
+          COMMIT_LOG=$(cat /tmp/commit_log.txt)
+          CONFLICTED=$(cat /tmp/conflicted_files.txt)
+          cat > /tmp/pr_body.md <<PREOF
+          ## Upstream sync -- ${{ steps.date.outputs.today }} -- Merge conflicts
+
+          Automated daily sync from [paperclipai/paperclip](https://github.com/paperclipai/paperclip).
+
+          ### Upstream commits included
+
+          \`\`\`
+          ${COMMIT_LOG}
+          \`\`\`
+
+          ### Conflicting files
+
+          \`\`\`
+          ${CONFLICTED}
+          \`\`\`
+
+          ---
+          *Manual resolution required. Assign to CTO + engineer to resolve conflicts before merging.*
+          PREOF
+          sed -i 's/^          //' /tmp/pr_body.md
 
       - name: Create PR (conflicts)
         if: steps.merge.outputs.merge_clean == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          COMMIT_LOG=$(cat /tmp/commit_log.txt)
-          CONFLICTED=$(cat /tmp/conflicted_files.txt)
           gh pr create \
             --repo "$GITHUB_REPOSITORY" \
             --base master \
             --head "${{ steps.merge.outputs.branch }}" \
             --title "chore: sync upstream paperclip (${{ steps.date.outputs.today }}) [CONFLICTS]" \
-            --body "## Upstream sync — ${{ steps.date.outputs.today }} — Merge conflicts
-
-Automated daily sync from [paperclipai/paperclip](https://github.com/paperclipai/paperclip).
-
-### Upstream commits included
-
-\`\`\`
-${COMMIT_LOG}
-\`\`\`
-
-### Conflicting files
-
-\`\`\`
-${CONFLICTED}
-\`\`\`
-
----
-*Manual resolution required. Assign to CTO + engineer to resolve conflicts before merging.*" \
+            --body-file /tmp/pr_body.md \
             --label conflicts \
             --assignee kaylenmistry
