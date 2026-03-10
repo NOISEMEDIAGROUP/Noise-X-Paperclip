@@ -2,47 +2,47 @@
 
 Last updated: 2026-03-10
 
-## Roadmap status
+## Current feature status
 
-- Phase 1: `done`
-  - executive records, board surface, results library, plans library, shared record detail, promotion flows
-- Phase 2: `done`
-  - briefing library, kind-aware generation, generation-window controls, and scheduled digest generation are now in code
-- Phase 3: `done`
-  - knowledge index, knowledge routes, and record-to-knowledge publication are now in code
-- Phase 4: `done`
-  - milestone model and dedicated portfolio surface are now in code
-- Phase 5: `partial`
-  - repo-backed checkout isolation is shipped, issue/portfolio/company cost truthfulness improved, and issues now logically release active checkouts when work leaves execution, but physical cleanup and full attribution normalization still need more work
+- Roadmap surface: `done`
+  - operator-facing rename from Goals to Roadmap
+  - roadmap grouping by planning horizon
+  - manager guidance field and ordered roadmap presentation
+  - compatibility alias routes preserved for existing goal-backed links
+- System health diagnostics: `done`
+  - `GET /api/health/subsystems`
+  - dashboard `System Health` section
+  - database, deployment/auth, `qmd`, and local-adapter diagnostics
+- Manager planning governance: `done`
+  - company default planning mode
+  - agent override planning mode
+  - resolved planning mode exposed by the server
+  - `approve_manager_plan` approvals
+  - top-level agent issue creation enforcement when approval is required
+- DEV-DOCS refresh: `done`
+  - new architecture document
+  - operational spine updated to match the shipped code
 
 ## Branch state
 
-- Base branch for ongoing work: `development`
-- Current implementation branch: `codex/ci-development-first`
-- CI branch model:
-  - feature branches open PRs into `development`
-  - `development` pushes refresh `pnpm-lock.yaml` and rerun verification
-  - `development` promotes into `master` after soak/live testing
+- Active branch in this workspace: `development`
+- Working tree contains the roadmap/health/governance implementation and supporting tests.
 
 ## Primary gap
 
-Paperclip already has governance and execution. The missing layer is interpretation:
+Paperclip now has the strategic primitives for manager autonomy, but the product still depends on agent instructions using them well:
 
-- what happened
-- why it matters
-- what changed
-- what is blocked
-- what decision is needed
-
-Phase 1 created the basic executive surface. The remaining work is to make it function like an executive operating console instead of a thin board over operational records.
+- roadmap quality determines whether idle managers pick useful next work
+- manager-plan approvals govern the workflow, but plan quality is still prompt-driven
+- checkout cleanup and wider attribution auditing remain separate hardening work
 
 ## Current blockers
 
 - None at the repo/tooling level right now.
 - The remaining risk is completeness, not broken infra:
-  - checkout lifecycle is only logically mature; physical cleanup/reaping is still light
+  - physical checkout cleanup/reaping is still light
   - attribution auditing across every mutation path still deserves a deeper sweep
-  - external delivery/search features remain intentionally out of scope for this sprint
+  - operator UX could use browser QA for the new roadmap and health flows
 
 ## Verification posture
 
@@ -54,11 +54,8 @@ pnpm test:run
 pnpm build
 ```
 
-This branch changes CI and docs, not runtime UI behavior, so browser QA is not required for this change set.
-
 Verified on this branch:
 
 - `pnpm -r typecheck`
 - `pnpm test:run`
 - `pnpm build`
-- workflow YAML parses successfully after the branch-filter changes

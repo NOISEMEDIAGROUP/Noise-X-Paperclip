@@ -454,6 +454,7 @@ const storageService = createStorageServiceFromConfig(config);
 const app = await createApp(db as any, {
   uiMode,
   storageService,
+  databaseConnectionString: activeDatabaseConnectionString,
   deploymentMode: config.deploymentMode,
   deploymentExposure: config.deploymentExposure,
   allowedHostnames: config.allowedHostnames,

@@ -2,6 +2,35 @@
 
 ## 2026-03-10
 
+### Session: roadmap, health, and manager-governance implementation
+
+- Extended the `goals` model into the operator-facing roadmap surface:
+  - added `planningHorizon`, `sortOrder`, and `guidance`
+  - added roadmap alias routes while preserving goal compatibility
+  - renamed the UI surface from Goals to Roadmap
+- Added system-health diagnostics:
+  - new subsystem health service
+  - `GET /api/health/subsystems`
+  - dashboard `System Health` section
+- Added manager planning governance:
+  - company default planning mode
+  - agent override planning mode
+  - resolved planning mode in agent reads
+  - `approve_manager_plan`
+  - top-level issue creation enforcement with `approvalId`
+- Added focused automated coverage for:
+  - subsystem health service and route
+  - roadmap alias routes
+  - approval-required issue creation
+  - manager-plan approval wakeups
+  - manager planning mode resolution
+  - roadmap/health/planning-mode UI rendering
+- Refreshed DEV-DOCS and added a detailed architecture document grounded in the current code.
+- Re-ran:
+  - `pnpm -r typecheck`
+  - `pnpm test:run`
+  - `pnpm build`
+
 ### Session: development-first CI alignment
 
 - Updated GitHub Actions to match the intended branch model:

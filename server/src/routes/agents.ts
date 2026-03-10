@@ -333,6 +333,8 @@ export function agentRoutes(db: Db) {
       adapterConfig: redactEventPayload(agent.adapterConfig),
       runtimeConfig: redactEventPayload(agent.runtimeConfig),
       permissions: agent.permissions,
+      managerPlanningModeOverride: agent.managerPlanningModeOverride,
+      resolvedManagerPlanningMode: agent.resolvedManagerPlanningMode,
       updatedAt: agent.updatedAt,
     };
   }
@@ -712,6 +714,7 @@ export function agentRoutes(db: Db) {
             typeof normalizedHireInput.budgetMonthlyCents === "number"
               ? normalizedHireInput.budgetMonthlyCents
               : agent.budgetMonthlyCents,
+          managerPlanningModeOverride: normalizedHireInput.managerPlanningModeOverride ?? null,
           metadata: requestedMetadata,
           agentId: agent.id,
           requestedByAgentId: actor.actorType === "agent" ? actor.actorId : null,

@@ -4,26 +4,26 @@ Last updated: 2026-03-10
 
 ## Current focus
 
-Paperclip has already shipped the executive-layer sprint:
+Paperclip has already shipped the executive-layer sprint and now includes the next operational governance layer:
 
-- `/briefings/board`
-- `/briefings/briefings`
-- `/briefings/results`
-- `/briefings/plans`
-- `/briefings/portfolio`
-- `/knowledge`
-- durable `records`, schedules, milestones, knowledge publication, and promotion flows
+- `/roadmap` as the operator-facing strategy surface (backed by the existing `goals` model)
+- dashboard `System Health` diagnostics
+- company-level and agent-level manager planning modes
+- approval-gated top-level manager issue creation via `approve_manager_plan`
+- durable `records`, schedules, milestones, knowledge publication, and checkout-aware execution flows
 
 ## Current branch
 
-- Working branch: `codex/ci-development-first`
-- Baseline source branch: `development`
+- Working branch: `development`
+- Integration branch: `development`
 
 ## Immediate priorities
 
-1. Keep `DEV-DOCS/` aligned with the actual code and branch policy.
-2. Move PR verification to `development`, where feature work is supposed to land.
-3. Move lockfile ownership to `development`, where integration actually happens.
+1. Keep `DEV-DOCS/` aligned with the roadmap/health/governance implementation.
+2. Preserve the compatibility contract:
+   - internal `goals` persistence
+   - operator-facing `Roadmap` language
+3. Keep manager governance rules easy to audit in code reviews.
 4. End with full verification:
    - `pnpm -r typecheck`
    - `pnpm test:run`
@@ -31,14 +31,14 @@ Paperclip has already shipped the executive-layer sprint:
 
 ## Important current truths
 
-- `/dashboard` is still the operational telemetry page.
-- The executive sprint is merged on `development`.
-- `development` is the gated integration branch.
-- `master` is the promotion branch after beta/live soak.
-- CI-owned lockfile updates belong on `development`, not on feature branches.
+- `/dashboard` is still the operator telemetry page, but it now also surfaces instance-level subsystem health.
+- The old Goals tab is now the Roadmap surface.
+- Managers resolve planning mode from company default plus optional agent override.
+- Approval-required managers must attach an approved `approvalId` when creating top-level issues.
+- `development` is the active integration branch in this workspace.
 
 ## Read next
 
 1. `DEV-DOCS/DEVELOPMENT-STATUS.md`
 2. `DEV-DOCS/01-task-list.md`
-3. `DEV-DOCS/recent-changes.md`
+3. `DEV-DOCS/ARCHITECTURE.md`

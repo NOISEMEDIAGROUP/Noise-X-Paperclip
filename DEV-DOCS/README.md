@@ -2,7 +2,7 @@
 
 This folder captures the **current local development state** of the Paperclip repository as verified in this workspace.
 
-Last updated: 2026-03-09 (America/New_York)
+Last updated: 2026-03-10 (America/New_York)
 
 ## Scope
 
@@ -32,6 +32,8 @@ These docs were updated from live repo inspection of:
   - practical task breakdown with `done`, `partial`, `next`, and `later`
 - `DEV-DOCS/work-log.md`
   - dated execution log for major implementation sessions
+- `DEV-DOCS/ARCHITECTURE.md`
+  - detailed system boundaries, entity model, runtime flow, roadmap semantics, and governance rules
 - `DEV-DOCS/roadmap.md`
   - the five-phase executive-layer roadmap and what each phase means
 
@@ -48,7 +50,7 @@ These docs were updated from live repo inspection of:
 
 If you only read two files before continuing work on this branch:
 
-1. `DEV-DOCS/recent-changes.md`
+1. `DEV-DOCS/ARCHITECTURE.md`
 2. `DEV-DOCS/DEVELOPMENT-STATUS.md`
 
-They now describe the post-Phase-1 executive layer plus the current all-phases sprint work that adds schedules, knowledge, portfolio, and checkout-aware workspace isolation.
+They now describe the current Paperclip control plane after the roadmap rename, system-health diagnostics, and manager-planning-governance work.

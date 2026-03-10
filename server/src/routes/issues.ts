@@ -15,6 +15,7 @@ import { validate } from "../middleware/validate.js";
 import {
   accessService,
   agentService,
+  approvalService,
   goalService,
   heartbeatService,
   issueApprovalService,
@@ -43,6 +44,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
   const access = accessService(db);
   const heartbeat = heartbeatService(db);
   const agentsSvc = agentService(db);
+  const approvalsSvc = approvalService(db);
   const projectsSvc = projectService(db);
   const goalsSvc = goalService(db);
   const issueApprovalsSvc = issueApprovalService(db);
@@ -108,6 +110,62 @@ export function issueRoutes(db: Db, storage: StorageService) {
       throw forbidden("Missing permission: tasks:assign");
     }
     throw unauthorized();
+  }
+
+  async function validateTopLevelAgentPlanningApproval(input: {
+    companyId: string;
+    parentId?: string | null;
+    approvalId?: string | null;
+    req: Request;
+    res: Response;
+  }) {
+    const { companyId, parentId, approvalId, req, res } = input;
+    if (req.actor.type !== "agent") return null;
+    if (parentId) return null;
+    if (!req.actor.agentId) {
+      res.status(403).json({ error: "Agent authentication required" });
+      return null;
+    }
+
+    const actorAgent = await agentsSvc.getById(req.actor.agentId);
+    if (!actorAgent || actorAgent.companyId !== companyId) {
+      res.status(403).json({ error: "Forbidden" });
+      return null;
+    }
+
+    if (actorAgent.resolvedManagerPlanningMode !== "approval_required") {
+      return null;
+    }
+
+    if (!approvalId) {
+      res.status(422).json({ error: "approvalId is required for top-level issue creation in approval-required mode" });
+      return null;
+    }
+
+    const approval = await approvalsSvc.getById(approvalId);
+    if (!approval) {
+      res.status(404).json({ error: "Approval not found" });
+      return null;
+    }
+
+    if (approval.companyId !== companyId) {
+      res.status(403).json({ error: "Approval belongs to another company" });
+      return null;
+    }
+    if (approval.requestedByAgentId !== actorAgent.id) {
+      res.status(403).json({ error: "Approval was not requested by this agent" });
+      return null;
+    }
+    if (approval.status !== "approved") {
+      res.status(422).json({ error: "Approval must be approved before work can be created" });
+      return null;
+    }
+    if (approval.type !== "approve_manager_plan" && approval.type !== "approve_ceo_strategy") {
+      res.status(422).json({ error: "Approval type cannot authorize top-level planning work" });
+      return null;
+    }
+
+    return approval;
   }
 
   function requireAgentRunId(req: Request, res: Response) {
@@ -611,13 +669,34 @@ export function issueRoutes(db: Db, storage: StorageService) {
     if (req.body.assigneeAgentId || req.body.assigneeUserId) {
       await assertCanAssignTasks(req, companyId);
     }
+    const planningApproval = await validateTopLevelAgentPlanningApproval({
+      companyId,
+      parentId: req.body.parentId ?? null,
+      approvalId: req.body.approvalId ?? null,
+      req,
+      res,
+    });
+    // The approval validator is responsible for returning the correct HTTP error when a
+    // governed manager tries to create top-level work without an approved plan.
+    if (res.headersSent) {
+      return;
+    }
 
     const actor = getActorInfo(req);
+    const { approvalId: _approvalId, ...issueInput } = req.body;
     const issue = await svc.create(companyId, {
-      ...req.body,
+      ...issueInput,
       createdByAgentId: actor.agentId,
       createdByUserId: actor.actorType === "user" ? actor.actorId : null,
     });
+
+    const linkedApprovalId = planningApproval?.id ?? req.body.approvalId ?? null;
+    if (linkedApprovalId) {
+      await issueApprovalsSvc.link(issue.id, linkedApprovalId, {
+        agentId: actor.agentId,
+        userId: actor.actorType === "user" ? actor.actorId : null,
+      });
+    }
 
     await logActivity(db, {
       companyId,
@@ -628,7 +707,11 @@ export function issueRoutes(db: Db, storage: StorageService) {
       action: "issue.created",
       entityType: "issue",
       entityId: issue.id,
-      details: { title: issue.title, identifier: issue.identifier },
+      details: {
+        title: issue.title,
+        identifier: issue.identifier,
+        approvalId: linkedApprovalId,
+      },
     });
 
     if (issue.assigneeAgentId && issue.status !== "backlog") {

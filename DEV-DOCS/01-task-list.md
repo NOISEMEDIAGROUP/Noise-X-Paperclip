@@ -4,6 +4,29 @@ Last updated: 2026-03-10
 
 ## Done
 
+- Turn the old Goals surface into the roadmap layer:
+  - `/roadmap` UI routes
+  - legacy `/goals*` redirects
+  - roadmap API aliases over the existing goal service
+  - roadmap guidance, horizon, and ordering fields
+- Add operator-facing health diagnostics:
+  - subsystem health service
+  - `/api/health/subsystems`
+  - dashboard `System Health` section
+- Add manager planning governance:
+  - company default planning mode
+  - agent override planning mode
+  - resolved planning mode in agent reads
+  - `approve_manager_plan` approval support
+  - top-level issue creation enforcement via `approvalId`
+- Add automated coverage for:
+  - roadmap aliases
+  - subsystem health service and route
+  - manager-plan approval wakeups
+  - manager planning mode resolution
+  - approval-required issue creation
+  - new roadmap/health/planning-mode UI rendering
+- Add detailed `DEV-DOCS/ARCHITECTURE.md`
 - Ship the first executive record layer:
   - `records`, `record_links`, `record_attachments`, `briefing_view_states`
   - `/briefings/board`, `/briefings/results`, `/briefings/plans`
@@ -53,14 +76,17 @@ Last updated: 2026-03-10
 
 ## Next
 
-- Verify the updated branch model against the next real feature PR targeting `development`
+- Do browser QA on:
+  - dashboard health section
+  - roadmap list/detail flows
+  - company settings planning mode controls
+  - agent create/edit planning mode controls
 - Tighten checkout lifecycle semantics:
   - release/archive rules
   - cleanup policy
   - operator visibility when a checkout becomes stale
 - Sweep remaining attribution paths to ensure every executive mutation carries consistent actor metadata
-- Extend pricing-state treatment into any remaining historical cost surface that still assumes exact dollars
-- Decide whether briefing delivery stays in-app only or expands into Slack/email/webhook delivery
+- Decide whether roadmap-aware manager guidance should also be seeded into default agent instructions/templates
 
 ## Later
 
@@ -70,5 +96,5 @@ Last updated: 2026-03-10
   - Discord
   - webhooks beyond current event layer
 - richer knowledge retrieval/search
-- automated plan-to-issue decomposition
+- automated plan-to-issue decomposition beyond the current approval-governed manager-plan path
 - broader multi-operator governance beyond current board model
