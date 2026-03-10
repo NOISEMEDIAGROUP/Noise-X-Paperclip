@@ -799,11 +799,17 @@ export function heartbeatService(db: Db) {
     const runtimeConfig = parseObject(agent.runtimeConfig);
     const heartbeat = parseObject(runtimeConfig.heartbeat);
 
+    // sessionMaxAgeSec: max age of a saved task session before it is considered
+    // stale and discarded. 0 means never expire by age (default). Agents with
+    // long idle periods benefit from a value like 86400 (24 h).
+    const sessionMaxAgeSec = Math.max(0, asNumber(heartbeat.sessionMaxAgeSec, 0));
+
     return {
       enabled: asBoolean(heartbeat.enabled, true),
       intervalSec: Math.max(0, asNumber(heartbeat.intervalSec, 0)),
       wakeOnDemand: asBoolean(heartbeat.wakeOnDemand ?? heartbeat.wakeOnAssignment ?? heartbeat.wakeOnOnDemand ?? heartbeat.wakeOnAutomation, true),
       maxConcurrentRuns: normalizeMaxConcurrentRuns(heartbeat.maxConcurrentRuns),
+      sessionMaxAgeSec,
     };
   }
 
@@ -1128,7 +1134,29 @@ export function heartbeatService(db: Db) {
       : null;
     const resetTaskSession = shouldResetTaskSessionForWake(context);
     const sessionResetReason = describeSessionResetReason(context);
-    const taskSessionForRun = resetTaskSession ? null : taskSession;
+
+    // Phase 3: expire stale task sessions that exceed the configured age threshold.
+    const policy = parseHeartbeatPolicy(agent);
+    const sessionAgeExpired =
+      !resetTaskSession &&
+      taskSession !== null &&
+      policy.sessionMaxAgeSec > 0 &&
+      taskSession.updatedAt !== null &&
+      (Date.now() - new Date(taskSession.updatedAt).getTime()) / 1000 > policy.sessionMaxAgeSec;
+    if (sessionAgeExpired && taskSession) {
+      logger.info(
+        {
+          companyId: agent.companyId,
+          agentId: agent.id,
+          runId: run.id,
+          taskKey,
+          sessionMaxAgeSec: policy.sessionMaxAgeSec,
+          sessionAgeMs: Date.now() - new Date(taskSession.updatedAt).getTime(),
+        },
+        "Phase 3: task session exceeded max age — starting fresh",
+      );
+    }
+    const taskSessionForRun = resetTaskSession || sessionAgeExpired ? null : taskSession;
     const previousSessionParams = normalizeSessionParams(
       sessionCodec.deserialize(taskSessionForRun?.sessionParamsJson ?? null),
     );

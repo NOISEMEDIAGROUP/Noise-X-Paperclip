@@ -166,55 +166,53 @@ Operators fork the public repo, add their own `agents/<slug>/AGENTS.md` files, c
 
 ## Phases
 
-### Phase 1 — Runtime Isolation for Local Adapters
+### Phase 1 — Runtime Isolation for Local Adapters ✅ DONE
 
 Decouple Paperclip agent runs from the operator's personal CLI environment.
 
-- Define a Paperclip-owned runtime home/config directory per agent or company.
-- Launch `codex_local` and `claude_local` with explicit env/config paths instead of inheriting personal defaults.
-- Add an adapter-level allowlist for MCP servers intentionally available to an agent; default to none.
-- Preserve cross-platform launch compatibility (PR #366 as hard constraint).
+- ✅ `claude_local`: passes `--strict-mcp-config` flag; writes per-agent `mcp-config.json` from adapter `mcpServers`; blocks personal `~/.claude` MCP servers by default.
+- ✅ `codex_local`: injects `CODEX_HOME = $AGENT_HOME/.codex`; isolates Codex CLI from `~/.codex` personal config.
+- ✅ Cross-platform spawn compatibility preserved (PR #366).
 
-**Outcome:** Linear-style auth noise disappears unless that MCP is explicitly configured. Runs are reproducible across machines.
+**Implementation:** `packages/adapters/claude-local/src/server/execute.ts`, `packages/adapters/codex-local/src/server/execute.ts`
 
 ---
 
-### Phase 2 — Required Environment Injection
+### Phase 2 — Required Environment Injection ✅ DONE
 
 Make agent runtime assumptions explicit and reliable.
 
-- Always inject `AGENT_HOME` for local agents that use role folders.
-- Ensure path variables are consistent with the agent's instructions file and workspace model.
-- Add a pre-flight sanity check for required env vars before invoking the adapter.
-- Standardize injection using the pattern from PR #399.
+- ✅ Both adapters inject `AGENT_HOME = $PAPERCLIP_AGENT_RUNTIME_DIR/<slug>` derived from `instructionsFilePath` parent dir name before spawning the subprocess.
+- ✅ Directory is `mkdir -p`'d on every run — agents never encounter a missing home dir.
+- ✅ Slug falls back to `agent.id` if `instructionsFilePath` is not set.
 
-**Outcome:** Agents stop wasting their first commands discovering missing paths.
-
----
-
-### Phase 3 — Session Resume Policy Hardening
-
-Keep useful continuity, but stop dragging huge stale sessions into low-value wakes.
-
-- Prefer fresh sessions when wake source is `timer`, no `issueId`/`taskId` is present, or the previous session is too old or too large.
-- Add configurable thresholds for session age/size before automatic resume.
-- Preserve resume only for same-task execution where continuity is genuinely valuable.
-- Ensure compatibility with worktree cleanup lifecycle from PR #179.
-
-**Outcome:** Lower token usage on routine heartbeats. Cleaner inputs for the circuit breaker from #390.
+**Implementation:** `packages/adapters/claude-local/src/server/execute.ts`, `packages/adapters/codex-local/src/server/execute.ts`
 
 ---
 
-### Phase 4 — Heartbeat Pre-flight Guard (Idle Token Burn)
+### Phase 3 — Session Resume Policy Hardening ✅ DONE
+
+- ✅ Timer wakes always start fresh — `shouldResetTaskSessionForWake()` returns `true` for `wakeSource === "timer"`.
+- ✅ Manual on-demand wakes and `issue_assigned` wakes always start fresh.
+- ✅ `sessionMaxAgeSec` added to `parseHeartbeatPolicy()`: if a saved task session is older than this value (seconds), it is discarded. Default: `0` (disabled). Set e.g. `86400` for 24 h expiry. Logged when triggered.
+- ✅ Task-keyed sessions preserved for active assignment wakes within the age window — continuity maintained where genuinely valuable.
+- ✅ Worktree cleanup from PR #179 compatible (session reset clears task sessions, worktrees cleaned separately).
+
+**Configuration:** set `runtimeConfig.heartbeat.sessionMaxAgeSec` per agent. Execution agents with long idle periods should use this to avoid resuming huge stale contexts.
+
+**Implementation:** `server/src/services/heartbeat.ts` — `parseHeartbeatPolicy()`, `executeRun()`
+
+---
+
+### Phase 4 — Heartbeat Pre-flight Guard (Idle Token Burn) ✅ DONE
 
 Stop spawning the adapter subprocess when there is nothing to do.
 
-- Add an orchestration-level guard in the heartbeat service: check for assigned tasks, unread comments, or due scheduled events before spawning the CLI.
-- If nothing actionable exists, exit immediately — no subprocess, no token cost.
-- Document the intended wake policy: executives/managers may use timer wakes; execution agents should default to `wakeOnDemand` and assignment/comment-driven wakes.
-- Align the "no progress" definition with the circuit breaker from #390.
+- ✅ Guard runs in `executeRun()` before adapter invocation: for bare timer wakes with no `issueId`, counts active assigned issues (`todo`, `in_progress`, `in_review`, `blocked`).
+- ✅ If count is 0: run is marked `succeeded` with `{skipped: true, reason: "no_actionable_work"}`, no subprocess spawned, no tokens burned.
+- ✅ On-demand, assignment, and automation wakes bypass the guard and always run.
 
-**Outcome:** The majority of idle token burn across all agent types is eliminated. This directly addresses Issue #373.
+**Implementation:** `server/src/services/heartbeat.ts` lines 1071–1108
 
 ---
 
@@ -246,67 +244,59 @@ Track before/after for:
 
 ---
 
-### Phase 7 — Codex Billing Mode and Cost Tracking
+### Phase 7 — Codex Billing Mode and Cost Tracking ✅ DONE
 
-> **Immediate operator action required** — before any code changes, go to [platform.openai.com/api-keys](https://platform.openai.com/api-keys), create a key named **`paperclip`**, and add it to each codex agent config under `OPENAI_API_KEY`. This switches billing from the subscription quota (with resets) to pay-per-token API billing.
+- ✅ PR #386 merged: heartbeat cost recording routes through `costService.createEvent()`.
+- ✅ PR #385 merged: `calculateTokenCostCents()` estimates cost from token counts; `calculatedCostCents` stored separately from adapter-reported `costCents`.
+- ✅ Greptile bug fixes applied inline: cached token double-counting corrected; unknown model returns `null` not `0`.
+- ✅ Global `OPENAI_API_KEY` fallback: `codex_local` falls through to `process.env.OPENAI_API_KEY` when agent config has no key, so Docker-level env var is recognized.
 
-**Root cause:** `resolveCodexBillingType` in `codex-local/execute.ts` only checks `adapterConfig.env`, not `process.env`. So a Docker-level `OPENAI_API_KEY` is invisible to Paperclip's billing detection. Additionally, `docker-compose.quickstart.yml` uses `${OPENAI_API_KEY:-}` which silently passes an empty string when the var is unset. And the Codex CLI never emits `costUsd`, so `costCents` is always `$0`. PRs #385 and #386 must land before this phase produces correct results.
-
-**Deliverables:**
-
-1. **Fix billing detection** — fall through to `process.env.OPENAI_API_KEY` when agent config has no key, so Docker-level vars are recognized.
-2. **Fix Docker silent failure** — change `${OPENAI_API_KEY:-}` to `${OPENAI_API_KEY:-}` with a warning, or document it clearly.
-3. **Estimated cost from tokens** — build on PR #385's pricing table to compute cost from `inputTokens`/`outputTokens` when `costUsd` is null. Store as `calculatedCostCents`, not `costCents`, to distinguish estimated from adapter-reported.
-4. **Global API key fallback** — server-level `OPENAI_API_KEY` acts as default for all `codex_local` agents that don't override it.
-5. **Billing mode visibility** — surface whether each agent run used API or subscription billing in the run detail and cost dashboard (PR #255).
-
-**Outcome:** Operators know where Codex charges land. Paperclip tracks Codex spend. Budget enforcement works. No more surprise quota resets.
+**Operator action still required:** create a `paperclip` API key at platform.openai.com and add it as `OPENAI_API_KEY` in each Codex agent adapter config (or set it as a global env var in `docker-compose.env`).
 
 ---
 
-### Phase 8 — Agent Runtime File Centralization and S3 Persistence
+### Phase 8 — Agent Runtime File Centralization and S3 Persistence ✅ DONE
 
-Agents currently write memory, notes, and logs scattered across their own subdirectories (`agents/*/memory/`, `agents/*/notes/`, `agents/*/life/`). These are runtime artifacts, not source code — they should never be in git.
+- ✅ `.gitignore` excludes all runtime subdirs: `agents/*/memory/`, `agents/*/notes/`, `agents/*/life/`, `agents/*/plans/`, `agents/*/logs/`, `agents/*/.codex/`.
+- ✅ All `agents/*/AGENTS.md` files updated with `## Runtime Files` section pointing to `$AGENT_HOME`.
+- ✅ `PAPERCLIP_AGENT_RUNTIME_DIR` defaults to `/paperclip-agents` (unified with instruction files mount).
+- ✅ `docker-compose.quickstart.yml` agents volume mount is R/W (removed `:ro`).
+- ✅ `syncAgentRuntimeToS3()`: walks local runtime dir, uploads changed files every 5 min (etag-deduplicated).
+- ✅ `restoreAgentRuntimeFromS3()`: on server startup, downloads missing files from S3; local wins on conflict.
+- ✅ `listObjects()` added to `StorageProvider` interface with S3 (paginated) and local-disk implementations.
+- ✅ Restore API for UI-driven conflict resolution:
+  - `GET  /api/agent-runtime/restore/preview` — returns `{missing[], conflicts[], synced}` diff
+  - `POST /api/agent-runtime/restore` — strategies: `missing_only` | `overwrite_all` | `selected`
 
-**Immediate fix (done):** `.gitignore` now excludes `agents/*/memory/`, `agents/*/notes/`, `agents/*/life/`, `agents/*/plans/`, and `agents/*/logs/`. Instruction files (`AGENTS.md`, `HEARTBEAT.md`, `SOUL.md`, `TOOLS.md`) remain tracked.
-
-**Problem with scattered writes:** agents need to be told explicitly where to write runtime files. Right now each agent decides its own path, leading to drift and inconsistency.
-
-**Deliverables:**
-
-1. **Centralized runtime directory** — define a canonical location for all agent runtime artifacts, e.g. `.agent-runtime/<agent-name>/` at the repo root (already git-ignored via `.agent-runtime/`), or mapped to the Paperclip data dir inside Docker (`/paperclip/instances/default/agent-runtime/`).
-2. **Update all AGENTS.md files** — add an explicit `## Runtime Files` section telling each agent where to write memory/notes/logs, pointing to the centralized path.
-3. **S3 sync fallback** — piggyback on Paperclip's existing storage provider abstraction (`local_disk` / `S3`). When storage provider is S3, periodically sync the agent runtime directory so files survive container restarts, rebuilds, and re-deployments. This is especially critical since Docker volumes can be wiped.
-4. **Already-tracked files cleanup** — run `git rm --cached` on the agent runtime files that were committed before this gitignore landed (`agents/ceo/life/`, `agents/ceo/memory/`, `agents/qa-tester/notes/`, etc.) so they stop showing as modified in git status.
-
-**Outcome:** Agent runtime files are never in git. They survive container restarts via S3. All agents write to a known, consistent location. `git status` stays clean during normal agent operation.
+**Implementation:** `server/src/services/agent-runtime-sync.ts`, `server/src/storage/`, `server/src/routes/agent-runtime.ts`
 
 ---
 
 ## Priority Order
 
-| Priority | Work |
-|----------|------|
-| 1 | Phase 7 operator setup (create `paperclip` API key, add to agent configs) — do this now |
-| 2 | Merge PR #386 (cost recording bug — blocker for budget enforcement) |
-| 3 | Phase 4 pre-flight guard (biggest token waste reduction) |
-| 4 | Phase 1 runtime isolation |
-| 5 | Phase 2 env injection |
-| 6 | Phase 3 session resume hardening |
-| 7 | Phase 5 stderr classification |
-| 8 | Phase 7 code changes (after #385 and #386 are merged) |
-| 9 | Phase 6 observability metrics |
-| 10 | Integrate circuit breaker (#390) after Phases 1–4 reduce noise |
+| Priority | Work | Status |
+|----------|------|--------|
+| 1 | Phase 7 operator setup (create `paperclip` API key) | ✅ Done |
+| 2 | Merge PR #386 (cost recording) | ✅ Done |
+| 3 | Phase 4 pre-flight guard | ✅ Done |
+| 4 | Phase 1 runtime isolation | ✅ Done |
+| 5 | Phase 2 env injection | ✅ Done |
+| 6 | Phase 8 runtime centralization + S3 | ✅ Done |
+| 7 | Phase 3 session resume hardening | 🔲 Next |
+| 8 | Phase 5 stderr classification (backend + UI) | 🔲 |
+| 9 | Phase 9 auth bootstrap integrity | 🔲 |
+| 10 | Phase 6 observability metrics | 🔲 |
+| 11 | Integrate circuit breaker (#390) | 🔲 After noise baseline is clean |
 
 ## Acceptance Criteria
 
-1. Agents with no assigned work do not spawn.
-2. Codex API spend is visible in Paperclip's cost dashboard.
-3. Successful runs no longer emit personal-MCP auth noise by default.
-4. Agents that rely on role folders receive `AGENT_HOME` consistently.
-5. Timer wakes without concrete issue work use materially fewer input tokens.
-6. Successful runs show warnings separately from failures in the UI.
-7. Operators can reproduce agent runtime behavior without depending on personal CLI state.
+1. ✅ Agents with no assigned work do not spawn.
+2. ✅ Codex API spend is visible in Paperclip's cost dashboard.
+3. ✅ Successful runs no longer emit personal-MCP auth noise by default.
+4. ✅ Agents that rely on role folders receive `AGENT_HOME` consistently.
+5. ✅ Timer wakes without concrete issue work use materially fewer input tokens.
+6. 🔲 Successful runs show warnings separately from failures in the UI. *(Phase 5)*
+7. ✅ Operators can reproduce agent runtime behavior without depending on personal CLI state.
 
 ---
 

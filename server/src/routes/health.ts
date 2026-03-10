@@ -1,7 +1,11 @@
 import { Router } from "express";
 import type { Db } from "@paperclipai/db";
-import { and, count, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, count, eq, gt, isNull, ne, sql } from "drizzle-orm";
 import { instanceUserRoles, invites } from "@paperclipai/db";
+
+// The ghost user created by local_trusted mode. In authenticated mode this
+// user must not be counted as a real instance admin — it has no credentials.
+const LOCAL_BOARD_USER_ID = "local-board";
 import type { DeploymentExposure, DeploymentMode } from "@paperclipai/shared";
 
 export function healthRoutes(
@@ -29,10 +33,12 @@ export function healthRoutes(
     let bootstrapStatus: "ready" | "bootstrap_pending" = "ready";
     let bootstrapInviteActive = false;
     if (opts.deploymentMode === "authenticated") {
+      // Phase 9: exclude the local_trusted ghost user from the admin count.
+      // local-board has no real credentials and must not prevent bootstrap.
       const roleCount = await db
         .select({ count: count() })
         .from(instanceUserRoles)
-        .where(sql`${instanceUserRoles.role} = 'instance_admin'`)
+        .where(and(sql`${instanceUserRoles.role} = 'instance_admin'`, ne(instanceUserRoles.userId, LOCAL_BOARD_USER_ID)))
         .then((rows) => Number(rows[0]?.count ?? 0));
       bootstrapStatus = roleCount > 0 ? "ready" : "bootstrap_pending";
 

@@ -1,8 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, ne } from "drizzle-orm";
 import { createDb, instanceUserRoles, invites } from "@paperclipai/db";
+
+// Ghost user from local_trusted mode — must not count as a real authenticated admin.
+const LOCAL_BOARD_USER_ID = "local-board";
 import { loadPaperclipEnvFile } from "../config/env.js";
 import { readConfig, resolveConfigPath } from "../config/store.js";
 
@@ -81,10 +84,12 @@ export async function bootstrapCeoInvite(opts: {
     };
   };
   try {
+    // Phase 9: exclude the local_trusted ghost user so that switching from
+    // dev mode to authenticated mode doesn't block bootstrap.
     const existingAdminCount = await db
       .select()
       .from(instanceUserRoles)
-      .where(eq(instanceUserRoles.role, "instance_admin"))
+      .where(and(eq(instanceUserRoles.role, "instance_admin"), ne(instanceUserRoles.userId, LOCAL_BOARD_USER_ID)))
       .then((rows) => rows.length);
 
     if (existingAdminCount > 0 && !opts.force) {
