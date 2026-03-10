@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Project } from "@paperclipai/shared";
-import { filterProjectRows, resolveGoalIds } from "../commands/client/project.js";
+import { filterProjectRows, parseNullableCliValue, resolveGoalIds } from "../commands/client/project.js";
 
 function makeProject(overrides: Partial<Project>): Project {
   return {
@@ -41,6 +41,21 @@ describe("resolveGoalIds", () => {
 
   it("returns undefined when no goal flags are provided", () => {
     expect(resolveGoalIds({})).toBeUndefined();
+  });
+});
+
+describe("parseNullableCliValue", () => {
+  it("returns undefined when omitted", () => {
+    expect(parseNullableCliValue(undefined)).toBeUndefined();
+  });
+
+  it("maps literal null to null", () => {
+    expect(parseNullableCliValue("null")).toBeNull();
+    expect(parseNullableCliValue(" NULL ")).toBeNull();
+  });
+
+  it("preserves non-null strings", () => {
+    expect(parseNullableCliValue("main")).toBe("main");
   });
 });
 
