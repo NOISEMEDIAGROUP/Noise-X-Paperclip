@@ -75,11 +75,11 @@ async function resolvePaperclipSkillsDir(): Promise<string | null> {
   return null;
 }
 
-async function ensureCodexSkillsInjected(onLog: AdapterExecutionContext["onLog"]) {
+async function ensureCodexSkillsInjected(onLog: AdapterExecutionContext["onLog"], homeDir?: string) {
   const skillsDir = await resolvePaperclipSkillsDir();
   if (!skillsDir) return;
 
-  const skillsHome = path.join(codexHomeDir(), "skills");
+  const skillsHome = path.join(homeDir ?? codexHomeDir(), "skills");
   await fs.mkdir(skillsHome, { recursive: true });
   const entries = await fs.readdir(skillsDir, { withFileTypes: true });
   for (const entry of entries) {
@@ -139,7 +139,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const effectiveWorkspaceCwd = useConfiguredInsteadOfAgentHome ? "" : workspaceCwd;
   const cwd = effectiveWorkspaceCwd || configuredCwd || process.cwd();
   await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
-  await ensureCodexSkillsInjected(onLog);
   const envConfig = parseObject(config.env);
   const hasExplicitApiKey =
     typeof envConfig.PAPERCLIP_API_KEY === "string" && envConfig.PAPERCLIP_API_KEY.trim().length > 0;
@@ -210,6 +209,31 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (!hasExplicitApiKey && authToken) {
     env.PAPERCLIP_API_KEY = authToken;
   }
+  // Phase 2: Inject AGENT_HOME so agents can find their role folder without
+  // wasting the first commands discovering the path.
+  // Derived from the instructionsFilePath parent dir name (slug) to match the
+  // runtime dir convention. Falls back to agent.id when no instructions file is set.
+  const agentRuntimeBaseDir = process.env.PAPERCLIP_AGENT_RUNTIME_DIR;
+  if (agentRuntimeBaseDir && !hasNonEmptyEnvValue(env, "AGENT_HOME")) {
+    const instructionsPathForHome = asString(config.instructionsFilePath, "").trim();
+    const slug = instructionsPathForHome
+      ? path.basename(path.dirname(instructionsPathForHome))
+      : agent.id;
+    const agentHome = path.join(agentRuntimeBaseDir, slug);
+    env.AGENT_HOME = agentHome;
+    await fs.mkdir(agentHome, { recursive: true }).catch(() => {});
+  }
+
+  // Phase 1: Isolate Codex from the operator's personal ~/.codex config.
+  // Set CODEX_HOME to a subdir of AGENT_HOME so all per-agent state (memory,
+  // notes, and Codex CLI internals) lives under one tree that S3 syncs together.
+  if (!hasNonEmptyEnvValue(env, "CODEX_HOME") && env.AGENT_HOME) {
+    const codexHome = path.join(env.AGENT_HOME, ".codex");
+    env.CODEX_HOME = codexHome;
+    await fs.mkdir(codexHome, { recursive: true }).catch(() => {});
+  }
+  await ensureCodexSkillsInjected(onLog, env.CODEX_HOME);
+
   // Phase 7: Fall through to server-level OPENAI_API_KEY when adapter config has no key.
   // Handles Docker-level env vars and acts as a global default for all codex_local agents.
   if (!hasNonEmptyEnvValue(env, "OPENAI_API_KEY")) {

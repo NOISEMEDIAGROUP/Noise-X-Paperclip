@@ -204,6 +204,19 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
     env.PAPERCLIP_API_KEY = authToken;
   }
 
+  // Phase 2: Inject AGENT_HOME so agents can find their role folder without
+  // wasting the first commands discovering the path.
+  // Derived from the instructionsFilePath parent dir name (slug) to match the
+  // runtime dir convention. Falls back to agent.id when no instructions file is set.
+  const agentRuntimeBaseDir = process.env.PAPERCLIP_AGENT_RUNTIME_DIR;
+  if (agentRuntimeBaseDir && !hasNonEmptyEnvValue(env, "AGENT_HOME")) {
+    const instructionsPath = asString(config.instructionsFilePath, "").trim();
+    const slug = instructionsPath ? path.basename(path.dirname(instructionsPath)) : agent.id;
+    const agentHome = path.join(agentRuntimeBaseDir, slug);
+    env.AGENT_HOME = agentHome;
+    await fs.mkdir(agentHome, { recursive: true }).catch(() => {});
+  }
+
   const runtimeEnv = ensurePathInEnv({ ...process.env, ...env });
   await ensureCommandResolvable(command, cwd, runtimeEnv);
 
@@ -306,6 +319,17 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const billingType = resolveClaudeBillingType(env);
   const skillsDir = await buildSkillsDir();
 
+  // Phase 1: Build agent-specific MCP config so we can isolate from the operator's
+  // personal ~/.claude MCP servers via --strict-mcp-config.
+  // If config.mcpServers is set, write it to a temp file; otherwise the agent runs
+  // with zero MCP servers (no personal auth noise by default).
+  const mcpServersConfig = parseObject(config.mcpServers);
+  let mcpConfigPath: string | null = null;
+  if (Object.keys(mcpServersConfig).length > 0) {
+    mcpConfigPath = path.join(skillsDir, "mcp-config.json");
+    await fs.writeFile(mcpConfigPath, JSON.stringify({ mcpServers: mcpServersConfig }), "utf-8");
+  }
+
   // When instructionsFilePath is configured, create a combined temp file that
   // includes both the file content and the path directive, so we only need
   // --append-system-prompt-file (Claude CLI forbids using both flags together).
@@ -352,6 +376,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     if (effectiveInstructionsFilePath) {
       args.push("--append-system-prompt-file", effectiveInstructionsFilePath);
     }
+    // Phase 1: Isolate from operator's personal MCP servers unless explicitly configured.
+    if (mcpConfigPath) args.push("--mcp-config", mcpConfigPath);
+    args.push("--strict-mcp-config");
     args.push("--add-dir", skillsDir);
     if (extraArgs.length > 0) args.push(...extraArgs);
     return args;
