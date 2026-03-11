@@ -40,6 +40,24 @@ jobs:
             exit 1
           fi
 
+      - name: Classify PR risk tier
+        id: risk
+        run: |
+          changed="$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}")"
+
+          HIGH_RISK_PATTERNS='server/src/routes/auth|server/src/services/auth|server/src/routes/access|server/src/services/access|server/src/routes/authz|server/src/routes/companies|server/src/services/companies|server/src/services/approval|server/src/routes/approvals|server/src/services/budget|server/src/services/costs|server/src/routes/costs|server/src/routes/issues-checkout|server/src/services/issues|packages/db/src/schema|packages/db/src/migrations|\.github/workflows|\.env'
+
+          if printf '%s\n' "$changed" | grep -Eq "$HIGH_RISK_PATTERNS"; then
+            echo "tier=high" >> "$GITHUB_OUTPUT"
+            echo "::warning::PR classified as HIGH RISK — elevated review required"
+          elif printf '%s\n' "$changed" | grep -Eq 'server/src/|packages/shared|packages/adapters|ui/src/'; then
+            echo "tier=medium" >> "$GITHUB_OUTPUT"
+            echo "::notice::PR classified as MEDIUM RISK"
+          else
+            echo "tier=low" >> "$GITHUB_OUTPUT"
+            echo "::notice::PR classified as LOW RISK — fast lane eligible"
+          fi
+
       - name: Validate dependency resolution when manifests change
         run: |
           changed="$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}")"
