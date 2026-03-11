@@ -6,11 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { assertCompanyAccess } from "../routes/authz.js";
-import type { Request } from "express";
-
-function fakeReq(actor: any): Request {
-  return { actor } as unknown as Request;
-}
+import { fakeReq } from "./helpers/fakeReq.js";
 
 describe("company-scope contract", () => {
   it("allows agent access to own company", () => {

@@ -5,17 +5,17 @@
  */
 import { readdirSync, existsSync } from 'fs';
 import { resolve } from 'path';
+import { ROOT, ROUTES_SKIP } from '../harness.config.mjs';
 
-const ROUTES_DIR = resolve(process.cwd(), 'server/src/routes');
-const TESTS_DIR = resolve(process.cwd(), 'server/src/__tests__');
-const SKIP = ['index.ts', 'authz.ts'];
+const ROUTES_DIR = resolve(ROOT, 'server/src/routes');
+const TESTS_DIR = resolve(ROOT, 'server/src/__tests__');
 
-const routes = readdirSync(ROUTES_DIR).filter(f => f.endsWith('.ts') && !SKIP.includes(f));
+const routes = readdirSync(ROUTES_DIR).filter(f => f.endsWith('.ts') && !ROUTES_SKIP.includes(f));
 const tests = existsSync(TESTS_DIR) ? readdirSync(TESTS_DIR) : [];
 
 const untested = routes.filter(route => {
   const base = route.replace('.ts', '');
-  return !tests.some(t => t.includes(base));
+  return !tests.some(t => t === `${base}.test.ts` || t.startsWith(`${base}.`) || t.startsWith(`${base}-`));
 });
 
 console.log(JSON.stringify({ type: 'untested-routes', count: untested.length, items: untested.map(f => ({ route: `server/src/routes/${f}` })) }, null, 2));

@@ -45,10 +45,7 @@ describe("issue transition guard contract", () => {
     expect(ISSUE_STATUSES).toContain("backlog");
   });
 
-  it("in_progress requires atomic checkout semantics", () => {
-    // Verify the checkout schema exists in shared validators — the atomic
-    // checkout invariant is enforced by the route/service layer but the
-    // schema must exist for request validation.
+  it("in_progress status exists for checkout workflow", () => {
     expect(ISSUE_STATUSES).toContain("in_progress");
   });
 });

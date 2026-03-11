@@ -1,38 +1,14 @@
 /**
- * Contract test: Agent API keys cannot access other companies.
+ * Contract test: Agent auth boundary — assertBoard enforcement.
  *
- * Verifies the assertCompanyAccess function correctly enforces the
- * agent-company boundary at the authz layer.
+ * Agent cross-company access tests are in company-scope-contract.test.ts.
+ * This file tests the assertBoard gate which is a distinct contract.
  */
 import { describe, expect, it } from "vitest";
-import { assertCompanyAccess, assertBoard } from "../routes/authz.js";
-import type { Request } from "express";
+import { assertBoard } from "../routes/authz.js";
+import { fakeReq } from "./helpers/fakeReq.js";
 
-function fakeReq(actor: any): Request {
-  return { actor } as unknown as Request;
-}
-
-describe("agent auth company boundary contract", () => {
-  it("agent with companyId=A cannot access companyId=B", () => {
-    const req = fakeReq({
-      type: "agent",
-      agentId: "agent-1",
-      companyId: "company-A",
-    });
-    expect(() => assertCompanyAccess(req, "company-B")).toThrow(
-      "Agent key cannot access another company",
-    );
-  });
-
-  it("agent with companyId=A can access companyId=A", () => {
-    const req = fakeReq({
-      type: "agent",
-      agentId: "agent-1",
-      companyId: "company-A",
-    });
-    expect(() => assertCompanyAccess(req, "company-A")).not.toThrow();
-  });
-
+describe("agent auth boundary contract — assertBoard", () => {
   it("assertBoard rejects agent actors", () => {
     const req = fakeReq({
       type: "agent",
@@ -42,11 +18,21 @@ describe("agent auth company boundary contract", () => {
     expect(() => assertBoard(req)).toThrow("Board access required");
   });
 
-  it("assertBoard accepts board actors", () => {
+  it("assertBoard accepts board actors (local_implicit)", () => {
     const req = fakeReq({
       type: "board",
       userId: "user-1",
       source: "local_implicit",
+    });
+    expect(() => assertBoard(req)).not.toThrow();
+  });
+
+  it("assertBoard accepts board actors (session)", () => {
+    const req = fakeReq({
+      type: "board",
+      userId: "user-1",
+      source: "session",
+      companyIds: ["company-1"],
     });
     expect(() => assertBoard(req)).not.toThrow();
   });

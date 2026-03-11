@@ -73,11 +73,25 @@ echo ""
 
 mkdir -p "$RUN_ARTIFACTS"
 
-# Record metadata
-cat > "$RUN_ARTIFACTS/metadata.json" <<METAEOF
+# Record metadata (use jq for safe JSON escaping)
+if command -v jq &>/dev/null; then
+  jq -n \
+    --arg run_id "$RUN_ID" \
+    --arg command "$*" \
+    --arg git_sha "$(git rev-parse HEAD 2>/dev/null || echo 'unknown')" \
+    --arg git_branch "$(git branch --show-current 2>/dev/null || echo 'unknown')" \
+    --arg started_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg node_version "$(node --version 2>/dev/null || echo 'unknown')" \
+    --arg cwd "$ROOT_DIR" \
+    '{run_id: $run_id, command: $command, git_sha: $git_sha, git_branch: $git_branch, started_at: $started_at, node_version: $node_version, cwd: $cwd}' \
+    > "$RUN_ARTIFACTS/metadata.json"
+else
+  # Fallback: escape double quotes in command string
+  SAFE_CMD=$(printf '%s' "$*" | sed 's/"/\\"/g')
+  cat > "$RUN_ARTIFACTS/metadata.json" <<METAEOF
 {
   "run_id": "$RUN_ID",
-  "command": "$*",
+  "command": "$SAFE_CMD",
   "git_sha": "$(git rev-parse HEAD 2>/dev/null || echo 'unknown')",
   "git_branch": "$(git branch --show-current 2>/dev/null || echo 'unknown')",
   "started_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
@@ -85,10 +99,14 @@ cat > "$RUN_ARTIFACTS/metadata.json" <<METAEOF
   "cwd": "$ROOT_DIR"
 }
 METAEOF
+fi
 
 # Run the command, capturing stdout/stderr
 EXIT_CODE=0
 "$@" > >(tee "$RUN_ARTIFACTS/stdout.log") 2> >(tee "$RUN_ARTIFACTS/stderr.log" >&2) || EXIT_CODE=$?
+
+# Wait for tee subshells to finish writing before recording result
+wait
 
 # Record result
 cat > "$RUN_ARTIFACTS/result.json" <<RESULTEOF

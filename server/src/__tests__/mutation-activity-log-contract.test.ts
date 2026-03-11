@@ -46,7 +46,7 @@ describe("mutation activity log contract", () => {
     it(`${file} calls logActivity for mutations`, () => {
       const content = readFileSync(join(ROUTES_DIR, file), "utf-8");
       // Must have at least one logActivity( call (not just the import)
-      const callCount = (content.match(/logActivity\(db,/g) || []).length;
+      const callCount = (content.match(/logActivity\s*\(/g) || []).length;
       expect(callCount).toBeGreaterThan(0);
     });
   }

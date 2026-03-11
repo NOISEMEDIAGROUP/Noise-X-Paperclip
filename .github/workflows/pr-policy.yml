@@ -58,15 +58,23 @@ jobs:
             echo "::notice::PR classified as LOW RISK — fast lane eligible"
           fi
 
+      - name: Classify PR risk tier (fail-safe)
+        if: steps.risk.outputs.tier == ''
+        run: |
+          echo "::warning::Risk classification produced empty tier — defaulting to high"
+          echo "tier=high" >> "$GITHUB_OUTPUT"
+
       - name: Check PR evidence sections
         if: steps.risk.outputs.tier == 'high' || steps.risk.outputs.tier == 'medium'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          BODY=$(gh pr view ${{ github.event.pull_request.number }} --json body -q .body 2>/dev/null || echo "")
-          if [ -n "$BODY" ]; then
-            echo "$BODY" | node scripts/check-pr-evidence.mjs || echo "::warning::PR evidence sections incomplete — see doc/AGENT_PR_CONTRACT.md"
+          BODY=$(gh pr view ${{ github.event.pull_request.number }} --json body -q .body)
+          if [ -z "$BODY" ]; then
+            echo "::error::Cannot fetch PR body — failing evidence check"
+            exit 1
           fi
+          echo "$BODY" | node scripts/check-pr-evidence.mjs
 
       - name: Validate dependency resolution when manifests change
         run: |

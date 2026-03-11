@@ -98,7 +98,9 @@ for (const line of verLines) {
     verContent += line + '\n';
   }
 }
-if (verContent) {
+if (inVerification && !verContent.trim()) {
+  errors.push('Verification section is present but empty — must include command output references');
+} else if (verContent) {
   for (const cmd of VERIFICATION_COMMANDS) {
     if (!cmd.pattern.test(verContent)) {
       errors.push(`Verification section should reference ${cmd.name} output`);

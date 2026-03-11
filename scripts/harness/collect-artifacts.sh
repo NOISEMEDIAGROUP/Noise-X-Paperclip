@@ -9,16 +9,20 @@ set -euo pipefail
 ARTIFACTS_DIR="${1:?Usage: collect-artifacts.sh <artifacts-dir>}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
+# Configurable test result paths (override via env)
+E2E_RESULTS_DIR="${HARNESS_E2E_RESULTS:-$ROOT_DIR/tests/e2e/test-results}"
+E2E_REPORT_DIR="${HARNESS_E2E_REPORT:-$ROOT_DIR/tests/e2e/playwright-report}"
+
 echo "Collecting artifacts to $ARTIFACTS_DIR"
 
 # 1. Copy test results if they exist
-if [[ -d "$ROOT_DIR/tests/e2e/test-results" ]]; then
-  cp -r "$ROOT_DIR/tests/e2e/test-results" "$ARTIFACTS_DIR/e2e-test-results" 2>/dev/null || true
+if [[ -d "$E2E_RESULTS_DIR" ]]; then
+  cp -r "$E2E_RESULTS_DIR" "$ARTIFACTS_DIR/e2e-test-results" 2>/dev/null || true
   echo "  - Collected e2e test results"
 fi
 
-if [[ -d "$ROOT_DIR/tests/e2e/playwright-report" ]]; then
-  cp -r "$ROOT_DIR/tests/e2e/playwright-report" "$ARTIFACTS_DIR/playwright-report" 2>/dev/null || true
+if [[ -d "$E2E_REPORT_DIR" ]]; then
+  cp -r "$E2E_REPORT_DIR" "$ARTIFACTS_DIR/playwright-report" 2>/dev/null || true
   echo "  - Collected Playwright report"
 fi
 

@@ -8,25 +8,14 @@
 
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import {
+  ROOT,
+  MIN_SCORECARD_PARAMETERS,
+  SCORECARD_REQUIRED_HEADINGS,
+  SCORECARD_REQUIRED_FRONTMATTER,
+} from './harness.config.mjs';
 
-const SCORECARD_PATH = resolve(process.cwd(), 'doc/HARNESS_SCORECARD.md');
-const REQUIRED_PARAMETERS = 11;
-
-const REQUIRED_HEADINGS = [
-  '# Harness Engineering Scorecard',
-  '## Parameters',
-  '## Scoring Method',
-  '## Update History',
-  '## Quarterly Delta',
-];
-
-const REQUIRED_FRONTMATTER = [
-  'Owner',
-  'Last Verified',
-  'Applies To',
-  'Links',
-  'Update Cadence',
-];
+const SCORECARD_PATH = resolve(ROOT, 'doc/HARNESS_SCORECARD.md');
 
 const REQUIRED_TABLE_COLUMNS = [
   '#',
@@ -57,7 +46,7 @@ if (fmStart === -1 || fmEnd === -1) {
   errors.push('Missing YAML frontmatter (--- delimiters)');
 } else {
   const frontmatter = lines.slice(fmStart + 1, fmEnd).join('\n');
-  for (const field of REQUIRED_FRONTMATTER) {
+  for (const field of SCORECARD_REQUIRED_FRONTMATTER) {
     if (!frontmatter.includes(`${field}:`)) {
       errors.push(`Missing frontmatter field: ${field}`);
     }
@@ -65,7 +54,7 @@ if (fmStart === -1 || fmEnd === -1) {
 }
 
 // Check required headings
-for (const heading of REQUIRED_HEADINGS) {
+for (const heading of SCORECARD_REQUIRED_HEADINGS) {
   if (!content.includes(heading)) {
     errors.push(`Missing required heading: ${heading}`);
   }
@@ -91,8 +80,8 @@ if (paramTableStart === -1) {
     rowCount++;
   }
 
-  if (rowCount < REQUIRED_PARAMETERS) {
-    errors.push(`Parameters table has ${rowCount} rows, expected at least ${REQUIRED_PARAMETERS}`);
+  if (rowCount < MIN_SCORECARD_PARAMETERS) {
+    errors.push(`Parameters table has ${rowCount} rows, expected at least ${MIN_SCORECARD_PARAMETERS}`);
   }
 }
 
@@ -121,7 +110,6 @@ if (errors.length > 0) {
   process.exit(1);
 } else {
   console.log('Harness scorecard validation PASSED');
-  console.log(`  - ${REQUIRED_PARAMETERS} parameters found`);
   console.log(`  - All frontmatter fields present`);
   console.log(`  - All required headings present`);
   console.log(`  - All metric sources populated`);

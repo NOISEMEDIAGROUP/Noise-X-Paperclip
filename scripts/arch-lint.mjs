@@ -5,55 +5,12 @@
  * Usage: node scripts/arch-lint.mjs
  * Exit 0 on success, 1 on violation.
  *
- * Rules:
- * 1. ui/ must not import from server/ or packages/db/
- * 2. packages/shared/ must not import from server/, ui/, or packages/db/
- * 3. packages/db/ must not import from server/, ui/, or packages/shared/
- * 4. packages/adapters/ must not import from server/ or ui/
+ * Checks: static imports, dynamic import(), re-exports, require().
  */
 
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { resolve, relative, extname } from 'path';
-
-const ROOT = process.cwd();
-
-const RULES = [
-  {
-    source: 'ui/src',
-    forbidden: [
-      { pattern: /@paperclipai\/db/, label: '@paperclipai/db' },
-      { pattern: /from\s+['"]\.\.\/.*server/,  label: 'server/ (relative)' },
-      { pattern: /from\s+['"].*\/server\//,     label: 'server/ (path)' },
-    ],
-    description: 'ui/ must not import from server/ or packages/db/',
-  },
-  {
-    source: 'packages/shared/src',
-    forbidden: [
-      { pattern: /@paperclipai\/db/, label: '@paperclipai/db' },
-      { pattern: /from\s+['"].*\/server\//, label: 'server/' },
-      { pattern: /from\s+['"].*\/ui\//, label: 'ui/' },
-    ],
-    description: 'packages/shared/ must not import from server/, ui/, or packages/db/',
-  },
-  {
-    source: 'packages/db/src',
-    forbidden: [
-      { pattern: /@paperclipai\/shared/, label: '@paperclipai/shared' },
-      { pattern: /from\s+['"].*\/server\//, label: 'server/' },
-      { pattern: /from\s+['"].*\/ui\//, label: 'ui/' },
-    ],
-    description: 'packages/db/ must not import from server/, ui/, or packages/shared/',
-  },
-  {
-    source: 'packages/adapters',
-    forbidden: [
-      { pattern: /from\s+['"].*\/server\//, label: 'server/ (relative)' },
-      { pattern: /from\s+['"].*\/ui\//, label: 'ui/' },
-    ],
-    description: 'packages/adapters/ must not import from server/ or ui/',
-  },
-];
+import { ROOT, ARCH_RULES } from './harness.config.mjs';
 
 const TS_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 
@@ -79,12 +36,91 @@ function walkDir(dir) {
   return files;
 }
 
+/**
+ * Extract all import/require/export-from specifiers from file content.
+ * Handles: static import, dynamic import(), require(), export...from.
+ * Returns array of { specifier, line, code }.
+ */
+function extractImportSpecifiers(content) {
+  const results = [];
+  const lines = content.split('\n');
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Static import: import ... from "specifier"
+    // Also matches: import type ... from "specifier"
+    const staticImport = line.match(/(?:import|export)\s+.*?from\s+['"]([^'"]+)['"]/);
+    if (staticImport) {
+      results.push({ specifier: staticImport[1], line: i + 1, code: line.trim() });
+      continue;
+    }
+
+    // Dynamic import: import("specifier") or import('specifier')
+    const dynamicImport = line.match(/import\s*\(\s*['"]([^'"]+)['"]\s*\)/);
+    if (dynamicImport) {
+      results.push({ specifier: dynamicImport[1], line: i + 1, code: line.trim() });
+      continue;
+    }
+
+    // require("specifier") or require('specifier')
+    const requireCall = line.match(/require\s*\(\s*['"]([^'"]+)['"]\s*\)/);
+    if (requireCall) {
+      results.push({ specifier: requireCall[1], line: i + 1, code: line.trim() });
+      continue;
+    }
+
+    // Bare export from: export { foo } from "specifier"
+    const exportFrom = line.match(/export\s+\{[^}]*\}\s+from\s+['"]([^'"]+)['"]/);
+    if (exportFrom) {
+      results.push({ specifier: exportFrom[1], line: i + 1, code: line.trim() });
+    }
+  }
+
+  return results;
+}
+
 let violations = [];
 
-for (const rule of RULES) {
-  const sourceDir = resolve(ROOT, rule.source);
-  const files = walkDir(sourceDir);
+for (const rule of ARCH_RULES) {
+  let sourceDir;
 
+  if (rule.scanSubdirs) {
+    // For packages/adapters: scan each adapter's src/ subdirectory
+    const adaptersRoot = resolve(ROOT, rule.source);
+    let adapterDirs;
+    try {
+      adapterDirs = readdirSync(adaptersRoot)
+        .filter(e => {
+          const st = statSync(resolve(adaptersRoot, e), { throwIfNoEntry: false });
+          return st && st.isDirectory() && e !== 'node_modules';
+        })
+        .flatMap(adapter => {
+          const srcDir = resolve(adaptersRoot, adapter, 'src');
+          try {
+            statSync(srcDir);
+            return [srcDir];
+          } catch {
+            // No src/ dir, scan adapter root
+            return [resolve(adaptersRoot, adapter)];
+          }
+        });
+    } catch {
+      adapterDirs = [];
+    }
+
+    for (const dir of adapterDirs) {
+      checkDir(dir, rule);
+    }
+    continue;
+  }
+
+  sourceDir = resolve(ROOT, rule.source);
+  checkDir(sourceDir, rule);
+}
+
+function checkDir(dir, rule) {
+  const files = walkDir(dir);
   for (const filePath of files) {
     let content;
     try {
@@ -93,21 +129,17 @@ for (const rule of RULES) {
       continue;
     }
 
-    const lines = content.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      // Only check import/require lines
-      if (!line.includes('import') && !line.includes('require')) continue;
-
+    const imports = extractImportSpecifiers(content);
+    for (const imp of imports) {
       for (const { pattern, label } of rule.forbidden) {
-        if (pattern.test(line)) {
+        if (pattern.test(imp.specifier) || pattern.test(imp.code)) {
           const relPath = relative(ROOT, filePath);
           violations.push({
             file: relPath,
-            line: i + 1,
+            line: imp.line,
             rule: rule.description,
             imported: label,
-            code: line.trim(),
+            code: imp.code,
           });
         }
       }
@@ -127,7 +159,7 @@ if (violations.length > 0) {
   process.exit(1);
 } else {
   console.log('Architecture lint PASSED');
-  console.log(`  - ${RULES.length} boundary rules checked`);
+  console.log(`  - ${ARCH_RULES.length} boundary rules checked`);
   console.log('  - No violations found');
   process.exit(0);
 }

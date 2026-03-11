@@ -5,8 +5,9 @@
  */
 import { readFileSync, readdirSync, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
+import { ROOT } from '../harness.config.mjs';
 
-const DOC_DIR = resolve(process.cwd(), 'doc');
+const DOC_DIR = resolve(ROOT, 'doc');
 const results = [];
 
 function scanDir(dir) {
@@ -22,7 +23,7 @@ function scanDir(dir) {
       if (target.startsWith('http') || target.startsWith('#') || target.startsWith('/')) continue;
       const resolved = resolve(dirname(full), target.split('#')[0]);
       if (!existsSync(resolved)) {
-        results.push({ file: full.replace(process.cwd() + '/', ''), link: target, text: match[1] });
+        results.push({ file: full.replace(ROOT + '/', ''), link: target, text: match[1] });
       }
     }
   }
