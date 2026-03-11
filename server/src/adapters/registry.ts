@@ -47,6 +47,7 @@ import {
 } from "@paperclipai/adapter-pi-local";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
+import { humanAdapter } from "./human/index.js";
 
 const claudeLocalAdapter: ServerAdapterModule = {
   type: "claude_local",
@@ -121,6 +122,7 @@ const adaptersByType = new Map<string, ServerAdapterModule>(
     openclawGatewayAdapter,
     processAdapter,
     httpAdapter,
+    humanAdapter,
   ].map((a) => [a.type, a]),
 );
 

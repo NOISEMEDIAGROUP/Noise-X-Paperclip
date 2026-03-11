@@ -27,7 +27,8 @@ type AdvancedAdapterType =
   | "opencode_local"
   | "pi_local"
   | "cursor"
-  | "openclaw_gateway";
+  | "openclaw_gateway"
+  | "human";
 
 const ADVANCED_ADAPTER_OPTIONS: Array<{
   value: AdvancedAdapterType;
@@ -73,6 +74,12 @@ const ADVANCED_ADAPTER_OPTIONS: Array<{
     label: "OpenClaw Gateway",
     icon: Bot,
     desc: "Invoke OpenClaw via gateway protocol",
+  },
+  {
+    value: "human",
+    label: "Human",
+    icon: Bot,
+    desc: "Human proxy agent for org chart",
   },
 ];
 

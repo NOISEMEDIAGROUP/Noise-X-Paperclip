@@ -7,6 +7,7 @@ import { piLocalUIAdapter } from "./pi-local";
 import { openClawGatewayUIAdapter } from "./openclaw-gateway";
 import { processUIAdapter } from "./process";
 import { httpUIAdapter } from "./http";
+import { humanUIAdapter } from "./human";
 
 const adaptersByType = new Map<string, UIAdapterModule>(
   [
@@ -18,6 +19,7 @@ const adaptersByType = new Map<string, UIAdapterModule>(
     openClawGatewayUIAdapter,
     processUIAdapter,
     httpUIAdapter,
+    humanUIAdapter,
   ].map((a) => [a.type, a]),
 );
 
