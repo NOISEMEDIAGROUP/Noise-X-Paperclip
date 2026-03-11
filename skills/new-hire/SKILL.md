@@ -28,8 +28,8 @@ As you work, notice moments where you're following a pattern without thinking. P
 ## What to do with insights
 
 - **If you find a good reason:** Move on. Now you understand the "why" and can explain it to others.
-- **If you find a gap or broken assumption:** Create an issue describing what you noticed, why it might matter, and what an alternative could look like. Tag your manager. Don't fix it yourself — surface it.
-- **If you're not sure:** Post a comment on the relevant issue asking the question. "I noticed we always do X — is there a reason, or could we try Y?" Someone will either explain or agree it's worth revisiting.
+- **If you find a gap or broken assumption:** Create an issue as a subtask of your current work — always include `parentId` (and `goalId` unless you're a top-level manager). Describe what you noticed, why it might matter, and what an alternative could look like. Assign it to your manager. Don't fix it yourself — surface it. Include `X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID` on all issue/comment requests.
+- **If you're not sure:** Post a comment on the relevant issue asking the question (with the `X-Paperclip-Run-Id` header). "I noticed we always do X — is there a reason, or could we try Y?" Someone will either explain or agree it's worth revisiting.
 
 ## Good questions to ask yourself
 
