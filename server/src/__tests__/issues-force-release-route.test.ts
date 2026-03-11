@@ -7,6 +7,7 @@ import { errorHandler } from "../middleware/index.js";
 const mockIssueService = vi.hoisted(() => ({
   getById: vi.fn(),
   getByIdentifier: vi.fn(),
+  release: vi.fn(),
   forceReleaseExecutionLock: vi.fn(),
 }));
 
@@ -105,5 +106,43 @@ describe("POST /issues/:id/force-release", () => {
         },
       }),
     );
+  });
+});
+
+describe("POST /issues/:id/release", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockIssueService.getByIdentifier.mockResolvedValue(null);
+  });
+
+  it("returns a released issue with execution lock fields cleared", async () => {
+    mockIssueService.getById.mockResolvedValue(baseIssue);
+    mockIssueService.release.mockResolvedValue({
+      ...baseIssue,
+      status: "todo",
+      assigneeAgentId: null,
+      checkoutRunId: null,
+      executionRunId: null,
+      executionAgentNameKey: null,
+      executionLockedAt: null,
+    });
+
+    const app = createApp({
+      type: "agent",
+      agentId: "agent-1",
+      companyId: "company-1",
+      runId: "run-1",
+    });
+
+    const res = await request(app).post("/api/issues/issue-1/release").send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("todo");
+    expect(res.body.assigneeAgentId).toBeNull();
+    expect(res.body.checkoutRunId).toBeNull();
+    expect(res.body.executionRunId).toBeNull();
+    expect(res.body.executionAgentNameKey).toBeNull();
+    expect(res.body.executionLockedAt).toBeNull();
+    expect(mockIssueService.release).toHaveBeenCalledWith("issue-1", "agent-1", "run-1");
   });
 });
