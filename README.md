@@ -189,7 +189,7 @@ pnpm dev
 This starts the API server at `http://localhost:3100`. An embedded PostgreSQL database is created automatically — no setup required.
 
 If you prefer Docker locally, use `docker-compose.yml` as the default compose entrypoint for Paperclip.
-For `claude_local` / `codex_local`, subscription/login auth happens inside the environment running Paperclip. In Docker, that means inside the Paperclip container/runtime, not your host shell session.
+For `claude_local` / `codex_local`, subscription/login auth happens inside the environment running Paperclip. In Docker, that means inside the Paperclip container/runtime, not your host shell session. Claude now supports shared runtime auth via `claude setup-token` stored in Instance Settings and injected as `CLAUDE_CODE_OAUTH_TOKEN`.
 
 > **Requirements:** Node.js 20+, pnpm 9.15+
 
@@ -291,13 +291,16 @@ pnpm db:migrate       # Apply migrations
 See [doc/DEVELOPING.md](doc/DEVELOPING.md) for the full development guide.
 Known migration and auth bugs tracked during active development are noted in [BUG-TRACKING.md](BUG-TRACKING.md).
 
-The board UI now also exposes instance-level app settings under `Settings`, including storage and AWS auth, backup policy, runtime automation, default secrets configuration, auth defaults for new Claude/Codex local agents, a Claude shared-auth flow powered by `claude auth login`, and a Codex subscription wizard for shared `codex login --device-auth` inside the Paperclip runtime. The `Costs` page breaks spend down by runtime as well, so you can compare Claude vs Codex and see API-billed runs separately from local subscription usage.
+The board UI now also exposes instance-level app settings under `Settings`, including storage and AWS auth, backup policy, runtime automation, default secrets configuration, auth defaults for new Claude/Codex local agents, a Claude setup-token wizard that injects `CLAUDE_CODE_OAUTH_TOKEN` into the Paperclip runtime, and a Codex subscription wizard for shared `codex login --device-auth` inside the Paperclip runtime. The `Costs` page breaks spend down by runtime as well, so you can compare Claude vs Codex and see API-billed runs separately from local subscription usage.
 
 <br/>
 
 ## Roadmap
 
 - ✅ Agent runtime noise reduction shipped: idle timer wakes skip when no work exists, local adapters run in isolated agent homes, Codex spend is tracked, stale session reuse is reduced, and benign stderr noise is surfaced as warnings instead of failures
+- ⚪ Hybrid auth routing for local model runtimes: prefer shared subscription capacity first, then automatically fall back to instance API keys when subscription capacity is exhausted or the subscription probe fails
+- ⚪ Global auth-mode master switch: flip all eligible local agents between shared subscription mode and instance API-key mode without editing them one by one
+- ⚪ Better subscription telemetry: track shared-subscription usage pressure, depletion events, and automatic fallback-to-API transitions across Claude and Codex runtimes
 - ⚪ Get OpenClaw onboarding easier
 - ⚪ Get cloud agents working e.g. Cursor / e2b agents
 - ⚪ ClipMart - buy and sell entire agent companies

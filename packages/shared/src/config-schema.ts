@@ -129,6 +129,7 @@ export const runtimeConfigSchema = z.object({
 export const agentAuthProfileConfigSchema = z.object({
   useApiKey: z.boolean().default(false),
   apiKey: z.string().optional(),
+  oauthToken: z.string().optional(),
   subscriptionEstimate: z.object({
     enabled: z.boolean().default(false),
     windowHours: z.number().int().min(1).max(24 * 30).default(5),

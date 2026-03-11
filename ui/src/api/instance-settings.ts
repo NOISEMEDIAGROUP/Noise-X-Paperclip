@@ -16,6 +16,8 @@ export const instanceSettingsApi = {
     api.get<InstanceClaudeSubscriptionAuthResponse>("/instance/settings/provider-auth/claude/subscription"),
   startClaudeSubscriptionAuth: () =>
     api.post<InstanceClaudeSubscriptionAuthResponse>("/instance/settings/provider-auth/claude/subscription/start", {}),
+  submitClaudeSubscriptionAuthCode: (code: string) =>
+    api.post<InstanceClaudeSubscriptionAuthResponse>("/instance/settings/provider-auth/claude/subscription/submit-code", { code }),
   testClaudeApiKeyConnection: () =>
     api.post<InstanceClaudeConnectionProbeResult>("/instance/settings/provider-auth/claude/test-api-key", {}),
   testClaudeSubscriptionConnection: () =>

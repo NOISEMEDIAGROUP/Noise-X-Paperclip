@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 FROM node:lts-trixie-slim AS base
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl git locales \
@@ -6,9 +8,12 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 RUN corepack enable
 ENV LANG=en_US.UTF-8 \
-    LC_ALL=en_US.UTF-8
+    LC_ALL=en_US.UTF-8 \
+    PNPM_HOME=/pnpm \
+    PNPM_STORE_DIR=/pnpm/store
+ENV PATH="${PNPM_HOME}:${PATH}"
 
-FROM base AS deps
+FROM base AS manifests
 WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY cli/package.json cli/
@@ -24,19 +29,25 @@ COPY packages/adapters/openclaw-gateway/package.json packages/adapters/openclaw-
 COPY packages/adapters/opencode-local/package.json packages/adapters/opencode-local/
 COPY packages/adapters/pi-local/package.json packages/adapters/pi-local/
 
-RUN pnpm install --frozen-lockfile
+FROM manifests AS deps
+RUN --mount=type=cache,id=paperclip-pnpm-store,target=/pnpm/store \
+  pnpm fetch --frozen-lockfile
+RUN --mount=type=cache,id=paperclip-pnpm-store,target=/pnpm/store \
+  pnpm install --frozen-lockfile --offline
 
-FROM base AS build
+FROM base AS build-base
 WORKDIR /app
 COPY --from=deps /app /app
 COPY . .
+
+FROM build-base AS ui-build
 RUN pnpm --filter @paperclipai/ui build
+
+FROM build-base AS server-build
 RUN pnpm --filter @paperclipai/server build
 RUN test -f server/dist/index.js || (echo "ERROR: server build output missing" && exit 1)
 
-FROM base AS production
-WORKDIR /app
-COPY --chown=node:node --from=build /app /app
+FROM base AS tools
 RUN arch="$(dpkg --print-architecture)" \
   && codex_vendor_bin='' \
   && case "$arch" in \
@@ -46,7 +57,17 @@ RUN arch="$(dpkg --print-architecture)" \
   esac \
   && if ! id postgres >/dev/null 2>&1; then adduser --system --group --home /var/lib/postgresql postgres; fi \
   && npm install --global --omit=dev @anthropic-ai/claude-code@latest "$codex_pkg" opencode-ai \
-  && if [ -n "$codex_vendor_bin" ] && [ -f "$codex_vendor_bin" ]; then ln -sf "$codex_vendor_bin" /usr/local/bin/codex; fi \
+  && if [ -n "$codex_vendor_bin" ] && [ -f "$codex_vendor_bin" ]; then ln -sf "$codex_vendor_bin" /usr/local/bin/codex; fi
+
+FROM base AS production
+WORKDIR /app
+COPY --chown=node:node --from=server-build /app /app
+COPY --chown=node:node --from=ui-build /app/ui/dist /app/ui/dist
+COPY --from=tools /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=tools /usr/local/bin/claude /usr/local/bin/claude
+COPY --from=tools /usr/local/bin/codex /usr/local/bin/codex
+COPY --from=tools /usr/local/bin/opencode /usr/local/bin/opencode
+RUN if ! id postgres >/dev/null 2>&1; then adduser --system --group --home /var/lib/postgresql postgres; fi \
   && mkdir -p /paperclip \
   && chown node:node /paperclip
 

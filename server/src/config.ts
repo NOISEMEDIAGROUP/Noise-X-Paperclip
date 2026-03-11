@@ -22,6 +22,7 @@ import {
   resolveDefaultStorageDir,
   resolveHomeAwarePath,
 } from "./home-paths.js";
+import { normalizeClaudeOauthToken } from "./services/claude-oauth-token.js";
 
 const PAPERCLIP_ENV_FILE_PATH = resolvePaperclipEnvPath();
 if (existsSync(PAPERCLIP_ENV_FILE_PATH)) {
@@ -70,6 +71,7 @@ export interface Config {
   agentRuntimeSyncIntervalMs: number;
   claudeInstanceUseApiKey: boolean;
   claudeInstanceApiKey: string | undefined;
+  claudeInstanceOauthToken: string | undefined;
   codexInstanceUseApiKey: boolean;
   codexInstanceApiKey: string | undefined;
 }
@@ -136,6 +138,7 @@ export function loadConfig(): Config {
     undefined;
   const claudeInstanceUseApiKey = fileAgentAuth?.claudeLocal?.useApiKey ?? false;
   const claudeInstanceApiKey = fileAgentAuth?.claudeLocal?.apiKey?.trim() || undefined;
+  const claudeInstanceOauthToken = normalizeClaudeOauthToken(fileAgentAuth?.claudeLocal?.oauthToken);
   const codexInstanceUseApiKey = fileAgentAuth?.codexLocal?.useApiKey ?? false;
   const codexInstanceApiKey = fileAgentAuth?.codexLocal?.apiKey?.trim() || undefined;
 
@@ -301,6 +304,7 @@ export function loadConfig(): Config {
     ),
     claudeInstanceUseApiKey,
     claudeInstanceApiKey,
+    claudeInstanceOauthToken,
     codexInstanceUseApiKey,
     codexInstanceApiKey,
   };

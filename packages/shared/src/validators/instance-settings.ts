@@ -24,6 +24,8 @@ export const updateInstanceSettingsSchema = z.object({
       useApiKey: z.boolean(),
       apiKey: z.string().optional(),
       clearApiKey: z.boolean().optional(),
+      oauthToken: z.string().optional(),
+      clearOauthToken: z.boolean().optional(),
       subscriptionEstimate: z.object({
         enabled: z.boolean(),
         windowHours: z.number().int().min(1).max(24 * 30),

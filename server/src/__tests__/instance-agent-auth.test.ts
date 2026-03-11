@@ -49,6 +49,7 @@ function runtimeConfig(overrides: Partial<Config> = {}): Config {
     agentRuntimeSyncIntervalMs: 300000,
     claudeInstanceUseApiKey: false,
     claudeInstanceApiKey: undefined,
+    claudeInstanceOauthToken: undefined,
     codexInstanceUseApiKey: false,
     codexInstanceApiKey: undefined,
     ...overrides,
@@ -156,6 +157,31 @@ describe("instance agent auth defaults", () => {
       CLAUDE_CONFIG_DIR: {
         type: "plain",
         value: resolveClaudeSharedSubscriptionHome(runtimeConfig()),
+      },
+    });
+  });
+
+  it("injects the stored Claude setup-token for subscription mode", () => {
+    const runtime = runtimeConfig({
+      claudeInstanceOauthToken: "sk-ant-oat01-test",
+    });
+    const result = applyInstanceAgentRuntimeAuth(
+      "claude_local",
+      { paperclipAuthMode: "subscription" },
+      runtime,
+    );
+    expect(result.env).toEqual({
+      ANTHROPIC_API_KEY: {
+        type: "plain",
+        value: "",
+      },
+      CLAUDE_CODE_OAUTH_TOKEN: {
+        type: "plain",
+        value: "sk-ant-oat01-test",
+      },
+      CLAUDE_CONFIG_DIR: {
+        type: "plain",
+        value: resolveClaudeSharedSubscriptionHome(runtime),
       },
     });
   });

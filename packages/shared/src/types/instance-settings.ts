@@ -70,6 +70,8 @@ export interface InstanceSettingsAgentAuthProfile {
   useApiKey: boolean;
   hasApiKey: boolean;
   apiKeyPreview: string | null;
+  hasOauthToken: boolean;
+  oauthTokenPreview: string | null;
   subscriptionEstimate: InstanceSubscriptionUsageEstimateConfig;
 }
 
@@ -120,6 +122,15 @@ export interface InstanceClaudeSubscriptionStatus {
 export interface InstanceClaudeAuthSession {
   state: "idle" | "pending" | "succeeded" | "failed";
   loginUrl: string | null;
+  awaitingManualCode: boolean;
+  manualCodePrompt: string | null;
+  codeSubmittedAt: string | null;
+  promptDetectedAt: string | null;
+  codeDeliveryState: "idle" | "queued" | "delivered" | "failed";
+  codeDeliveryError: string | null;
+  codeDeliveryAttemptCount: number;
+  lastCodeDeliveryAttemptAt: string | null;
+  lastActivityAt: string | null;
   startedAt: string | null;
   finishedAt: string | null;
   exitCode: number | null;
@@ -152,6 +163,7 @@ export interface InstanceCodexDeviceAuthSession {
   state: "idle" | "pending" | "succeeded" | "failed";
   loginUrl: string | null;
   userCode: string | null;
+  userCodeDetectedAt: string | null;
   startedAt: string | null;
   finishedAt: string | null;
   exitCode: number | null;
@@ -254,6 +266,8 @@ export interface UpdateInstanceAgentAuthSettings {
     useApiKey: boolean;
     apiKey?: string;
     clearApiKey?: boolean;
+    oauthToken?: string;
+    clearOauthToken?: boolean;
     subscriptionEstimate?: InstanceSubscriptionUsageEstimateConfig;
   };
   codexLocal?: {

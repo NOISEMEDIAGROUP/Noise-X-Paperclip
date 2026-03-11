@@ -16,7 +16,7 @@ import { resolveCodexSharedSubscriptionHome } from "./instance-agent-auth.js";
 
 const CODEX_COMMAND = "codex";
 const DEVICE_LOGIN_URL_RE = /https:\/\/auth\.openai\.com\/codex\/device\b/i;
-const DEVICE_CODE_RE = /\b[A-Z0-9]{4,}(?:-[A-Z0-9]{4,})+\b/;
+const DEVICE_CODE_RE = /\b(?:[A-Z0-9]{9}|[A-Z0-9]{4,}(?:-[A-Z0-9]{4,})+)\b/;
 const ANSI_RE = /\u001b\[[0-9;]*m/g;
 
 type MutableDeviceAuthSession = InstanceCodexDeviceAuthSession;
@@ -25,6 +25,7 @@ let currentSession: MutableDeviceAuthSession = {
   state: "idle",
   loginUrl: null,
   userCode: null,
+  userCodeDetectedAt: null,
   startedAt: null,
   finishedAt: null,
   exitCode: null,
@@ -39,15 +40,26 @@ function cloneSession(): InstanceCodexDeviceAuthSession {
   return { ...currentSession };
 }
 
+export function extractCodexDeviceLoginUrl(text: string): string | null {
+  return stripAnsi(text).match(DEVICE_LOGIN_URL_RE)?.[0] ?? null;
+}
+
+export function extractCodexDeviceCode(text: string): string | null {
+  return stripAnsi(text).match(DEVICE_CODE_RE)?.[0] ?? null;
+}
+
 function parseDeviceAuthHints(session: MutableDeviceAuthSession) {
   const combined = `${session.stdout}\n${session.stderr}`;
   if (!session.loginUrl) {
-    const loginUrl = combined.match(DEVICE_LOGIN_URL_RE)?.[0] ?? null;
+    const loginUrl = extractCodexDeviceLoginUrl(combined);
     if (loginUrl) session.loginUrl = loginUrl;
   }
   if (!session.userCode) {
-    const userCode = combined.match(DEVICE_CODE_RE)?.[0] ?? null;
-    if (userCode) session.userCode = userCode;
+    const userCode = extractCodexDeviceCode(combined);
+    if (userCode) {
+      session.userCode = userCode;
+      session.userCodeDetectedAt = new Date().toISOString();
+    }
   }
 }
 
@@ -124,6 +136,7 @@ export async function startCodexInstanceDeviceAuth(): Promise<InstanceCodexDevic
     state: "pending",
     loginUrl: null,
     userCode: null,
+    userCodeDetectedAt: null,
     startedAt: new Date().toISOString(),
     finishedAt: null,
     exitCode: null,

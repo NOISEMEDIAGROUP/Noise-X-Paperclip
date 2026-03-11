@@ -102,6 +102,9 @@ export function applyInstanceAgentRuntimeAuth(
     }
     if (authMode === "subscription") {
       let next = withEnvBinding(adapterConfig, "ANTHROPIC_API_KEY", "");
+      if (runtimeConfig.claudeInstanceOauthToken) {
+        next = withEnvBinding(next, "CLAUDE_CODE_OAUTH_TOKEN", runtimeConfig.claudeInstanceOauthToken);
+      }
       const env = asRecord(next.env);
       if (!envHasExplicitKey(env, "CLAUDE_CONFIG_DIR")) {
         next = withEnvBinding(next, "CLAUDE_CONFIG_DIR", resolveClaudeSharedSubscriptionHome(runtimeConfig));

@@ -84,6 +84,7 @@ export function InstanceSettingsPanel({
 
   const [claudeUseApiKey, setClaudeUseApiKey] = useState(false);
   const [claudeApiKey, setClaudeApiKey] = useState("");
+  const [claudeOauthToken, setClaudeOauthToken] = useState("");
   const [claudeEstimateEnabled, setClaudeEstimateEnabled] = useState(false);
   const [claudeEstimateWindowHours, setClaudeEstimateWindowHours] = useState("5");
   const [claudeEstimateUnit, setClaudeEstimateUnit] = useState<"runs" | "input_tokens" | "total_tokens">("runs");
@@ -96,6 +97,7 @@ export function InstanceSettingsPanel({
   const [codexEstimateUnit, setCodexEstimateUnit] = useState<"runs" | "input_tokens" | "total_tokens">("runs");
   const [codexEstimateCapacity, setCodexEstimateCapacity] = useState("100");
   const [codexEstimateExtraCapacity, setCodexEstimateExtraCapacity] = useState("0");
+  const [lastCodexAutoProbeKey, setLastCodexAutoProbeKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (!data) return;
@@ -128,6 +130,7 @@ export function InstanceSettingsPanel({
 
     setClaudeUseApiKey(data.agentAuth.configured.claudeLocal.useApiKey);
     setClaudeApiKey("");
+    setClaudeOauthToken("");
     setClaudeEstimateEnabled(data.agentAuth.configured.claudeLocal.subscriptionEstimate.enabled);
     setClaudeEstimateWindowHours(String(data.agentAuth.configured.claudeLocal.subscriptionEstimate.windowHours));
     setClaudeEstimateUnit(data.agentAuth.configured.claudeLocal.subscriptionEstimate.unit);
@@ -146,13 +149,8 @@ export function InstanceSettingsPanel({
     mutationFn: (payload: UpdateInstanceSettings) => instanceSettingsApi.update(payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.instance.settings });
-    },
-  });
-  const startClaudeSubscriptionAuth = useMutation({
-    mutationFn: () => instanceSettingsApi.startClaudeSubscriptionAuth(),
-    onSuccess: async (result) => {
-      queryClient.setQueryData(queryKeys.instance.claudeSubscriptionAuth, result);
       await queryClient.invalidateQueries({ queryKey: queryKeys.instance.claudeSubscriptionAuth });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.instance.codexSubscriptionAuth });
     },
   });
   const testClaudeApiKey = useMutation({
@@ -164,6 +162,7 @@ export function InstanceSettingsPanel({
   const startCodexSubscriptionAuth = useMutation({
     mutationFn: () => instanceSettingsApi.startCodexSubscriptionAuth(),
     onSuccess: async (result) => {
+      setLastCodexAutoProbeKey(null);
       queryClient.setQueryData(queryKeys.instance.codexSubscriptionAuth, result);
       await queryClient.invalidateQueries({ queryKey: queryKeys.instance.codexSubscriptionAuth });
     },
@@ -174,6 +173,26 @@ export function InstanceSettingsPanel({
   const testCodexSubscription = useMutation({
     mutationFn: () => instanceSettingsApi.testCodexSubscriptionConnection(),
   });
+
+  useEffect(() => {
+    const auth = codexSubscriptionAuth.data;
+    if (!auth?.loginStatus.loggedIn) return;
+    if (auth.session.state === "pending") return;
+    if (testCodexSubscription.isPending) return;
+
+    const autoProbeKey = auth.session.finishedAt ?? auth.session.startedAt ?? "logged-in";
+    const probeCheckedAt = testCodexSubscription.data?.checkedAt;
+    const hasProbe = typeof probeCheckedAt === "string";
+
+    if ((hasProbe && lastCodexAutoProbeKey === autoProbeKey) || lastCodexAutoProbeKey === autoProbeKey) return;
+
+    setLastCodexAutoProbeKey(autoProbeKey);
+    testCodexSubscription.mutate();
+  }, [
+    codexSubscriptionAuth.data,
+    lastCodexAutoProbeKey,
+    testCodexSubscription,
+  ]);
 
   const storageDirty = useMemo(() => {
     if (!data) return false;
@@ -253,6 +272,7 @@ export function InstanceSettingsPanel({
   }, [claudeUseApiKey, codexUseApiKey, data]);
 
   const claudeKeyDirty = claudeApiKey.trim().length > 0;
+  const claudeOauthTokenDirty = claudeOauthToken.trim().length > 0;
   const codexKeyDirty = codexApiKey.trim().length > 0;
   const claudeEstimateDirty = useMemo(() => {
     if (!data) return false;
@@ -601,7 +621,7 @@ export function InstanceSettingsPanel({
                 />
                 <ToplineMetric
                   label="Claude default"
-                  value={claudeUseApiKey ? "API key" : "Local login"}
+                  value={claudeUseApiKey ? "API key" : "Setup-token"}
                   hint="Saved to instance config"
                 />
                 <ToplineMetric
@@ -619,7 +639,7 @@ export function InstanceSettingsPanel({
                 useApiKey={claudeUseApiKey}
                 onSelectMode={(mode) => setClaudeUseApiKey(mode === "api")}
                 apiDescription="Store an Anthropic key for Paperclip-managed auth."
-                localDescription="Reuse the shared Claude subscription session."
+                localDescription="Inject a Claude setup-token into the container runtime."
               />
               <AuthDefaultProviderCard
                 providerName="Codex"
@@ -633,7 +653,7 @@ export function InstanceSettingsPanel({
 
             <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
               <div className="rounded-[22px] border border-white/10 bg-black/30 px-4 py-3 text-[10px] leading-4 text-slate-400">
-                API key mode uses Paperclip-managed credentials. Local login and subscription mode keep the CLI logged in inside the Paperclip runtime. In Docker, that session lives in the Paperclip container.
+                API key mode uses Paperclip-managed credentials. Claude subscription mode now prefers a long-lived setup-token injected into the Paperclip runtime container instead of an interactive browser login.
               </div>
               <SaveRow
                 dirty={agentAuthDefaultsDirty}
@@ -668,7 +688,7 @@ export function InstanceSettingsPanel({
                 testClaudeSubscription.data,
                 testClaudeApiKey.error,
                 testClaudeSubscription.error,
-                startClaudeSubscriptionAuth.error,
+                null,
                 claudeSubscriptionAuth.error,
               )}
               summary={claudeProviderSurfaceSummary(
@@ -677,7 +697,7 @@ export function InstanceSettingsPanel({
                 testClaudeSubscription.data,
                 testClaudeApiKey.error,
                 testClaudeSubscription.error,
-                startClaudeSubscriptionAuth.error,
+                null,
                 claudeSubscriptionAuth.error,
               )}
               keyLabel="Instance API key"
@@ -724,7 +744,7 @@ export function InstanceSettingsPanel({
               }
               keyMeta={[
                 { label: "Saved preview", value: data?.agentAuth.configured.claudeLocal.apiKeyPreview ?? "No stored key" },
-                { label: "Default mode", value: claudeUseApiKey ? "Instance API key" : "Local login / subscription" },
+                { label: "Default mode", value: claudeUseApiKey ? "Instance API key" : "Setup-token / subscription" },
               ]}
               keySupplementaryContent={
                 <ClaudeApiProbeCard
@@ -732,28 +752,55 @@ export function InstanceSettingsPanel({
                   error={testClaudeApiKey.error}
                 />
               }
-              loginTitle="Local login / subscription"
-              loginSummary="Shared session reused by subscription-mode agents."
+              loginTitle="Claude setup-token wizard"
+              loginSummary="Generate a long-lived token locally, then inject it into Claude runtimes in Docker."
               loginCard={buildClaudeHandshakeCard(
                 claudeSubscriptionAuth.data,
                 testClaudeSubscription.data,
                 testClaudeSubscription.error,
-                startClaudeSubscriptionAuth.error,
+                null,
                 claudeSubscriptionAuth.error,
+                Boolean(data?.agentAuth.configured.claudeLocal.hasOauthToken),
               )}
-              onStartLogin={() => startClaudeSubscriptionAuth.mutate()}
-              loginDisabled={startClaudeSubscriptionAuth.isPending || claudeSubscriptionAuth.data?.session.state === "pending"}
               loginContent={
-                <ClaudeSubscriptionActions
+                <ClaudeSetupTokenWizard
                   auth={claudeSubscriptionAuth.data}
                   isLoading={claudeSubscriptionAuth.isLoading}
                   error={claudeSubscriptionAuth.error}
-                  isStarting={startClaudeSubscriptionAuth.isPending}
-                  startError={startClaudeSubscriptionAuth.error}
-                  onStart={() => startClaudeSubscriptionAuth.mutate()}
                   onRefresh={() =>
                     queryClient.invalidateQueries({ queryKey: queryKeys.instance.claudeSubscriptionAuth })
                   }
+                  oauthToken={claudeOauthToken}
+                  onOauthTokenChange={setClaudeOauthToken}
+                  hasStoredToken={Boolean(data?.agentAuth.configured.claudeLocal.hasOauthToken)}
+                  storedTokenPreview={data?.agentAuth.configured.claudeLocal.oauthTokenPreview ?? "No stored token"}
+                  onSaveToken={() =>
+                    saveSettings.mutate({
+                      agentAuth: {
+                        claudeLocal: {
+                          useApiKey: claudeUseApiKey,
+                          oauthToken: claudeOauthToken.trim(),
+                        },
+                      },
+                    })
+                  }
+                  onClearToken={
+                    data?.agentAuth.configured.claudeLocal.hasOauthToken
+                      ? () =>
+                          saveSettings.mutate({
+                            agentAuth: {
+                              claudeLocal: {
+                                useApiKey: claudeUseApiKey,
+                                clearOauthToken: true,
+                              },
+                            },
+                          })
+                      : undefined
+                  }
+                  isSavingToken={saveSettings.isPending}
+                  saveTokenError={saveSettings.error}
+                  saveTokenSuccess={saveSettings.isSuccess}
+                  canSaveToken={claudeOauthTokenDirty}
                   testSubscriptionResult={testClaudeSubscription.data}
                   testSubscriptionError={testClaudeSubscription.error}
                   onTestSubscription={() => testClaudeSubscription.mutate()}
@@ -1502,14 +1549,21 @@ function ClaudeApiProbeCard({
   );
 }
 
-function ClaudeSubscriptionActions({
+function ClaudeSetupTokenWizard({
   auth,
   isLoading,
   error,
-  isStarting,
-  startError,
-  onStart,
   onRefresh,
+  oauthToken,
+  onOauthTokenChange,
+  hasStoredToken,
+  storedTokenPreview,
+  onSaveToken,
+  onClearToken,
+  isSavingToken,
+  saveTokenError,
+  saveTokenSuccess,
+  canSaveToken,
   onTestSubscription,
   isTestingSubscription,
   testSubscriptionResult,
@@ -1518,10 +1572,17 @@ function ClaudeSubscriptionActions({
   auth: InstanceClaudeSubscriptionAuthResponse | undefined;
   isLoading: boolean;
   error: unknown;
-  isStarting: boolean;
-  startError: unknown;
-  onStart: () => void;
   onRefresh: () => void;
+  oauthToken: string;
+  onOauthTokenChange: (value: string) => void;
+  hasStoredToken: boolean;
+  storedTokenPreview: string;
+  onSaveToken: () => void;
+  onClearToken?: () => void;
+  isSavingToken: boolean;
+  saveTokenError: unknown;
+  saveTokenSuccess: boolean;
+  canSaveToken: boolean;
   onTestSubscription: () => void;
   isTestingSubscription: boolean;
   testSubscriptionResult: InstanceClaudeConnectionProbeResult | undefined;
@@ -1529,10 +1590,14 @@ function ClaudeSubscriptionActions({
 }) {
   const status = auth?.loginStatus;
   const session = auth?.session;
-  const startErrorMessage =
-    startError instanceof Error ? startError.message : startError ? "Failed to start Claude login" : null;
   const loadErrorMessage =
     error instanceof Error ? error.message : error ? "Failed to load Claude login status" : null;
+  const saveTokenErrorMessage =
+    saveTokenError instanceof Error
+      ? saveTokenError.message
+      : saveTokenError
+        ? "Failed to save Claude setup-token"
+        : null;
   const testSubscriptionErrorMessage =
     testSubscriptionError instanceof Error
       ? testSubscriptionError.message
@@ -1545,19 +1610,62 @@ function ClaudeSubscriptionActions({
 
   return (
     <div className="space-y-4">
-      {session?.loginUrl && (
-        <div className="rounded-[22px] border border-sky-400/25 bg-sky-500/10 px-3.5 py-3 text-[10px] text-sky-100">
-          Browser URL:
-          <a
-            href={session.loginUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="ml-1 break-all underline underline-offset-2"
-          >
-            {session.loginUrl}
-          </a>
+      <div className="rounded-[22px] border border-amber-300/30 bg-[linear-gradient(180deg,rgba(255,204,64,0.16),rgba(24,19,6,0.92)_42%,rgba(5,5,5,0.98))] px-3.5 py-3 text-[10px] text-amber-50 shadow-[inset_0_1px_0_rgba(255,224,130,0.12)]">
+        <div className="text-[9px] font-semibold uppercase tracking-[0.2em] text-amber-200/80">Step 1</div>
+        <div className="mt-1 text-[12px] font-semibold text-amber-50">Generate a Claude setup-token on your local machine</div>
+        <div className="mt-1.5 rounded-[16px] border border-amber-200/15 bg-black/45 px-3 py-2 font-mono text-[11px] text-amber-100">
+          claude setup-token
         </div>
-      )}
+
+        <div className="mt-4 border-t border-amber-200/12 pt-3">
+          <div className="text-[9px] font-semibold uppercase tracking-[0.2em] text-amber-200/80">Step 2</div>
+          <div className="mt-1 text-[10px] leading-4 text-amber-50/85">
+            Complete the browser flow until Claude prints a long-lived token that starts with <span className="font-mono">sk-ant-oat01-</span>.
+          </div>
+        </div>
+
+        <div className="mt-4 border-t border-amber-200/12 pt-3">
+          <div className="text-[9px] font-semibold uppercase tracking-[0.2em] text-amber-200/80">Step 3</div>
+          <label className="mb-2 mt-2 block text-[9px] font-semibold uppercase tracking-[0.18em] text-amber-200/80">
+            Paste Claude setup-token
+          </label>
+          <div className="text-[10px] leading-4 text-amber-50/85">
+            Paperclip stores this token and injects it as <span className="font-mono">CLAUDE_CODE_OAUTH_TOKEN</span> for Claude runtimes in Docker.
+          </div>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <input
+              className="w-full rounded-[18px] border border-amber-200/20 bg-black/55 px-3 py-2.5 text-[12px] font-mono text-amber-50 outline-none transition placeholder:text-amber-100/35 focus:border-amber-300/45"
+              type="password"
+              value={oauthToken}
+              onChange={(e) => onOauthTokenChange(e.target.value)}
+              placeholder={storedTokenPreview}
+            />
+            <Button
+              type="button"
+              size="sm"
+              className={COMPACT_BUTTON_CLASS}
+              onClick={onSaveToken}
+              disabled={!canSaveToken || isSavingToken}
+            >
+              {isSavingToken ? "Saving..." : "Save token"}
+            </Button>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {onClearToken ? (
+              <Button type="button" size="sm" className={COMPACT_BUTTON_CLASS} variant="outline" onClick={onClearToken} disabled={isSavingToken}>
+                Clear token
+              </Button>
+            ) : null}
+            <StatusPill tone={hasStoredToken ? "success" : "idle"} icon={hasStoredToken ? <CheckCircle2 className="h-3.5 w-3.5" /> : <CircleFallbackIcon />} label={hasStoredToken ? "Stored" : "Missing"} />
+          </div>
+          {saveTokenErrorMessage ? (
+            <div className="mt-2 text-[10px] text-red-200">{saveTokenErrorMessage}</div>
+          ) : null}
+          {!saveTokenErrorMessage && saveTokenSuccess && !isSavingToken && (
+            <div className="mt-2 text-[10px] text-emerald-200">Token saved. Run the subscription probe to verify Docker can use it.</div>
+          )}
+        </div>
+      </div>
 
       <RuntimeSignalCard
         title="Claude subscription probe"
@@ -1566,21 +1674,17 @@ function ClaudeSubscriptionActions({
         meta={[
           status?.sharedConfigDir ? `Shared config dir: ${status.sharedConfigDir}` : auth?.sharedConfigDir ? `Shared config dir: ${auth.sharedConfigDir}` : null,
           testSubscriptionResult?.checkedAt ? `Checked: ${formatIso(testSubscriptionResult.checkedAt)}` : null,
+          hasStoredToken ? `Stored token: ${storedTokenPreview}` : "Stored token: none",
+          session?.lastActivityAt ? `Last CLI activity: ${formatIso(session.lastActivityAt)}` : null,
+          session?.promptDetectedAt ? `Prompt detected: ${formatIso(session.promptDetectedAt)}` : null,
         ]}
         consoleLabel="Claude runtime console"
         stdout={cleanConsoleText(testSubscriptionResult?.stdout ?? consoleStdout)}
         stderr={cleanConsoleText(testSubscriptionResult?.stderr ?? consoleStderr)}
-        detail={testSubscriptionResult?.detail ?? testSubscriptionErrorMessage ?? loadErrorMessage ?? startErrorMessage}
+        detail={testSubscriptionResult?.detail ?? session?.codeDeliveryError ?? testSubscriptionErrorMessage ?? saveTokenErrorMessage ?? loadErrorMessage}
       />
 
       <div className="flex flex-wrap gap-2">
-        <Button type="button" size="sm" className={COMPACT_BUTTON_CLASS} onClick={onStart} disabled={isStarting || session?.state === "pending"}>
-          {isStarting
-            ? "Starting login..."
-            : session?.state === "pending"
-              ? "Waiting for browser confirmation..."
-              : "Connect Claude subscription"}
-        </Button>
         <Button type="button" size="sm" className={COMPACT_BUTTON_CLASS} variant="outline" onClick={onTestSubscription} disabled={isTestingSubscription}>
           {isTestingSubscription ? "Testing..." : "Test subscription"}
         </Button>
@@ -1590,9 +1694,9 @@ function ClaudeSubscriptionActions({
         </Button>
       </div>
 
-      {(loadErrorMessage || startErrorMessage) && (
+      {loadErrorMessage && (
         <div className="rounded-[20px] border border-red-400/25 bg-red-500/10 px-3.5 py-3 text-[10px] text-red-100">
-          {loadErrorMessage ?? startErrorMessage}
+          {loadErrorMessage}
         </div>
       )}
     </div>
@@ -1666,32 +1770,84 @@ function CodexSubscriptionActions({
 
   const consoleStdout = cleanConsoleText(session?.stdout ?? "");
   const consoleStderr = cleanConsoleText(session?.stderr ?? "");
+  const [deviceCodeVisible, setDeviceCodeVisible] = useState(Boolean(session?.userCode));
+  const showDeviceCode = session?.state === "pending" && Boolean(session?.userCode) && deviceCodeVisible;
+  const showFlowCard = Boolean(
+    session &&
+      ((session.state === "pending" && (session.loginUrl || session.userCode)) ||
+        session.state === "succeeded" ||
+        session.state === "failed"),
+  );
+
+  useEffect(() => {
+    if (!session?.userCode) {
+      setDeviceCodeVisible(false);
+      return;
+    }
+
+    setDeviceCodeVisible(true);
+    const detectedAt = session.userCodeDetectedAt ?? session.startedAt;
+    const detectedMs = detectedAt ? new Date(detectedAt).getTime() : Date.now();
+    const hideInMs = Math.max(0, detectedMs + (5 * 60 * 1000) - Date.now());
+    const timeout = window.setTimeout(() => setDeviceCodeVisible(false), hideInMs);
+    return () => window.clearTimeout(timeout);
+  }, [session?.startedAt, session?.userCode, session?.userCodeDetectedAt]);
 
   return (
     <div className="space-y-4">
-      {(session?.loginUrl || session?.userCode) && (
-        <div className="rounded-[22px] border border-sky-400/25 bg-sky-500/10 px-3.5 py-3 text-[10px] text-sky-100">
-          {session.loginUrl && (
+      {showFlowCard && (
+        <div className="rounded-[22px] border border-amber-300/30 bg-[linear-gradient(180deg,rgba(255,204,64,0.16),rgba(24,19,6,0.92)_42%,rgba(5,5,5,0.98))] px-3.5 py-3 text-[10px] text-amber-50 shadow-[inset_0_1px_0_rgba(255,224,130,0.12)]">
+          {session?.state === "pending" && session.loginUrl ? (
             <div>
               Browser URL:
               <a
                 href={session.loginUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="ml-1 break-all underline underline-offset-2"
+                className="ml-1 break-all underline underline-offset-2 text-amber-100"
               >
                 {session.loginUrl}
               </a>
             </div>
-          )}
-          {session.userCode && (
-            <div className="mt-2">
-              One-time code:
-              <span className="ml-1 rounded-md bg-white/10 px-1.5 py-0.5 font-mono text-white">
-                {session.userCode}
-              </span>
+          ) : null}
+
+          {session?.state === "pending" && session.userCode ? (
+            <div className={cn(session.loginUrl ? "mt-3 border-t border-amber-200/12 pt-3" : "")}>
+              <div className="mb-2 block text-[9px] font-semibold uppercase tracking-[0.18em] text-amber-200/80">
+                Device code
+              </div>
+              {showDeviceCode ? (
+                <>
+                  <div className="text-[10px] leading-4 text-amber-50/85">
+                    Enter this code in the OpenAI browser page for Codex. The UI hides it after 5 minutes.
+                  </div>
+                  <div className="mt-3 inline-flex rounded-[18px] border border-amber-200/20 bg-black/55 px-4 py-3 font-mono text-[24px] tracking-[0.22em] text-amber-50">
+                    {session.userCode}
+                  </div>
+                </>
+              ) : (
+                <div className="text-[10px] leading-4 text-amber-100/70">
+                  Device code hidden after 5 minutes. Start a new Codex login if you need a fresh code.
+                </div>
+              )}
             </div>
-          )}
+          ) : null}
+
+          {session?.state === "succeeded" ? (
+            <div>
+              <div className="text-[10px] text-emerald-200">
+                Codex finished the browser device-auth step. Paperclip is checking whether the shared session is usable.
+              </div>
+            </div>
+          ) : null}
+
+          {session?.state === "failed" ? (
+            <div>
+              <div className="text-[10px] text-red-200">
+                Codex did not complete the shared login. Open the runtime console below for the exact CLI response.
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -2140,7 +2296,7 @@ function claudeProviderSurfaceState(
   loadError: unknown,
 ): SurfaceTone {
   if (apiProbeError || subscriptionProbeError || startError || loadError) return "failure";
-  if (apiProbe?.ok || subscriptionProbe?.ok || auth?.loginStatus.loggedIn) return "success";
+  if (apiProbe?.ok || subscriptionProbe?.ok) return "success";
   if (apiProbe || subscriptionProbe || auth?.session.state === "failed") return "failure";
   return "idle";
 }
@@ -2156,11 +2312,12 @@ function claudeProviderSurfaceSummary(
 ): string {
   if (apiProbe?.ok) return apiProbe.summary;
   if (subscriptionProbe?.ok) return subscriptionProbe.summary;
-  if (auth?.loginStatus.loggedIn) return "Shared Claude subscription is logged in and ready for local subscription mode.";
+  if (auth?.loginStatus.loggedIn) {
+    return "Claude reports logged-in status, but Docker readiness is only confirmed after a successful subscription probe.";
+  }
   if (apiProbeError || subscriptionProbeError || startError || loadError) return "One or more Claude connection checks failed. Open the console output for the exact error.";
-  if (auth?.session.state === "pending") return "Waiting for the browser sign-in step to complete.";
   if (auth?.session.state === "failed") return "The last Claude login attempt failed. Open the console output to see the CLI response.";
-  return "No successful Claude connection has been confirmed yet.";
+  return "Store a Claude setup-token, then run a live subscription probe against the Docker runtime.";
 }
 
 function claudeSubscriptionPanelTone(
@@ -2170,8 +2327,9 @@ function claudeSubscriptionPanelTone(
   startError: unknown,
   loadError: unknown,
 ): SurfaceTone {
-  if (subscriptionProbe?.ok || auth?.loginStatus.loggedIn) return "success";
+  if (subscriptionProbe?.ok) return "success";
   if (subscriptionProbeError || startError || loadError || auth?.session.state === "failed") return "failure";
+  if (subscriptionProbe && !subscriptionProbe.ok) return "failure";
   return "idle";
 }
 
@@ -2185,7 +2343,7 @@ function codexProviderSurfaceState(
   loadError: unknown,
 ): SurfaceTone {
   if (apiProbeError || subscriptionProbeError || startError || loadError) return "failure";
-  if (apiProbe?.ok || subscriptionProbe?.ok || auth?.loginStatus.loggedIn) return "success";
+  if (apiProbe?.ok || subscriptionProbe?.ok) return "success";
   if (apiProbe || subscriptionProbe || auth?.session.state === "failed") return "failure";
   return "idle";
 }
@@ -2201,8 +2359,10 @@ function codexProviderSurfaceSummary(
 ): string {
   if (apiProbe?.ok) return apiProbe.summary;
   if (subscriptionProbe?.ok) return subscriptionProbe.summary;
-  if (auth?.loginStatus.loggedIn) return "Shared Codex subscription is logged in and ready for local subscription mode.";
   if (apiProbeError || subscriptionProbeError || startError || loadError) return "One or more Codex connection checks failed. Open the console output for the exact error.";
+  if (auth?.loginStatus.loggedIn) {
+    return "Shared Codex login exists, but runtime readiness is only confirmed after a successful subscription probe.";
+  }
   if (auth?.session.state === "pending") return "Waiting for the browser/device-auth step to complete.";
   if (auth?.session.state === "failed") return "The last Codex login attempt failed. Open the console output to see the CLI response.";
   return "No successful Codex connection has been confirmed yet.";
@@ -2215,8 +2375,9 @@ function codexSubscriptionPanelTone(
   startError: unknown,
   loadError: unknown,
 ): SurfaceTone {
-  if (subscriptionProbe?.ok || auth?.loginStatus.loggedIn) return "success";
+  if (subscriptionProbe?.ok) return "success";
   if (subscriptionProbeError || startError || loadError || auth?.session.state === "failed") return "failure";
+  if (subscriptionProbe && !subscriptionProbe.ok) return "failure";
   return "idle";
 }
 
@@ -2226,6 +2387,7 @@ function buildClaudeHandshakeCard(
   subscriptionProbeError: unknown,
   startError: unknown,
   loadError: unknown,
+  hasStoredToken: boolean,
 ): HandshakeCardState {
   const tone = claudeSubscriptionPanelTone(
     auth,
@@ -2239,7 +2401,7 @@ function buildClaudeHandshakeCard(
       state: "success",
       label: "Handshake state",
       title: "Subscription ready",
-      line: "Shared session is active and reusable.",
+      line: "Shared session passed a live Claude runtime probe.",
       actionLabel: "Connected",
     };
   }
@@ -2247,26 +2409,37 @@ function buildClaudeHandshakeCard(
     return {
       state: "failure",
       label: "Handshake state",
-      title: "Handshake failed",
-      line: "Unable to establish shared subscription session.",
-      actionLabel: "Click to reconnect",
+      title: hasStoredToken ? "Probe failed" : "Token missing",
+      line: hasStoredToken
+        ? "Unable to establish a shared Claude subscription session in Docker."
+        : "Save a Claude setup-token before testing the shared subscription runtime.",
+      actionLabel: hasStoredToken ? "Needs attention" : "Setup required",
     };
   }
-  if (auth?.session.state === "pending") {
+  if (auth?.loginStatus.loggedIn) {
     return {
       state: "idle",
       label: "Handshake state",
-      title: "Waiting for browser",
-      line: "Shared login started and is waiting for browser confirmation.",
-      actionLabel: "Connection in progress",
+      title: "Token loaded",
+      line: "Claude reports an authenticated session, but the runtime still needs a live probe to confirm it works.",
+      actionLabel: "Ready to test",
+    };
+  }
+  if (hasStoredToken) {
+    return {
+      state: "idle",
+      label: "Handshake state",
+      title: "Token stored",
+      line: "Run the subscription probe to verify that Docker can use the saved Claude setup-token.",
+      actionLabel: "Verification needed",
     };
   }
   return {
     state: "idle",
     label: "Handshake state",
-    title: "Not connected",
-    line: "No shared subscription handshake has been started.",
-    actionLabel: "Click to connect",
+    title: "Not configured",
+    line: "No Claude setup-token is stored yet.",
+    actionLabel: "Paste token",
   };
 }
 
@@ -2335,7 +2508,7 @@ function buildClaudeLoginMeta(
     },
     {
       label: "New-agent default",
-      value: claudeUseApiKey ? "API key" : "Shared subscription",
+      value: claudeUseApiKey ? "API key" : "Setup-token / subscription",
     },
   ];
 }

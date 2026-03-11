@@ -10,9 +10,12 @@ import { createDefaultConfigFile, readConfigFile, writeConfigFile } from "../con
 import { loadConfig } from "../config.js";
 import { validate } from "../middleware/validate.js";
 import { resolvePaperclipConfigPath } from "../paths.js";
+import { normalizeClaudeOauthToken } from "../services/claude-oauth-token.js";
 import {
   getClaudeInstanceSubscriptionAuth,
+  getClaudeInstanceSubscriptionAuthSnapshot,
   probeClaudeInstanceConnection,
+  submitClaudeInstanceAuthCode,
   startClaudeInstanceAuth,
 } from "../services/claude-instance-subscription.js";
 import {
@@ -108,6 +111,7 @@ function buildStorageAuthStatus(input: {
 function buildAgentAuthProfile(input: {
   useApiKey: boolean;
   apiKey?: string;
+  oauthToken?: string;
   subscriptionEstimate?: {
     enabled: boolean;
     windowHours: number;
@@ -116,10 +120,13 @@ function buildAgentAuthProfile(input: {
     extraCapacity: number;
   };
 }) {
+  const normalizedOauthToken = normalizeClaudeOauthToken(input.oauthToken);
   return {
     useApiKey: input.useApiKey,
     hasApiKey: Boolean(input.apiKey?.trim()),
     apiKeyPreview: previewSecret(input.apiKey),
+    hasOauthToken: Boolean(normalizedOauthToken),
+    oauthTokenPreview: previewSecret(normalizedOauthToken),
     subscriptionEstimate: input.subscriptionEstimate ?? {
       enabled: false,
       windowHours: 5,
@@ -357,6 +364,19 @@ export function instanceSettingsRoutes(db: Db) {
     res.json(await getClaudeInstanceSubscriptionAuth());
   });
 
+  router.post("/instance/settings/provider-auth/claude/subscription/submit-code", async (req, res) => {
+    assertBoard(req);
+    const code = typeof req.body?.code === "string" ? req.body.code : "";
+    try {
+      await submitClaudeInstanceAuthCode(code);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to submit authentication code";
+      res.status(400).json({ error: message });
+      return;
+    }
+    res.json(await getClaudeInstanceSubscriptionAuthSnapshot());
+  });
+
   router.post("/instance/settings/provider-auth/claude/test-api-key", async (req, res) => {
     assertBoard(req);
     const apiKeyOverride =
@@ -432,6 +452,11 @@ export function instanceSettingsRoutes(db: Db) {
                   ? { apiKey: undefined }
                   : req.body.agentAuth.claudeLocal.apiKey !== undefined
                     ? { apiKey: req.body.agentAuth.claudeLocal.apiKey.trim() }
+                    : {}),
+                ...(req.body.agentAuth.claudeLocal.clearOauthToken
+                  ? { oauthToken: undefined }
+                  : req.body.agentAuth.claudeLocal.oauthToken !== undefined
+                    ? { oauthToken: normalizeClaudeOauthToken(req.body.agentAuth.claudeLocal.oauthToken) }
                     : {}),
                 ...(req.body.agentAuth.claudeLocal.subscriptionEstimate
                   ? { subscriptionEstimate: req.body.agentAuth.claudeLocal.subscriptionEstimate }

@@ -1,9 +1,15 @@
 .git
 .github
 .paperclip
+.paperclip-local
 .pnpm-store
+.turbo
+.cache
 node_modules
 **/node_modules
+dist
+**/dist
+**/.vite
 coverage
 data
 tmp
