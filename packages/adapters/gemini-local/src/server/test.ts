@@ -1,22 +1,18 @@
-import path from "node:path";
 import type {
   AdapterEnvironmentCheck,
   AdapterEnvironmentTestContext,
   AdapterEnvironmentTestResult,
 } from "@paperclipai/adapter-utils";
 import {
-  asBoolean,
   asString,
   asStringArray,
+  parseObject,
   ensureAbsoluteDirectory,
   ensureCommandResolvable,
   ensurePathInEnv,
-  parseObject,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
-import { DEFAULT_GEMINI_LOCAL_MODEL } from "../index.js";
-import { detectGeminiAuthRequired, parseGeminiJsonl } from "./parse.js";
-import { firstNonEmptyLine } from "./utils.js";
+import { parseGeminiStreamJson, detectGeminiAuthRequired } from "./parse.js";
 
 function summarizeStatus(checks: AdapterEnvironmentCheck[]): AdapterEnvironmentTestResult["status"] {
   if (checks.some((check) => check.level === "error")) return "fail";
@@ -28,13 +24,17 @@ function isNonEmpty(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function commandLooksLike(command: string, expected: string): boolean {
-  const base = path.basename(command).toLowerCase();
-  return base === expected || base === `${expected}.cmd` || base === `${expected}.exe`;
+function firstNonEmptyLine(text: string): string {
+  return (
+    text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(Boolean) ?? ""
+  );
 }
 
-function summarizeProbeDetail(stdout: string, stderr: string, parsedError: string | null): string | null {
-  const raw = parsedError?.trim() || firstNonEmptyLine(stderr) || firstNonEmptyLine(stdout);
+function summarizeProbeDetail(stdout: string, stderr: string): string | null {
+  const raw = firstNonEmptyLine(stderr) || firstNonEmptyLine(stdout);
   if (!raw) return null;
   const clean = raw.replace(/\s+/g, " ").trim();
   const max = 240;
@@ -87,130 +87,99 @@ export async function testEnvironment(
     });
   }
 
-  const configGeminiApiKey = env.GEMINI_API_KEY;
-  const hostGeminiApiKey = process.env.GEMINI_API_KEY;
-  const configGoogleApiKey = env.GOOGLE_API_KEY;
-  const hostGoogleApiKey = process.env.GOOGLE_API_KEY;
-  const hasGca = env.GOOGLE_GENAI_USE_GCA === "true" || process.env.GOOGLE_GENAI_USE_GCA === "true";
-  if (
-    isNonEmpty(configGeminiApiKey) ||
-    isNonEmpty(hostGeminiApiKey) ||
-    isNonEmpty(configGoogleApiKey) ||
-    isNonEmpty(hostGoogleApiKey) ||
-    hasGca
-  ) {
-    const source = hasGca
-      ? "Google account login (GCA)"
-      : isNonEmpty(configGeminiApiKey) || isNonEmpty(configGoogleApiKey)
-        ? "adapter config env"
-        : "server environment";
+  // Check for API key
+  const configApiKey = env.GEMINI_API_KEY || env.GOOGLE_API_KEY;
+  const hostApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (isNonEmpty(configApiKey) || isNonEmpty(hostApiKey)) {
+    const source = isNonEmpty(configApiKey) ? "adapter config env" : "server environment";
     checks.push({
-      code: "gemini_api_key_present",
+      code: "gemini_api_key_configured",
       level: "info",
-      message: "Gemini API credentials are set for CLI authentication.",
+      message: "Gemini API key is configured.",
       detail: `Detected in ${source}.`,
     });
   } else {
     checks.push({
-      code: "gemini_api_key_missing",
-      level: "info",
-      message: "No explicit API key detected. Gemini CLI may still authenticate via `gemini auth login` (OAuth).",
-      hint: "If the hello probe fails with an auth error, set GEMINI_API_KEY or GOOGLE_API_KEY in adapter env, or run `gemini auth login`.",
+      code: "gemini_no_api_key",
+      level: "warn",
+      message: "No Gemini API key detected. You may need to authenticate via `gemini login` or set GEMINI_API_KEY.",
+      hint: "Set GEMINI_API_KEY environment variable or run `gemini login` for OAuth authentication.",
     });
   }
 
   const canRunProbe =
     checks.every((check) => check.code !== "gemini_cwd_invalid" && check.code !== "gemini_command_unresolvable");
   if (canRunProbe) {
-    if (!commandLooksLike(command, "gemini")) {
+    const model = asString(config.model, "gemini-2.5-flash").trim();
+    const extraArgs = asStringArray(config.extraArgs);
+
+    const args = ["-p", "Respond with hello.", "--output-format", "stream-json", "--model", model];
+    if (extraArgs.length > 0) args.push(...extraArgs);
+
+    const probe = await runChildProcess(
+      `gemini-envtest-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      command,
+      args,
+      {
+        cwd,
+        env,
+        timeoutSec: 45,
+        graceSec: 5,
+        stdin: "Respond with hello.",
+        onLog: async () => {},
+      },
+    );
+
+    const parsedStream = parseGeminiStreamJson(probe.stdout);
+    const parsed = parsedStream.resultJson;
+    const authMeta = detectGeminiAuthRequired({
+      parsed,
+      stdout: probe.stdout,
+      stderr: probe.stderr,
+    });
+    const detail = summarizeProbeDetail(probe.stdout, probe.stderr);
+
+    if (probe.timedOut) {
       checks.push({
-        code: "gemini_hello_probe_skipped_custom_command",
-        level: "info",
-        message: "Skipped hello probe because command is not `gemini`.",
-        detail: command,
-        hint: "Use the `gemini` CLI command to run the automatic installation and auth probe.",
+        code: "gemini_hello_probe_timed_out",
+        level: "warn",
+        message: "Gemini hello probe timed out.",
+        hint: "Retry the probe. If this persists, verify Gemini can run from this directory manually.",
+      });
+    } else if (authMeta.requiresAuth) {
+      checks.push({
+        code: "gemini_hello_probe_auth_required",
+        level: "warn",
+        message: "Gemini CLI is installed, but authentication is required.",
+        ...(detail ? { detail } : {}),
+        hint: authMeta.loginUrl
+          ? `Visit ${authMeta.loginUrl} to authenticate, or set GEMINI_API_KEY.`
+          : "Run `gemini login` in this environment or set GEMINI_API_KEY, then retry the probe.",
+      });
+    } else if ((probe.exitCode ?? 1) === 0) {
+      const summary = parsedStream.summary.trim();
+      const hasHello = /\bhello\b/i.test(summary);
+      checks.push({
+        code: hasHello ? "gemini_hello_probe_passed" : "gemini_hello_probe_unexpected_output",
+        level: hasHello ? "info" : "warn",
+        message: hasHello
+          ? "Gemini hello probe succeeded."
+          : "Gemini probe ran but did not return `hello` as expected.",
+        ...(summary ? { detail: summary.replace(/\s+/g, " ").trim().slice(0, 240) } : {}),
+        ...(hasHello
+          ? {}
+          : {
+              hint: "Try the probe manually (`gemini -p hello --output-format stream-json`) to debug.",
+            }),
       });
     } else {
-      const model = asString(config.model, DEFAULT_GEMINI_LOCAL_MODEL).trim();
-      const approvalMode = asString(config.approvalMode, asBoolean(config.yolo, false) ? "yolo" : "default");
-      const sandbox = asBoolean(config.sandbox, false);
-      const extraArgs = (() => {
-        const fromExtraArgs = asStringArray(config.extraArgs);
-        if (fromExtraArgs.length > 0) return fromExtraArgs;
-        return asStringArray(config.args);
-      })();
-
-      const args = ["--output-format", "stream-json"];
-      if (model && model !== DEFAULT_GEMINI_LOCAL_MODEL) args.push("--model", model);
-      if (approvalMode !== "default") args.push("--approval-mode", approvalMode);
-      if (sandbox) {
-        args.push("--sandbox");
-      } else {
-        args.push("--sandbox=none");
-      }
-      if (extraArgs.length > 0) args.push(...extraArgs);
-      args.push("Respond with hello.");
-
-      const probe = await runChildProcess(
-        `gemini-envtest-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        command,
-        args,
-        {
-          cwd,
-          env,
-          timeoutSec: 45,
-          graceSec: 5,
-          onLog: async () => { },
-        },
-      );
-      const parsed = parseGeminiJsonl(probe.stdout);
-      const detail = summarizeProbeDetail(probe.stdout, probe.stderr, parsed.errorMessage);
-      const authMeta = detectGeminiAuthRequired({
-        parsed: parsed.resultEvent,
-        stdout: probe.stdout,
-        stderr: probe.stderr,
+      checks.push({
+        code: "gemini_hello_probe_failed",
+        level: "error",
+        message: "Gemini hello probe failed.",
+        ...(detail ? { detail } : {}),
+        hint: "Run `gemini -p hello --output-format stream-json` manually in this directory to debug.",
       });
-
-      if (probe.timedOut) {
-        checks.push({
-          code: "gemini_hello_probe_timed_out",
-          level: "warn",
-          message: "Gemini hello probe timed out.",
-          hint: "Retry the probe. If this persists, verify Gemini can run `Respond with hello.` from this directory manually.",
-        });
-      } else if ((probe.exitCode ?? 1) === 0) {
-        const summary = parsed.summary.trim();
-        const hasHello = /\bhello\b/i.test(summary);
-        checks.push({
-          code: hasHello ? "gemini_hello_probe_passed" : "gemini_hello_probe_unexpected_output",
-          level: hasHello ? "info" : "warn",
-          message: hasHello
-            ? "Gemini hello probe succeeded."
-            : "Gemini probe ran but did not return `hello` as expected.",
-          ...(summary ? { detail: summary.replace(/\s+/g, " ").trim().slice(0, 240) } : {}),
-          ...(hasHello
-            ? {}
-            : {
-              hint: "Try `gemini --output-format json \"Respond with hello.\"` manually to inspect full output.",
-            }),
-        });
-      } else if (authMeta.requiresAuth) {
-        checks.push({
-          code: "gemini_hello_probe_auth_required",
-          level: "warn",
-          message: "Gemini CLI is installed, but authentication is not ready.",
-          ...(detail ? { detail } : {}),
-          hint: "Run `gemini auth` or configure GEMINI_API_KEY / GOOGLE_API_KEY in adapter env/shell, then retry the probe.",
-        });
-      } else {
-        checks.push({
-          code: "gemini_hello_probe_failed",
-          level: "error",
-          message: "Gemini hello probe failed.",
-          ...(detail ? { detail } : {}),
-          hint: "Run `gemini --output-format json \"Respond with hello.\"` manually in this working directory to debug.",
-        });
-      }
     }
   }
 

@@ -1,112 +1,23 @@
 import pc from "picocolors";
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
-}
-
-function asNumber(value: unknown, fallback = 0): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function stringifyUnknown(value: unknown): string {
+function asErrorText(value: unknown): string {
   if (typeof value === "string") return value;
-  if (value === null || value === undefined) return "";
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
-
-function errorText(value: unknown): string {
-  if (typeof value === "string") return value;
-  const rec = asRecord(value);
-  if (!rec) return "";
-  const msg =
-    (typeof rec.message === "string" && rec.message) ||
-    (typeof rec.error === "string" && rec.error) ||
-    (typeof rec.code === "string" && rec.code) ||
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return "";
+  const obj = value as Record<string, unknown>;
+  const message =
+    (typeof obj.message === "string" && obj.message) ||
+    (typeof obj.error === "string" && obj.error) ||
+    (typeof obj.code === "string" && obj.code) ||
     "";
-  if (msg) return msg;
+  if (message) return message;
   try {
-    return JSON.stringify(rec);
+    return JSON.stringify(obj);
   } catch {
     return "";
   }
 }
 
-function printTextMessage(prefix: string, colorize: (text: string) => string, messageRaw: unknown): void {
-  if (typeof messageRaw === "string") {
-    const text = messageRaw.trim();
-    if (text) console.log(colorize(`${prefix}: ${text}`));
-    return;
-  }
-
-  const message = asRecord(messageRaw);
-  if (!message) return;
-
-  const directText = asString(message.text).trim();
-  if (directText) console.log(colorize(`${prefix}: ${directText}`));
-
-  const content = Array.isArray(message.content) ? message.content : [];
-  for (const partRaw of content) {
-    const part = asRecord(partRaw);
-    if (!part) continue;
-    const type = asString(part.type).trim();
-
-    if (type === "output_text" || type === "text" || type === "content") {
-      const text = asString(part.text).trim() || asString(part.content).trim();
-      if (text) console.log(colorize(`${prefix}: ${text}`));
-      continue;
-    }
-
-    if (type === "thinking") {
-      const text = asString(part.text).trim();
-      if (text) console.log(pc.gray(`thinking: ${text}`));
-      continue;
-    }
-
-    if (type === "tool_call") {
-      const name = asString(part.name, asString(part.tool, "tool"));
-      console.log(pc.yellow(`tool_call: ${name}`));
-      const input = part.input ?? part.arguments ?? part.args;
-      if (input !== undefined) console.log(pc.gray(stringifyUnknown(input)));
-      continue;
-    }
-
-    if (type === "tool_result" || type === "tool_response") {
-      const isError = part.is_error === true || asString(part.status).toLowerCase() === "error";
-      const contentText =
-        asString(part.output) ||
-        asString(part.text) ||
-        asString(part.result) ||
-        stringifyUnknown(part.output ?? part.result ?? part.text ?? part.response);
-      console.log((isError ? pc.red : pc.cyan)(`tool_result${isError ? " (error)" : ""}`));
-      if (contentText) console.log((isError ? pc.red : pc.gray)(contentText));
-    }
-  }
-}
-
-function printUsage(parsed: Record<string, unknown>) {
-  const usage = asRecord(parsed.usage) ?? asRecord(parsed.usageMetadata);
-  const usageMetadata = asRecord(usage?.usageMetadata);
-  const source = usageMetadata ?? usage ?? {};
-  const input = asNumber(source.input_tokens, asNumber(source.inputTokens, asNumber(source.promptTokenCount)));
-  const output = asNumber(source.output_tokens, asNumber(source.outputTokens, asNumber(source.candidatesTokenCount)));
-  const cached = asNumber(
-    source.cached_input_tokens,
-    asNumber(source.cachedInputTokens, asNumber(source.cachedContentTokenCount)),
-  );
-  const cost = asNumber(parsed.total_cost_usd, asNumber(parsed.cost_usd, asNumber(parsed.cost)));
-  console.log(pc.blue(`tokens: in=${input} out=${output} cached=${cached} cost=$${cost.toFixed(6)}`));
-}
-
-export function printGeminiStreamEvent(raw: string, _debug: boolean): void {
+export function printGeminiStreamEvent(raw: string, debug: boolean): void {
   const line = raw.trim();
   if (!line) return;
 
@@ -118,91 +29,76 @@ export function printGeminiStreamEvent(raw: string, _debug: boolean): void {
     return;
   }
 
-  const type = asString(parsed.type);
+  const type = typeof parsed.type === "string" ? parsed.type : "";
 
-  if (type === "system") {
-    const subtype = asString(parsed.subtype);
-    if (subtype === "init") {
-      const sessionId =
-        asString(parsed.session_id) ||
-        asString(parsed.sessionId) ||
-        asString(parsed.sessionID) ||
-        asString(parsed.checkpoint_id);
-      const model = asString(parsed.model);
-      const details = [sessionId ? `session: ${sessionId}` : "", model ? `model: ${model}` : ""]
-        .filter(Boolean)
-        .join(", ");
-      console.log(pc.blue(`Gemini init${details ? ` (${details})` : ""}`));
-      return;
-    }
-    if (subtype === "error") {
-      const text = errorText(parsed.error ?? parsed.message ?? parsed.detail);
-      if (text) console.log(pc.red(`error: ${text}`));
-      return;
-    }
-    console.log(pc.blue(`system: ${subtype || "event"}`));
+  // Handle system/init events
+  if (type === "system" || type === "systemMessage") {
+    const model = typeof parsed.model === "string" ? parsed.model : "unknown";
+    const sessionId = typeof parsed.session_id === "string" ? parsed.session_id : "";
+    console.log(pc.blue(`Gemini initialized (model: ${model}${sessionId ? `, session: ${sessionId}` : ""})`));
     return;
   }
 
-  if (type === "assistant") {
-    printTextMessage("assistant", pc.green, parsed.message);
+  // Handle message/assistant events
+  if (type === "message" || type === "assistant" || type === "model") {
+    const text = typeof parsed.text === "string"
+      ? parsed.text
+      : typeof parsed.content === "string"
+        ? parsed.content
+        : typeof parsed.message === "string"
+          ? parsed.message
+          : "";
+    if (text) console.log(pc.green(`assistant: ${text}`));
     return;
   }
 
-  if (type === "user") {
-    printTextMessage("user", pc.gray, parsed.message);
-    return;
-  }
-
-  if (type === "thinking") {
-    const text = asString(parsed.text).trim() || asString(asRecord(parsed.delta)?.text).trim();
-    if (text) console.log(pc.gray(`thinking: ${text}`));
-    return;
-  }
-
-  if (type === "tool_call") {
-    const subtype = asString(parsed.subtype).trim().toLowerCase();
-    const toolCall = asRecord(parsed.tool_call ?? parsed.toolCall);
-    const [toolName] = toolCall ? Object.keys(toolCall) : [];
-    if (!toolCall || !toolName) {
-      console.log(pc.yellow(`tool_call${subtype ? `: ${subtype}` : ""}`));
-      return;
-    }
-    const payload = asRecord(toolCall[toolName]) ?? {};
-    if (subtype === "started" || subtype === "start") {
-      console.log(pc.yellow(`tool_call: ${toolName}`));
-      console.log(pc.gray(stringifyUnknown(payload.args ?? payload.input ?? payload.arguments ?? payload)));
-      return;
-    }
-    if (subtype === "completed" || subtype === "complete" || subtype === "finished") {
-      const isError =
-        parsed.is_error === true ||
-        payload.is_error === true ||
-        payload.error !== undefined ||
-        asString(payload.status).toLowerCase() === "error";
-      console.log((isError ? pc.red : pc.cyan)(`tool_result${isError ? " (error)" : ""}`));
-      console.log((isError ? pc.red : pc.gray)(stringifyUnknown(payload.result ?? payload.output ?? payload.error)));
-      return;
-    }
-    console.log(pc.yellow(`tool_call: ${toolName}${subtype ? ` (${subtype})` : ""}`));
-    return;
-  }
-
-  if (type === "result") {
-    printUsage(parsed);
-    const subtype = asString(parsed.subtype, "result");
-    const isError = parsed.is_error === true;
-    if (subtype || isError) {
-      console.log((isError ? pc.red : pc.blue)(`result: subtype=${subtype} is_error=${isError ? "true" : "false"}`));
+  // Handle tool calls
+  if (type === "tool" || type === "tool_use" || type === "function_call") {
+    const name = typeof parsed.name === "string" ? parsed.name : "unknown";
+    console.log(pc.yellow(`tool_call: ${name}`));
+    if (parsed.input !== undefined) {
+      console.log(pc.gray(JSON.stringify(parsed.input, null, 2)));
     }
     return;
   }
 
-  if (type === "error") {
-    const text = errorText(parsed.error ?? parsed.message ?? parsed.detail);
-    if (text) console.log(pc.red(`error: ${text}`));
+  // Handle result/final response
+  if (type === "response" || type === "result") {
+    const usageMetadata = typeof parsed.usageMetadata === "object" && parsed.usageMetadata !== null
+      ? (parsed.usageMetadata as Record<string, unknown>)
+      : typeof parsed.usage === "object" && parsed.usage !== null
+        ? (parsed.usage as Record<string, unknown>)
+        : {};
+    const input = Number(usageMetadata.promptTokenCount ?? usageMetadata.prompt_tokens ?? usageMetadata.inputTokenCount ?? usageMetadata.input_tokens ?? 0);
+    const output = Number(usageMetadata.candidatesTokenCount ?? usageMetadata.completion_tokens ?? usageMetadata.outputTokenCount ?? usageMetadata.output_tokens ?? 0);
+    const cost = Number(parsed.costUsd ?? parsed.total_cost_usd ?? 0);
+    const isError = parsed.is_error === true || parsed.error === true;
+    const resultText = typeof parsed.result === "string"
+      ? parsed.result
+      : typeof parsed.text === "string"
+        ? parsed.text
+        : typeof parsed.content === "string"
+          ? parsed.content
+          : "";
+    if (resultText) {
+      console.log(pc.green("result:"));
+      console.log(resultText);
+    }
+    if (isError) {
+      const errorMsg = asErrorText(parsed);
+      if (errorMsg) {
+        console.log(pc.red(`gemini_result: error=${errorMsg}`));
+      }
+    }
+    console.log(
+      pc.blue(
+        `tokens: in=${Number.isFinite(input) ? input : 0} out=${Number.isFinite(output) ? output : 0} cost=$${Number.isFinite(cost) ? cost.toFixed(6) : "0.000000"}`,
+      ),
+    );
     return;
   }
 
-  console.log(line);
+  if (debug) {
+    console.log(pc.gray(line));
+  }
 }

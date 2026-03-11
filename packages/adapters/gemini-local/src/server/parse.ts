@@ -1,193 +1,149 @@
-import { asNumber, asString, parseJson, parseObject } from "@paperclipai/adapter-utils/server-utils";
+import type { UsageSummary } from "@paperclipai/adapter-utils";
+import { asString, asNumber, parseObject, parseJson } from "@paperclipai/adapter-utils/server-utils";
 
-function collectMessageText(message: unknown): string[] {
-  if (typeof message === "string") {
-    const trimmed = message.trim();
-    return trimmed ? [trimmed] : [];
-  }
+const GEMINI_AUTH_REQUIRED_RE = /(?:not\s+logged\s+in|please\s+log\s+in|authenticate|authentication\s+required|unauthorized)/i;
+const URL_RE = /(https?:\/\/[^\s'"`<>()[\]{};,!?]+[^\s'"`<>()[\]{};,!.?:]+)/gi;
 
-  const record = parseObject(message);
-  const direct = asString(record.text, "").trim();
-  const lines: string[] = direct ? [direct] : [];
-  const content = Array.isArray(record.content) ? record.content : [];
+// Token pricing per 1M tokens (as of 2026)
+const PRICING: Record<string, { input: number; output: number }> = {
+  "gemini-2.5-flash": { input: 0.10, output: 0.40 },
+  "gemini-2.5-pro": { input: 2.00, output: 12.00 },
+  "gemini-2.0-flash": { input: 0.10, output: 0.40 },
+  "gemini-2.0-flash-lite": { input: 0.10, output: 0.40 },
+  "gemini-1.5-pro": { input: 1.25, output: 5.00 },
+  "gemini-1.5-flash": { input: 0.075, output: 0.30 },
+};
 
-  for (const partRaw of content) {
-    const part = parseObject(partRaw);
-    const type = asString(part.type, "").trim();
-    if (type === "output_text" || type === "text" || type === "content") {
-      const text = asString(part.text, "").trim() || asString(part.content, "").trim();
-      if (text) lines.push(text);
-    }
-  }
-
-  return lines;
+function calculateCostUsd(model: string, inputTokens: number, outputTokens: number): number {
+  const prices = PRICING[model] || PRICING["gemini-2.5-flash"];
+  const inputCost = (inputTokens / 1_000_000) * prices.input;
+  const outputCost = (outputTokens / 1_000_000) * prices.output;
+  return inputCost + outputCost;
 }
 
-function readSessionId(event: Record<string, unknown>): string | null {
-  return (
-    asString(event.session_id, "").trim() ||
-    asString(event.sessionId, "").trim() ||
-    asString(event.sessionID, "").trim() ||
-    asString(event.checkpoint_id, "").trim() ||
-    asString(event.thread_id, "").trim() ||
-    null
-  );
-}
-
-function asErrorText(value: unknown): string {
-  if (typeof value === "string") return value;
-  const rec = parseObject(value);
-  const message =
-    asString(rec.message, "") ||
-    asString(rec.error, "") ||
-    asString(rec.code, "") ||
-    asString(rec.detail, "");
-  if (message) return message;
-  try {
-    return JSON.stringify(rec);
-  } catch {
-    return "";
-  }
-}
-
-function accumulateUsage(
-  target: { inputTokens: number; cachedInputTokens: number; outputTokens: number },
-  usageRaw: unknown,
-) {
-  const usage = parseObject(usageRaw);
-  const usageMetadata = parseObject(usage.usageMetadata);
-  const source = Object.keys(usageMetadata).length > 0 ? usageMetadata : usage;
-
-  target.inputTokens += asNumber(
-    source.input_tokens,
-    asNumber(source.inputTokens, asNumber(source.promptTokenCount, 0)),
-  );
-  target.cachedInputTokens += asNumber(
-    source.cached_input_tokens,
-    asNumber(source.cachedInputTokens, asNumber(source.cachedContentTokenCount, 0)),
-  );
-  target.outputTokens += asNumber(
-    source.output_tokens,
-    asNumber(source.outputTokens, asNumber(source.candidatesTokenCount, 0)),
-  );
-}
-
-export function parseGeminiJsonl(stdout: string) {
+export function parseGeminiStreamJson(stdout: string) {
   let sessionId: string | null = null;
-  const messages: string[] = [];
-  let errorMessage: string | null = null;
-  let costUsd: number | null = null;
-  let resultEvent: Record<string, unknown> | null = null;
-  const usage = {
-    inputTokens: 0,
-    cachedInputTokens: 0,
-    outputTokens: 0,
-  };
+  let model = "";
+  let finalResult: Record<string, unknown> | null = null;
+  const assistantTexts: string[] = [];
 
   for (const rawLine of stdout.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line) continue;
-
     const event = parseJson(line);
     if (!event) continue;
 
-    const foundSessionId = readSessionId(event);
-    if (foundSessionId) sessionId = foundSessionId;
+    const type = asString(event.type, "");
 
-    const type = asString(event.type, "").trim();
-
-    if (type === "assistant") {
-      messages.push(...collectMessageText(event.message));
+    // Handle different event types based on Gemini CLI output format
+    if (type === "system" || type === "systemMessage") {
+      sessionId = asString(event.session_id, sessionId ?? "") || sessionId;
+      model = asString(event.model, model);
+      const text = asString(event.text, "");
+      if (text) assistantTexts.push(text);
       continue;
     }
 
-    if (type === "result") {
-      resultEvent = event;
-      accumulateUsage(usage, event.usage ?? event.usageMetadata);
-      const resultText =
-        asString(event.result, "").trim() ||
-        asString(event.text, "").trim() ||
-        asString(event.response, "").trim();
-      if (resultText && messages.length === 0) messages.push(resultText);
-      costUsd = asNumber(event.total_cost_usd, asNumber(event.cost_usd, asNumber(event.cost, costUsd ?? 0))) || costUsd;
-      const isError = event.is_error === true || asString(event.subtype, "").toLowerCase() === "error";
-      if (isError) {
-        const text = asErrorText(event.error ?? event.message ?? event.result).trim();
-        if (text) errorMessage = text;
-      }
+    if (type === "message" || type === "assistant" || type === "model") {
+      sessionId = asString(event.session_id, sessionId ?? "") || sessionId;
+      const text = asString(event.text, "") || asString(event.message, "");
+      if (text) assistantTexts.push(text);
       continue;
     }
 
-    if (type === "error") {
-      const text = asErrorText(event.error ?? event.message ?? event.detail).trim();
-      if (text) errorMessage = text;
-      continue;
+    if (type === "response" || type === "result") {
+      finalResult = event;
+      sessionId = asString(event.session_id, sessionId ?? "") || sessionId;
     }
 
-    if (type === "system") {
-      const subtype = asString(event.subtype, "").trim().toLowerCase();
-      if (subtype === "error") {
-        const text = asErrorText(event.error ?? event.message ?? event.detail).trim();
-        if (text) errorMessage = text;
-      }
-      continue;
-    }
-
-    if (type === "text") {
-      const part = parseObject(event.part);
-      const text = asString(part.text, "").trim();
-      if (text) messages.push(text);
-      continue;
-    }
-
-    if (type === "step_finish" || event.usage || event.usageMetadata) {
-      accumulateUsage(usage, event.usage ?? event.usageMetadata);
-      costUsd = asNumber(event.total_cost_usd, asNumber(event.cost_usd, asNumber(event.cost, costUsd ?? 0))) || costUsd;
-      continue;
+    // Also check for content at top level
+    const content = asString(event.content, "");
+    if (content && !finalResult) {
+      assistantTexts.push(content);
     }
   }
 
+  // Extract usage metadata if available in final result
+  let usage: UsageSummary = { inputTokens: 0, outputTokens: 0 };
+  let costUsd: number | null = null;
+
+  if (finalResult) {
+    const usageMetadata = parseObject(finalResult.usageMetadata || finalResult.usage);
+    const promptTokens = asNumber(usageMetadata.promptTokenCount, 0) ||
+                       asNumber(usageMetadata.prompt_tokens, 0) ||
+                       asNumber(usageMetadata.inputTokenCount, 0) ||
+                       asNumber(usageMetadata.input_tokens, 0);
+    const completionTokens = asNumber(usageMetadata.candidatesTokenCount, 0) ||
+                           asNumber(usageMetadata.completion_tokens, 0) ||
+                           asNumber(usageMetadata.outputTokenCount, 0) ||
+                           asNumber(usageMetadata.output_tokens, 0);
+    const totalTokens = asNumber(usageMetadata.totalTokenCount, 0) ||
+                      asNumber(usageMetadata.total_tokens, 0);
+
+    usage = {
+      inputTokens: promptTokens,
+      outputTokens: completionTokens,
+    };
+
+    // Calculate cost if we have token counts
+    if (promptTokens > 0 || completionTokens > 0) {
+      const modelId = model || asString(finalResult.model, "gemini-2.5-flash");
+      costUsd = calculateCostUsd(modelId, promptTokens, completionTokens);
+    }
+  }
+
+  if (!finalResult) {
+    return {
+      sessionId,
+      model,
+      costUsd: null as number | null,
+      usage: null as UsageSummary | null,
+      summary: assistantTexts.join("\n\n").trim(),
+      resultJson: null as Record<string, unknown> | null,
+    };
+  }
+
+  const summary = asString(
+    finalResult.result ||
+    finalResult.text ||
+    finalResult.content ||
+    finalResult.message ||
+    assistantTexts.join("\n\n"),
+    ""
+  ).trim();
+
   return {
     sessionId,
-    summary: messages.join("\n\n").trim(),
-    usage,
+    model,
     costUsd,
-    errorMessage,
-    resultEvent,
+    usage,
+    summary,
+    resultJson: finalResult,
   };
 }
 
-export function isGeminiUnknownSessionError(stdout: string, stderr: string): boolean {
-  const haystack = `${stdout}\n${stderr}`
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .join("\n");
-
-  return /unknown\s+session|session\s+.*\s+not\s+found|resume\s+.*\s+not\s+found|checkpoint\s+.*\s+not\s+found|cannot\s+resume|failed\s+to\s+resume/i.test(
-    haystack,
-  );
-}
-
 function extractGeminiErrorMessages(parsed: Record<string, unknown>): string[] {
-  const messages: string[] = [];
-  const errorMsg = asString(parsed.error, "").trim();
-  if (errorMsg) messages.push(errorMsg);
-
   const raw = Array.isArray(parsed.errors) ? parsed.errors : [];
+  const messages: string[] = [];
+
   for (const entry of raw) {
     if (typeof entry === "string") {
       const msg = entry.trim();
       if (msg) messages.push(msg);
       continue;
     }
-    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) continue;
+
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+      continue;
+    }
+
     const obj = entry as Record<string, unknown>;
     const msg = asString(obj.message, "") || asString(obj.error, "") || asString(obj.code, "");
     if (msg) {
       messages.push(msg);
       continue;
     }
+
     try {
       messages.push(JSON.stringify(obj));
     } catch {
@@ -198,45 +154,47 @@ function extractGeminiErrorMessages(parsed: Record<string, unknown>): string[] {
   return messages;
 }
 
-export function describeGeminiFailure(parsed: Record<string, unknown>): string | null {
-  const status = asString(parsed.status, "");
-  const errors = extractGeminiErrorMessages(parsed);
-
-  const detail = errors[0] ?? "";
-  const parts = ["Gemini run failed"];
-  if (status) parts.push(`status=${status}`);
-  if (detail) parts.push(detail);
-  return parts.length > 1 ? parts.join(": ") : null;
+export function extractGeminiLoginUrl(text: string): string | null {
+  const match = text.match(URL_RE);
+  if (!match || match.length === 0) return null;
+  for (const rawUrl of match) {
+    const cleaned = rawUrl.replace(/[\])}.!,?;:'\"]+$/g, "");
+    if (cleaned.includes("gemini") || cleaned.includes("google") || cleaned.includes("auth")) {
+      return cleaned;
+    }
+  }
+  return match[0]?.replace(/[\])}.!,?;:'\"]+$/g, "") ?? null;
 }
-
-const GEMINI_AUTH_REQUIRED_RE = /(?:not\s+authenticated|please\s+authenticate|api[_ ]?key\s+(?:required|missing|invalid)|authentication\s+required|unauthorized|invalid\s+credentials|not\s+logged\s+in|login\s+required|run\s+`?gemini\s+auth(?:\s+login)?`?\s+first)/i;
 
 export function detectGeminiAuthRequired(input: {
   parsed: Record<string, unknown> | null;
   stdout: string;
   stderr: string;
-}): { requiresAuth: boolean } {
-  const errors = extractGeminiErrorMessages(input.parsed ?? {});
-  const messages = [...errors, input.stdout, input.stderr]
+}): { requiresAuth: boolean; loginUrl: string | null } {
+  const resultText = asString(input.parsed?.result, "").trim();
+  const messages = [resultText, ...extractGeminiErrorMessages(input.parsed ?? {}), input.stdout, input.stderr]
     .join("\n")
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
 
   const requiresAuth = messages.some((line) => GEMINI_AUTH_REQUIRED_RE.test(line));
-  return { requiresAuth };
+  return {
+    requiresAuth,
+    loginUrl: extractGeminiLoginUrl([input.stdout, input.stderr].join("\n")),
+  };
 }
 
-export function isGeminiTurnLimitResult(
-  parsed: Record<string, unknown> | null | undefined,
-  exitCode?: number | null,
-): boolean {
-  if (exitCode === 53) return true;
-  if (!parsed) return false;
+export function describeGeminiFailure(parsed: Record<string, unknown>): string | null {
+  const resultText = asString(parsed.result, "").trim();
+  const errors = extractGeminiErrorMessages(parsed);
 
-  const status = asString(parsed.status, "").trim().toLowerCase();
-  if (status === "turn_limit" || status === "max_turns") return true;
+  let detail = resultText;
+  if (!detail && errors.length > 0) {
+    detail = errors[0] ?? "";
+  }
 
-  const error = asString(parsed.error, "").trim();
-  return /turn\s*limit|max(?:imum)?\s+turns?/i.test(error);
+  const parts = ["Gemini run failed"];
+  if (detail) parts.push(detail);
+  return parts.length > 1 ? parts.join(": ") : null;
 }

@@ -1,11 +1,9 @@
 export { execute } from "./execute.js";
 export { testEnvironment } from "./test.js";
 export {
-  parseGeminiJsonl,
-  isGeminiUnknownSessionError,
+  parseGeminiStreamJson,
   describeGeminiFailure,
   detectGeminiAuthRequired,
-  isGeminiTurnLimitResult,
 } from "./parse.js";
 import type { AdapterSessionCodec } from "@paperclipai/adapter-utils";
 
@@ -17,10 +15,7 @@ export const sessionCodec: AdapterSessionCodec = {
   deserialize(raw: unknown) {
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
     const record = raw as Record<string, unknown>;
-    const sessionId =
-      readNonEmptyString(record.sessionId) ??
-      readNonEmptyString(record.session_id) ??
-      readNonEmptyString(record.sessionID);
+    const sessionId = readNonEmptyString(record.sessionId) ?? readNonEmptyString(record.session_id);
     if (!sessionId) return null;
     const cwd =
       readNonEmptyString(record.cwd) ??
@@ -39,10 +34,7 @@ export const sessionCodec: AdapterSessionCodec = {
   },
   serialize(params: Record<string, unknown> | null) {
     if (!params) return null;
-    const sessionId =
-      readNonEmptyString(params.sessionId) ??
-      readNonEmptyString(params.session_id) ??
-      readNonEmptyString(params.sessionID);
+    const sessionId = readNonEmptyString(params.sessionId) ?? readNonEmptyString(params.session_id);
     if (!sessionId) return null;
     const cwd =
       readNonEmptyString(params.cwd) ??
@@ -61,10 +53,6 @@ export const sessionCodec: AdapterSessionCodec = {
   },
   getDisplayId(params: Record<string, unknown> | null) {
     if (!params) return null;
-    return (
-      readNonEmptyString(params.sessionId) ??
-      readNonEmptyString(params.session_id) ??
-      readNonEmptyString(params.sessionID)
-    );
+    return readNonEmptyString(params.sessionId) ?? readNonEmptyString(params.session_id);
   },
 };

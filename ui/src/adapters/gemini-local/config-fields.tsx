@@ -1,15 +1,14 @@
 import type { AdapterConfigFieldsProps } from "../types";
 import {
-  DraftInput,
   Field,
-  ToggleField,
+  help,
 } from "../../components/agent-config-primitives";
-import { ChoosePathButton } from "../../components/PathInstructionsModal";
 
 const inputClass =
   "w-full rounded-md border border-border px-2.5 py-1.5 bg-transparent outline-none text-sm font-mono placeholder:text-muted-foreground/40";
-const instructionsFileHint =
-  "Absolute path to a markdown file (e.g. AGENTS.md) that defines this agent's behavior. Prepended to the Gemini prompt at runtime.";
+
+const modelHint = "Gemini model to use (e.g., gemini-2.5-flash, gemini-2.5-pro)";
+const apiKeyHint = "Set GEMINI_API_KEY or GOOGLE_API_KEY environment variable, or run `gemini login` for OAuth";
 
 export function GeminiLocalConfigFields({
   isCreate,
@@ -20,45 +19,10 @@ export function GeminiLocalConfigFields({
   mark,
 }: AdapterConfigFieldsProps) {
   return (
-    <>
-      <Field label="Agent instructions file" hint={instructionsFileHint}>
-        <div className="flex items-center gap-2">
-          <DraftInput
-            value={
-              isCreate
-                ? values!.instructionsFilePath ?? ""
-                : eff(
-                    "adapterConfig",
-                    "instructionsFilePath",
-                    String(config.instructionsFilePath ?? ""),
-                  )
-            }
-            onCommit={(v) =>
-              isCreate
-                ? set!({ instructionsFilePath: v })
-                : mark("adapterConfig", "instructionsFilePath", v || undefined)
-            }
-            immediate
-            className={inputClass}
-            placeholder="/absolute/path/to/AGENTS.md"
-          />
-          <ChoosePathButton />
-        </div>
-      </Field>
-      <ToggleField
-        label="Yolo mode"
-        hint="Run Gemini with --approval-mode yolo for unattended operation."
-        checked={
-          isCreate
-            ? values!.dangerouslyBypassSandbox
-            : eff("adapterConfig", "yolo", config.yolo === true)
-        }
-        onChange={(v) =>
-          isCreate
-            ? set!({ dangerouslyBypassSandbox: v })
-            : mark("adapterConfig", "yolo", v)
-        }
-      />
-    </>
+    <Field label="API Key" hint={apiKeyHint}>
+      <div className="text-xs text-muted-foreground">
+        Set GEMINI_API_KEY in environment variables, or use OAuth by running `gemini login`
+      </div>
+    </Field>
   );
 }
