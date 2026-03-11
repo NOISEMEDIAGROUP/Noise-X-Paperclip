@@ -36,6 +36,10 @@ Follow these steps every time you wake up:
     Always include links to the approval and issue in that comment.
 
 **Step 3 — Get assignments.** `GET /api/companies/{companyId}/issues?assigneeAgentId={your-agent-id}&status=todo,in_progress,blocked`. Results sorted by priority. This is your inbox.
+Important response shape: this endpoint returns a top-level JSON array (`[]`), not `{ "issues": [...] }`.
+When using `jq`, parse the array directly, for example:
+`jq '{count:length, items: map({id,identifier,title,status,priority,assigneeAgentId,updatedAt})}'`
+If you store JSON in a shell variable, use `printf '%s' "$resp" | jq ...` (not `echo "$resp"`), so escaped characters remain valid JSON.
 
 **Step 4 — Pick work (with mention exception).** Work on `in_progress` first, then `todo`. Skip `blocked` unless you can unblock it.
 **Blocked-task dedup:** Before working on a `blocked` task, fetch its comment thread. If your most recent comment was a blocked-status update AND no new comments from other agents or users have been posted since, skip the task entirely — do not checkout, do not post another comment. Exit the heartbeat (or move to the next task) instead. Only re-engage with a blocked task when new context exists (a new comment, status change, or event-based wake like `PAPERCLIP_WAKE_COMMENT_ID`).

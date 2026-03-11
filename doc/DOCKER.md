@@ -7,6 +7,7 @@ Run Paperclip in Docker without installing Node or pnpm locally.
 ```sh
 docker build -t paperclip-local . && \
 docker run --name paperclip \
+  -u "$(id -u):$(id -g)" \
   -p 3100:3100 \
   -e HOST=0.0.0.0 \
   -e PAPERCLIP_HOME=/paperclip \
@@ -23,7 +24,7 @@ Data persistence:
 - local secrets key
 - local agent workspace data
 
-All persisted under your bind mount (`./data/docker-paperclip` in the example above).
+All persisted under your mounted `/paperclip` path (bind mount in the example above).
 
 ## Compose Quickstart
 
@@ -35,6 +36,8 @@ Defaults:
 
 - host port: `3100`
 - persistent data dir: `./data/docker-paperclip`
+- container restart policy: `unless-stopped` (self-healing if process exits)
+- container healthcheck on `GET /api/health`
 
 Optional overrides:
 
@@ -42,7 +45,36 @@ Optional overrides:
 PAPERCLIP_PORT=3200 PAPERCLIP_DATA_DIR=./data/pc docker compose -f docker-compose.quickstart.yml up --build
 ```
 
+`PAPERCLIP_DATA_DIR` accepts either:
+
+- a host bind path (default: `./data/docker-paperclip`)
+- a Docker volume name (for example `paperclip-data`)
+
+When using bind mounts, keep the directory writable by the container runtime user.
+
 If you change host port or use a non-local domain, set `PAPERCLIP_PUBLIC_URL` to the external URL you will use in browser/auth flows.
+
+## Server-Only Compose (API without bundled UI)
+
+If you want only the API/control-plane server in Docker (no UI mount/serve path), use:
+
+```sh
+docker compose -f docker-compose.server.yml up --build
+```
+
+This profile sets `SERVE_UI=false` and starts:
+
+- `server` on `http://localhost:3100`
+- `db` on `localhost:5432`
+- both services use restart policy `unless-stopped`
+- server includes container healthcheck on `GET /api/health`
+
+Quick checks:
+
+```sh
+curl http://localhost:3100/api/health
+curl http://localhost:3100/api/companies
+```
 
 ## Authenticated Compose (Single Public URL)
 
@@ -92,6 +124,25 @@ Notes:
 
 - Without API keys, the app still runs normally.
 - Adapter environment checks in Paperclip will surface missing auth/CLI prerequisites.
+
+## Cerebrouter Adapter in Docker
+
+If Paperclip runs in one container and Cerebrouter in another, set:
+
+- `ROUTER_API_KEY` in the Paperclip container environment
+- `CEREBROUTER_BASE_URL` to the Cerebrouter service URL (for example `http://cerebrouter:7777`)
+
+Example:
+
+```yaml
+services:
+  paperclip:
+    environment:
+      ROUTER_API_KEY: ${ROUTER_API_KEY}
+      CEREBROUTER_BASE_URL: http://cerebrouter:7777
+```
+
+Then in the agent config, choose adapter type `cerebrouter` and leave `baseUrl` empty to use the container-level default.
 
 ## Onboard Smoke Test (Ubuntu + npm only)
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { Agent, Issue, LiveEvent } from "@paperclipai/shared";
 import { authApi } from "../api/auth";
+import { healthApi } from "../api/health";
 import { useCompany } from "./CompanyContext";
 import type { ToastInput } from "./ToastContext";
 import { useToast } from "./ToastContext";
@@ -522,6 +523,7 @@ export function LiveUpdatesProvider({ children }: { children: ReactNode }) {
     let reconnectAttempt = 0;
     let reconnectTimer: number | null = null;
     let socket: WebSocket | null = null;
+    let connectSeq = 0;
 
     const clearReconnect = () => {
       if (reconnectTimer !== null) {
@@ -540,8 +542,17 @@ export function LiveUpdatesProvider({ children }: { children: ReactNode }) {
       }, delayMs);
     };
 
-    const connect = () => {
+    const canReachApi = async () => healthApi.ping();
+
+    const connect = async () => {
       if (closed) return;
+      const seq = ++connectSeq;
+      const apiReachable = await canReachApi();
+      if (closed || seq !== connectSeq) return;
+      if (!apiReachable) {
+        scheduleReconnect();
+        return;
+      }
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";
       const url = `${protocol}://${window.location.host}/api/companies/${encodeURIComponent(selectedCompanyId)}/events/ws`;
       socket = new WebSocket(url);

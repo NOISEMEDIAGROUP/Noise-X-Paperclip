@@ -123,6 +123,7 @@ const adapterLabels: Record<string, string> = {
   openclaw_gateway: "OpenClaw Gateway",
   process: "Process",
   http: "HTTP",
+  cerebrouter: "Cerebrouter",
 };
 
 const statusDotColor: Record<string, string> = {

@@ -30,6 +30,7 @@ Create agents from the Agents page. Each agent requires:
 Common adapter choices:
 - `claude_local` / `codex_local` / `opencode_local` for local coding agents
 - `openclaw` / `http` for webhook-based external agents
+- `cerebrouter` for OpenAI-compatible routing via a Cerebrouter service
 - `process` for generic local command execution
 
 For `opencode_local`, configure an explicit `adapterConfig.model` (`provider/model`).

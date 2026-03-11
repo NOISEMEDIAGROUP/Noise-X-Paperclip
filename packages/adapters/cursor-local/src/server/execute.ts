@@ -14,6 +14,7 @@ import {
   ensureAbsoluteDirectory,
   ensureCommandResolvable,
   ensurePathInEnv,
+  applyUserEnvOverrides,
   renderTemplate,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
@@ -178,8 +179,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   await ensureCursorSkillsInjected(onLog);
 
   const envConfig = parseObject(config.env);
-  const hasExplicitApiKey =
-    typeof envConfig.PAPERCLIP_API_KEY === "string" && envConfig.PAPERCLIP_API_KEY.trim().length > 0;
   const env: Record<string, string> = { ...buildPaperclipEnv(agent) };
   env.PAPERCLIP_RUN_ID = runId;
   const wakeTaskId =
@@ -241,10 +240,14 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (workspaceHints.length > 0) {
     env.PAPERCLIP_WORKSPACES_JSON = JSON.stringify(workspaceHints);
   }
-  for (const [k, v] of Object.entries(envConfig)) {
-    if (typeof v === "string") env[k] = v;
+  const appliedEnv = applyUserEnvOverrides(env, envConfig);
+  if (appliedEnv.skippedReservedKeys.length > 0) {
+    await onLog(
+      "stderr",
+      `[paperclip] Ignored reserved env key overrides: ${appliedEnv.skippedReservedKeys.join(", ")}\n`,
+    );
   }
-  if (!hasExplicitApiKey && authToken) {
+  if (!hasNonEmptyEnvValue(env, "PAPERCLIP_API_KEY") && authToken) {
     env.PAPERCLIP_API_KEY = authToken;
   }
   const billingType = resolveCursorBillingType(env);

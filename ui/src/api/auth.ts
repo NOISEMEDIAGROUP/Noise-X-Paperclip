@@ -1,3 +1,5 @@
+import { ApiError, apiFetch } from "./client";
+
 export type AuthSession = {
   session: { id: string; userId: string };
   user: { id: string; email: string | null; name: string | null };
@@ -25,12 +27,24 @@ function toSession(value: unknown): AuthSession | null {
 }
 
 async function authPost(path: string, body: Record<string, unknown>) {
-  const res = await fetch(`/api/auth${path}`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const apiPath = `/auth${path}`;
+  const requestUrl = `/api${apiPath}`;
+  let res: Response;
+  try {
+    res = await apiFetch(apiPath, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    if (err instanceof ApiError) {
+      throw new Error(err.message);
+    }
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Network error while requesting ${requestUrl}. Verify that the Paperclip server is reachable. (${reason})`,
+    );
+  }
   const payload = await res.json().catch(() => null);
   if (!res.ok) {
     const message =
@@ -45,10 +59,21 @@ async function authPost(path: string, body: Record<string, unknown>) {
 
 export const authApi = {
   getSession: async (): Promise<AuthSession | null> => {
-    const res = await fetch("/api/auth/get-session", {
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
+    const apiPath = "/auth/get-session";
+    let res: Response;
+    try {
+      res = await apiFetch(apiPath, {
+        headers: { Accept: "application/json" },
+      });
+    } catch (err) {
+      if (err instanceof ApiError) {
+        throw new Error(err.message);
+      }
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `Network error while requesting /api${apiPath}. Verify that the Paperclip server is reachable. (${reason})`,
+      );
+    }
     if (res.status === 401) return null;
     const payload = await res.json().catch(() => null);
     if (!res.ok) {

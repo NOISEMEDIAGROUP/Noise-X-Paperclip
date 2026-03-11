@@ -5,6 +5,7 @@ import {
   asStringArray,
   parseObject,
   buildPaperclipEnv,
+  applyUserEnvOverrides,
   redactEnvForLogs,
   runChildProcess,
 } from "../utils.js";
@@ -18,9 +19,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const cwd = asString(config.cwd, process.cwd());
   const envConfig = parseObject(config.env);
   const env: Record<string, string> = { ...buildPaperclipEnv(agent) };
-  for (const [k, v] of Object.entries(envConfig)) {
-    if (typeof v === "string") env[k] = v;
-  }
+  applyUserEnvOverrides(env, envConfig);
 
   const timeoutSec = asNumber(config.timeoutSec, 0);
   const graceSec = asNumber(config.graceSec, 15);

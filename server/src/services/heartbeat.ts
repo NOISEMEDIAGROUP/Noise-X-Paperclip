@@ -1,15 +1,17 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   agents,
   agentRuntimeState,
   agentTaskSessions,
   agentWakeupRequests,
+  approvals,
   heartbeatRunEvents,
   heartbeatRuns,
   costEvents,
+  goals,
   issues,
   projects,
   projectWorkspaces,
@@ -21,7 +23,14 @@ import { getRunLogStore, type RunLogHandle } from "./run-log-store.js";
 import { getServerAdapter, runningProcesses } from "../adapters/index.js";
 import type { AdapterExecutionResult, AdapterInvocationMeta, AdapterSessionCodec } from "../adapters/index.js";
 import { createLocalAgentJwt } from "../agent-auth-jwt.js";
-import { parseObject, asBoolean, asNumber, appendWithCap, MAX_EXCERPT_BYTES } from "../adapters/utils.js";
+import {
+  parseObject,
+  asBoolean,
+  asNumber,
+  appendWithCap,
+  MAX_EXCERPT_BYTES,
+  isReservedRuntimeEnvKey,
+} from "../adapters/utils.js";
 import { secretService } from "./secrets.js";
 import { resolveDefaultAgentWorkspaceDir } from "../home-paths.js";
 import {
@@ -32,6 +41,7 @@ import {
   releaseRuntimeServicesForRun,
 } from "./workspace-runtime.js";
 import { issueService } from "./issues.js";
+import { logActivity } from "./activity-log.js";
 import {
   buildExecutionWorkspaceAdapterConfig,
   parseIssueExecutionWorkspaceSettings,
@@ -43,6 +53,83 @@ const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_MAX = 10;
 const DEFERRED_WAKE_CONTEXT_KEY = "_paperclipWakeContext";
+const ACTIVE_GOAL_COVERAGE_ISSUE_STATUSES = [
+  "backlog",
+  "todo",
+  "in_progress",
+  "in_review",
+  "blocked",
+] as const;
+const ACTIVE_CONTRIBUTOR_STATUSES = ["active", "idle", "running", "error"] as const;
+const PENDING_HIRE_APPROVAL_STATUSES = ["pending", "revision_requested"] as const;
+const AUTO_HIRE_APPROVAL_REASON = "goal_capacity_gap";
+const AUTO_HIRE_DEFAULT_PROMPT_TEMPLATE =
+  "You are {{agent.name}} ({{agent.role}}). Execute assigned Paperclip issues end-to-end: implement, verify, and report concise progress.";
+const AUTO_HIRE_RUNTIME_CONFIG = {
+  heartbeat: {
+    enabled: false,
+    intervalSec: 0,
+    wakeOnDemand: true,
+    maxConcurrentRuns: 1,
+  },
+} as const;
+const AUTO_HIRE_ADAPTER_CONFIG_KEYS: Record<string, string[]> = {
+  codex_local: [
+    "command",
+    "model",
+    "modelReasoningEffort",
+    "reasoningEffort",
+    "search",
+    "dangerouslyBypassApprovalsAndSandbox",
+    "dangerouslyBypassSandbox",
+    "extraArgs",
+    "timeoutSec",
+    "graceSec",
+    "cwd",
+  ],
+  claude_local: [
+    "command",
+    "model",
+    "effort",
+    "dangerouslySkipPermissions",
+    "dangerouslyBypassPermissions",
+    "extraArgs",
+    "timeoutSec",
+    "graceSec",
+    "cwd",
+  ],
+  cursor: [
+    "command",
+    "model",
+    "mode",
+    "extraArgs",
+    "timeoutSec",
+    "graceSec",
+    "cwd",
+  ],
+  opencode_local: [
+    "command",
+    "model",
+    "variant",
+    "extraArgs",
+    "timeoutSec",
+    "graceSec",
+    "cwd",
+  ],
+  pi_local: [
+    "command",
+    "model",
+    "variant",
+    "extraArgs",
+    "timeoutSec",
+    "graceSec",
+    "cwd",
+  ],
+  process: ["command", "args", "cwd", "timeoutSec", "graceSec"],
+};
+const AUTO_HIRE_CLONEABLE_ADAPTER_TYPES = new Set(
+  Object.keys(AUTO_HIRE_ADAPTER_CONFIG_KEYS),
+);
 const startLocksByAgent = new Map<string, Promise<void>>();
 const REPO_ONLY_CWD_SENTINEL = "/__paperclip_repo_only__";
 
@@ -107,6 +194,93 @@ export type ResolvedWorkspaceForRun = {
 
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function sanitizeAutoHireEnvBindings(rawEnv: unknown) {
+  const parsed = parseObject(rawEnv);
+  const sanitizedEntries = Object.entries(parsed).filter(
+    ([key]) => !isReservedRuntimeEnvKey(key),
+  );
+  if (sanitizedEntries.length === 0) return undefined;
+  return Object.fromEntries(sanitizedEntries);
+}
+
+function pickAutoHireAdapterConfig(
+  requesterAdapterType: string,
+  requesterAdapterConfig: Record<string, unknown>,
+) {
+  const keys = AUTO_HIRE_ADAPTER_CONFIG_KEYS[requesterAdapterType] ?? [];
+  const picked: Record<string, unknown> = {};
+  for (const key of keys) {
+    const value = requesterAdapterConfig[key];
+    if (value !== undefined) picked[key] = value;
+  }
+  const env = sanitizeAutoHireEnvBindings(requesterAdapterConfig.env);
+  if (env) picked.env = env;
+  if (requesterAdapterType !== "process") {
+    picked.promptTemplate = AUTO_HIRE_DEFAULT_PROMPT_TEMPLATE;
+  }
+  return picked;
+}
+
+function resolveAutoHireAdapterBlueprint(requestingAgent: typeof agents.$inferSelect) {
+  const requesterAdapterType = readNonEmptyString(requestingAgent.adapterType);
+  const requesterAdapterConfig = parseObject(requestingAgent.adapterConfig);
+  const canClone = requesterAdapterType
+    ? AUTO_HIRE_CLONEABLE_ADAPTER_TYPES.has(requesterAdapterType)
+    : false;
+
+  let adapterType: string =
+    canClone && requesterAdapterType ? requesterAdapterType : "codex_local";
+  let adapterConfig = pickAutoHireAdapterConfig(adapterType, requesterAdapterConfig);
+
+  if (adapterType === "process" && !readNonEmptyString(adapterConfig.command)) {
+    adapterType = "codex_local";
+    adapterConfig = pickAutoHireAdapterConfig(adapterType, requesterAdapterConfig);
+  }
+
+  if (adapterType === "codex_local") {
+    if (!readNonEmptyString(adapterConfig.command)) adapterConfig.command = "codex";
+    adapterConfig.dangerouslyBypassApprovalsAndSandbox = asBoolean(
+      adapterConfig.dangerouslyBypassApprovalsAndSandbox,
+      true,
+    );
+  }
+
+  return { adapterType, adapterConfig };
+}
+
+export function buildAutoHireApprovalPayload(input: {
+  requestingAgent: typeof agents.$inferSelect;
+  requestedHeadcount: number;
+  uncoveredGoalIds: string[];
+  sourceRunId: string;
+}) {
+  const { adapterType, adapterConfig } = resolveAutoHireAdapterBlueprint(
+    input.requestingAgent,
+  );
+  return {
+    name: "Founding Engineer",
+    role: "engineer",
+    title: "Founding Engineer",
+    reportsTo: input.requestingAgent.id,
+    capabilities:
+      "Own delivery of delegated implementation work from company-goal decomposition.",
+    adapterType,
+    adapterConfig,
+    runtimeConfig: AUTO_HIRE_RUNTIME_CONFIG,
+    budgetMonthlyCents: 0,
+    metadata: {
+      autoGenerated: true,
+      autoRequestReason: AUTO_HIRE_APPROVAL_REASON,
+      requestedHeadcount: input.requestedHeadcount,
+      uncoveredGoalIds: input.uncoveredGoalIds,
+      sourceRunId: input.sourceRunId,
+    },
+    autoRequestReason: AUTO_HIRE_APPROVAL_REASON,
+    requestedHeadcount: input.requestedHeadcount,
+    uncoveredGoalIds: input.uncoveredGoalIds,
+  } as Record<string, unknown>;
 }
 
 export function resolveRuntimeSessionParamsForWorkspace(input: {
@@ -221,6 +395,35 @@ export function shouldResetTaskSessionForWake(
 
   const wakeTriggerDetail = readNonEmptyString(contextSnapshot?.wakeTriggerDetail);
   return wakeSource === "on_demand" && wakeTriggerDetail === "manual";
+}
+
+export function shouldQueueFollowupWake(input: {
+  wakeReason: string | null;
+  wakeCommentId: string | null;
+  hasSameScopeRunningRun: boolean;
+  hasSameScopeQueuedRun: boolean;
+}) {
+  if (input.hasSameScopeQueuedRun) return false;
+  if (!input.hasSameScopeRunningRun) return false;
+  if (input.wakeCommentId) return true;
+  return input.wakeReason === "issue_assigned";
+}
+
+function parseRequestedHeadcount(payload: unknown) {
+  const parsedPayload = parseObject(payload);
+  const asInt = Math.floor(asNumber(parsedPayload.requestedHeadcount, 1));
+  return Math.max(1, asInt);
+}
+
+export function resolveAutoHireHeadcount(input: {
+  uncoveredGoalCount: number;
+  contributorCount: number;
+  pendingHireHeadcount: number;
+}) {
+  const uncoveredGoalCount = Math.max(0, Math.floor(asNumber(input.uncoveredGoalCount, 0)));
+  const contributorCount = Math.max(0, Math.floor(asNumber(input.contributorCount, 0)));
+  const pendingHireHeadcount = Math.max(0, Math.floor(asNumber(input.pendingHireHeadcount, 0)));
+  return Math.max(0, uncoveredGoalCount - contributorCount - pendingHireHeadcount);
 }
 
 function describeSessionResetReason(
@@ -619,10 +822,6 @@ export function heartbeatService(db: Db) {
       warnings.push(
         `No project workspace directory is currently available for this issue. Using fallback workspace "${cwd}" for this run.`,
       );
-    } else {
-      warnings.push(
-        `No project or prior session workspace was available. Using fallback workspace "${cwd}" for this run.`,
-      );
     }
     return {
       cwd,
@@ -818,6 +1017,265 @@ export function heartbeatService(db: Db) {
       intervalSec: Math.max(0, asNumber(heartbeat.intervalSec, 0)),
       wakeOnDemand: asBoolean(heartbeat.wakeOnDemand ?? heartbeat.wakeOnAssignment ?? heartbeat.wakeOnOnDemand ?? heartbeat.wakeOnAutomation, true),
       maxConcurrentRuns: normalizeMaxConcurrentRuns(heartbeat.maxConcurrentRuns),
+    };
+  }
+
+  async function runCeoGoalCoveragePreflight(input: {
+    agent: typeof agents.$inferSelect;
+    run: typeof heartbeatRuns.$inferSelect;
+  }) {
+    const { agent, run } = input;
+    const warnings: string[] = [];
+    const activeGoals = await db
+      .select({
+        id: goals.id,
+        title: goals.title,
+      })
+      .from(goals)
+      .where(
+        and(
+          eq(goals.companyId, agent.companyId),
+          eq(goals.level, "company"),
+          eq(goals.status, "active"),
+        ),
+      )
+      .orderBy(asc(goals.createdAt), asc(goals.id));
+
+    if (activeGoals.length === 0) {
+      return {
+        summary: {
+          activeGoalCount: 0,
+          uncoveredGoalCount: 0,
+          remainingUncoveredGoalCount: 0,
+          uncoveredGoalIds: [] as string[],
+          createdIssueIds: [] as string[],
+          createdIssueIdentifiers: [] as string[],
+          contributorCount: 0,
+          pendingHireHeadcount: 0,
+          requiredHireHeadcount: 0,
+          autoHireApprovalId: null as string | null,
+        },
+        warnings,
+      };
+    }
+
+    const activeGoalIds = activeGoals.map((goal) => goal.id);
+    const activeGoalIdSet = new Set(activeGoalIds);
+    const coveredGoalRows = await db
+      .select({ goalId: issues.goalId })
+      .from(issues)
+      .where(
+        and(
+          eq(issues.companyId, agent.companyId),
+          inArray(issues.goalId, activeGoalIds),
+          inArray(issues.status, [...ACTIVE_GOAL_COVERAGE_ISSUE_STATUSES]),
+          sql`${issues.hiddenAt} is null`,
+        ),
+      );
+    const coveredGoalIds = new Set(
+      coveredGoalRows
+        .map((row) => row.goalId)
+        .filter((goalId): goalId is string => Boolean(goalId && activeGoalIdSet.has(goalId))),
+    );
+    const uncoveredGoals = activeGoals.filter((goal) => !coveredGoalIds.has(goal.id));
+
+    const createdIssues: Array<{
+      id: string;
+      identifier: string;
+      goalId: string;
+    }> = [];
+    const coveredGoalIdsAfterCreation = new Set(coveredGoalIds);
+
+    for (const goal of uncoveredGoals) {
+      const alreadyCovered = await db
+        .select({ id: issues.id })
+        .from(issues)
+        .where(
+          and(
+            eq(issues.companyId, agent.companyId),
+            eq(issues.goalId, goal.id),
+            inArray(issues.status, [...ACTIVE_GOAL_COVERAGE_ISSUE_STATUSES]),
+            sql`${issues.hiddenAt} is null`,
+          ),
+        )
+        .limit(1)
+        .then((rows) => rows[0] ?? null);
+      if (alreadyCovered) {
+        coveredGoalIdsAfterCreation.add(goal.id);
+        continue;
+      }
+
+      try {
+        const createdIssue = await issuesSvc.create(agent.companyId, {
+          title: `Decompose company goal: ${goal.title}`,
+          description:
+            "Auto-generated by CEO heartbeat.\n\n" +
+            "Create actionable child issues for this active company goal and assign owners.",
+          status: "todo",
+          priority: "high",
+          goalId: goal.id,
+          assigneeAgentId: agent.id,
+          createdByAgentId: agent.id,
+        });
+        const identifier = readNonEmptyString(createdIssue.identifier) ?? createdIssue.id;
+        createdIssues.push({
+          id: createdIssue.id,
+          identifier,
+          goalId: goal.id,
+        });
+        coveredGoalIdsAfterCreation.add(goal.id);
+        await logActivity(db, {
+          companyId: agent.companyId,
+          actorType: "agent",
+          actorId: agent.id,
+          agentId: agent.id,
+          runId: run.id,
+          action: "issue.created",
+          entityType: "issue",
+          entityId: createdIssue.id,
+          details: {
+            autoGenerated: true,
+            reason: "ceo_goal_decomposition",
+            goalId: goal.id,
+            title: createdIssue.title,
+            identifier,
+          },
+        });
+      } catch (err) {
+        warnings.push(
+          `Failed to create decomposition issue for goal "${goal.title}": ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    const contributorCount = await db
+      .select({ id: agents.id })
+      .from(agents)
+      .where(
+        and(
+          eq(agents.companyId, agent.companyId),
+          ne(agents.role, "ceo"),
+          inArray(agents.status, [...ACTIVE_CONTRIBUTOR_STATUSES]),
+        ),
+      )
+      .then((rows) => rows.length);
+
+    const pendingHireApprovals = await db
+      .select({
+        id: approvals.id,
+        payload: approvals.payload,
+        requestedByAgentId: approvals.requestedByAgentId,
+      })
+      .from(approvals)
+      .where(
+        and(
+          eq(approvals.companyId, agent.companyId),
+          eq(approvals.type, "hire_agent"),
+          inArray(approvals.status, [...PENDING_HIRE_APPROVAL_STATUSES]),
+        ),
+      )
+      .orderBy(asc(approvals.createdAt), asc(approvals.id));
+    const pendingHireHeadcount = pendingHireApprovals.reduce(
+      (sum, approval) => sum + parseRequestedHeadcount(approval.payload),
+      0,
+    );
+    const existingAutoHireApproval = pendingHireApprovals.find((approval) => {
+      const payload = parseObject(approval.payload);
+      return (
+        approval.requestedByAgentId === agent.id &&
+        readNonEmptyString(payload.autoRequestReason) === AUTO_HIRE_APPROVAL_REASON
+      );
+    }) ?? null;
+    const requiredHireHeadcount = resolveAutoHireHeadcount({
+      uncoveredGoalCount: uncoveredGoals.length,
+      contributorCount,
+      pendingHireHeadcount,
+    });
+
+    let autoHireApprovalId = existingAutoHireApproval?.id ?? null;
+    let createdAutoHireApproval = false;
+    if (requiredHireHeadcount > 0 && !existingAutoHireApproval) {
+      const payload = buildAutoHireApprovalPayload({
+        requestingAgent: agent,
+        requestedHeadcount: requiredHireHeadcount,
+        uncoveredGoalIds: uncoveredGoals.map((goal) => goal.id),
+        sourceRunId: run.id,
+      });
+
+      const createdAutoHireApprovalRecord = await db
+        .insert(approvals)
+        .values({
+          companyId: agent.companyId,
+          type: "hire_agent",
+          requestedByAgentId: agent.id,
+          requestedByUserId: null,
+          status: "pending",
+          payload,
+          decisionNote: null,
+          decidedByUserId: null,
+          decidedAt: null,
+          updatedAt: new Date(),
+        })
+        .returning()
+        .then((rows) => rows[0] ?? null);
+      if (createdAutoHireApprovalRecord) {
+        createdAutoHireApproval = true;
+        autoHireApprovalId = createdAutoHireApprovalRecord.id;
+        await logActivity(db, {
+          companyId: agent.companyId,
+          actorType: "agent",
+          actorId: agent.id,
+          agentId: agent.id,
+          runId: run.id,
+          action: "approval.created",
+          entityType: "approval",
+          entityId: createdAutoHireApprovalRecord.id,
+          details: {
+            type: "hire_agent",
+            autoGenerated: true,
+            reason: AUTO_HIRE_APPROVAL_REASON,
+            requestedHeadcount: requiredHireHeadcount,
+            uncoveredGoalIds: uncoveredGoals.map((goal) => goal.id),
+          },
+        });
+      }
+    }
+
+    if (createdIssues.length > 0) {
+      warnings.push(
+        `Created ${createdIssues.length} CEO decomposition issue(s): ${createdIssues
+          .map((issue) => issue.identifier)
+          .join(", ")}.`,
+      );
+    }
+    if (createdAutoHireApproval && autoHireApprovalId) {
+      warnings.push(
+        `Auto-hire request is pending (${autoHireApprovalId}) for ${requiredHireHeadcount} additional contributor(s).`,
+      );
+    } else if (existingAutoHireApproval && requiredHireHeadcount > 0) {
+      warnings.push(
+        `Auto-hire request ${existingAutoHireApproval.id} is already pending.`,
+      );
+    }
+
+    const remainingUncoveredGoalCount = Math.max(
+      0,
+      activeGoals.length - coveredGoalIdsAfterCreation.size,
+    );
+    return {
+      summary: {
+        activeGoalCount: activeGoals.length,
+        uncoveredGoalCount: uncoveredGoals.length,
+        remainingUncoveredGoalCount,
+        uncoveredGoalIds: uncoveredGoals.map((goal) => goal.id),
+        createdIssueIds: createdIssues.map((issue) => issue.id),
+        createdIssueIdentifiers: createdIssues.map((issue) => issue.identifier),
+        contributorCount,
+        pendingHireHeadcount,
+        requiredHireHeadcount,
+        autoHireApprovalId,
+      },
+      warnings,
     };
   }
 
@@ -1081,6 +1539,24 @@ export function heartbeatService(db: Db) {
 
     const runtime = await ensureRuntimeState(agent);
     const context = parseObject(run.contextSnapshot);
+    const preExecutionWarnings: string[] = [];
+    const issueIdFromContext = readNonEmptyString(context.issueId);
+    if (agent.role === "ceo" && run.invocationSource === "timer" && !issueIdFromContext) {
+      try {
+        const goalCoveragePreflight = await runCeoGoalCoveragePreflight({
+          agent,
+          run,
+        });
+        context.paperclipGoalCoverage = goalCoveragePreflight.summary;
+        preExecutionWarnings.push(...goalCoveragePreflight.warnings);
+      } catch (err) {
+        preExecutionWarnings.push(
+          `CEO goal preflight failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    } else {
+      delete context.paperclipGoalCoverage;
+    }
     const taskKey = deriveTaskKey(context, null);
     const sessionCodec = getAdapterSessionCodec(agent.adapterType);
     const issueId = readNonEmptyString(context.issueId);
@@ -1187,6 +1663,7 @@ export function heartbeatService(db: Db) {
     });
     const runtimeSessionParams = runtimeSessionResolution.sessionParams;
     const runtimeWorkspaceWarnings = [
+      ...preExecutionWarnings,
       ...resolvedWorkspace.warnings,
       ...executionWorkspace.warnings,
       ...(runtimeSessionResolution.warning ? [runtimeSessionResolution.warning] : []),
@@ -1822,6 +2299,7 @@ export function heartbeatService(db: Db) {
       payload,
     });
     const issueId = readNonEmptyString(enrichedContextSnapshot.issueId) ?? issueIdFromPayload;
+    const wakeReason = readNonEmptyString(enrichedContextSnapshot.wakeReason);
 
     const agent = await getAgent(agentId);
     if (!agent) throw notFound("Agent not found");
@@ -2160,17 +2638,21 @@ export function heartbeatService(db: Db) {
     const sameScopeRunningRun = activeRuns.find(
       (candidate) => candidate.status === "running" && isSameTaskScope(runTaskKey(candidate), taskKey),
     );
-    const shouldQueueFollowupForCommentWake =
-      Boolean(wakeCommentId) && Boolean(sameScopeRunningRun) && !sameScopeQueuedRun;
+    const shouldQueueFollowup = shouldQueueFollowupWake({
+      wakeReason,
+      wakeCommentId,
+      hasSameScopeRunningRun: Boolean(sameScopeRunningRun),
+      hasSameScopeQueuedRun: Boolean(sameScopeQueuedRun),
+    });
 
     const coalescedTargetRun =
       sameScopeQueuedRun ??
-      (shouldQueueFollowupForCommentWake ? null : sameScopeRunningRun ?? null);
+      (shouldQueueFollowup ? null : sameScopeRunningRun ?? null);
 
     if (coalescedTargetRun) {
       const mergedContextSnapshot = mergeCoalescedContextSnapshot(
         coalescedTargetRun.contextSnapshot,
-        contextSnapshot,
+        enrichedContextSnapshot,
       );
       const mergedRun = await db
         .update(heartbeatRuns)

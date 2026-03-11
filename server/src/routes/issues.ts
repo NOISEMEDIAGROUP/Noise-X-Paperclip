@@ -438,10 +438,10 @@ export function issueRoutes(db: Db, storage: StorageService) {
           source: "assignment",
           triggerDetail: "system",
           reason: "issue_assigned",
-          payload: { issueId: issue.id, mutation: "create" },
+          payload: { assignedIssueId: issue.id, mutation: "create" },
           requestedByActorType: actor.actorType,
           requestedByActorId: actor.actorId,
-          contextSnapshot: { issueId: issue.id, source: "issue.create" },
+          contextSnapshot: { assignedIssueId: issue.id, source: "issue.create" },
         })
         .catch((err) => logger.warn({ err, issueId: issue.id }, "failed to wake assignee on issue create"));
     }
@@ -582,10 +582,10 @@ export function issueRoutes(db: Db, storage: StorageService) {
           source: "assignment",
           triggerDetail: "system",
           reason: "issue_assigned",
-          payload: { issueId: issue.id, mutation: "update" },
+          payload: { assignedIssueId: issue.id, mutation: "update" },
           requestedByActorType: actor.actorType,
           requestedByActorId: actor.actorId,
-          contextSnapshot: { issueId: issue.id, source: "issue.update" },
+          contextSnapshot: { assignedIssueId: issue.id, source: "issue.update" },
         });
       }
 

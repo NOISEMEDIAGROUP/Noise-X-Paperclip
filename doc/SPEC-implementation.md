@@ -588,6 +588,18 @@ Scheduler must skip invocation when:
 - an existing run is active
 - hard budget limit has been hit
 
+## 11.6 CEO Goal-Coverage Preflight
+
+For CEO timer heartbeats without an explicit issue context, server preflight logic must run before adapter execution:
+
+- load active `company`-level goals
+- detect active goals that have no non-terminal linked issues (`backlog|todo|in_progress|in_review|blocked`)
+- auto-create a high-priority `todo` decomposition issue assigned to CEO for each uncovered goal
+- compute contributor capacity from active non-CEO agents and pending hire approvals
+- if a capacity gap remains and no matching auto-hire request is already pending, create `approval(type=hire_agent, status=pending)` with an auto-generated payload
+
+All auto-generated issue/approval mutations must be written to `activity_log`, and preflight summary data must be attached to heartbeat context (`paperclipGoalCoverage`) for adapter visibility.
+
 ## 12. Governance and Approval Flows
 
 ## 12.1 Hiring

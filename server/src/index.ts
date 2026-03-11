@@ -1,4 +1,5 @@
 /// <reference path="./types/express.d.ts" />
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
@@ -6,7 +7,7 @@ import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { pathToFileURL } from "node:url";
 import type { Request as ExpressRequest, RequestHandler } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 import {
   createDb,
   ensurePostgresDatabase,
@@ -18,8 +19,10 @@ import {
   authUsers,
   companies,
   companyMemberships,
+  invites,
   instanceUserRoles,
 } from "@paperclipai/db";
+import type { Db } from "@paperclipai/db";
 import detectPort from "detect-port";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
@@ -111,6 +114,76 @@ export async function startServer(): Promise<StartedServer> {
   type EnsureMigrationsOptions = {
     autoApply?: boolean;
   };
+
+  function hashInviteToken(token: string): string {
+    return createHash("sha256").update(token).digest("hex");
+  }
+
+  function createBootstrapInviteToken(): string {
+    return `pcp_bootstrap_${randomBytes(24).toString("hex")}`;
+  }
+
+  function resolveBootstrapInviteBaseUrl(): string {
+    const explicitBaseUrl =
+      process.env.PAPERCLIP_PUBLIC_URL ??
+      process.env.PAPERCLIP_AUTH_PUBLIC_BASE_URL ??
+      process.env.BETTER_AUTH_URL ??
+      process.env.BETTER_AUTH_BASE_URL ??
+      (config.authBaseUrlMode === "explicit" ? config.authPublicBaseUrl : undefined);
+
+    if (typeof explicitBaseUrl === "string" && explicitBaseUrl.trim().length > 0) {
+      return explicitBaseUrl.trim().replace(/\/+$/, "");
+    }
+
+    const publicHost =
+      config.host === "0.0.0.0" || config.host === "::" ? "localhost" : config.host;
+    return `http://${publicHost}:${config.port}`;
+  }
+
+  async function ensureBootstrapInviteForFreshAuthenticatedInstance(db: Db): Promise<void> {
+    if (config.deploymentMode !== "authenticated") return;
+
+    const existingAdminCount = await db
+      .select()
+      .from(instanceUserRoles)
+      .where(eq(instanceUserRoles.role, "instance_admin"))
+      .then((rows) => rows.length);
+    if (existingAdminCount > 0) return;
+
+    const now = new Date();
+    const activeInviteCount = await db
+      .select()
+      .from(invites)
+      .where(
+        and(
+          eq(invites.inviteType, "bootstrap_ceo"),
+          isNull(invites.revokedAt),
+          isNull(invites.acceptedAt),
+          gt(invites.expiresAt, now),
+        ),
+      )
+      .then((rows) => rows.length);
+    if (activeInviteCount > 0) return;
+
+    const token = createBootstrapInviteToken();
+    const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
+    await db.insert(invites).values({
+      inviteType: "bootstrap_ceo",
+      tokenHash: hashInviteToken(token),
+      allowedJoinTypes: "human",
+      expiresAt,
+      invitedByUserId: "system",
+    });
+
+    const inviteUrl = `${resolveBootstrapInviteBaseUrl()}/invite/${token}`;
+    logger.warn(
+      {
+        inviteUrl,
+        expiresAt: expiresAt.toISOString(),
+      },
+      "No instance admin exists; created bootstrap CEO invite automatically",
+    );
+  }
   
   async function ensureMigrations(
     connectionString: string,
@@ -458,6 +531,7 @@ export async function startServer(): Promise<StartedServer> {
     resolveSessionFromHeaders = (headers) => resolveBetterAuthSessionFromHeaders(auth, headers);
     await initializeBoardClaimChallenge(db as any, { deploymentMode: config.deploymentMode });
     authReady = true;
+    await ensureBootstrapInviteForFreshAuthenticatedInstance(db as any);
   }
   
   const listenPort = await detectPort(config.port);

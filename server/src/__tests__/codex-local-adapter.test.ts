@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { isCodexUnknownSessionError, parseCodexJsonl } from "@paperclipai/adapter-codex-local/server";
+import { isCodexUnknownSessionError, parseCodexJsonl, stripCodexStderrNoise } from "@paperclipai/adapter-codex-local/server";
 import { parseCodexStdoutLine } from "@paperclipai/adapter-codex-local/ui";
 import { printCodexStreamEvent } from "@paperclipai/adapter-codex-local/cli";
 
@@ -30,6 +30,21 @@ describe("codex_local stale session detection", () => {
       "2026-02-19T19:58:53.281939Z ERROR codex_core::rollout::list: state db missing rollout path for thread 019c775d-967c-7ef1-acc7-e396dc2c87cc";
 
     expect(isCodexUnknownSessionError("", stderr)).toBe(true);
+  });
+});
+
+describe("codex_local stderr noise filter", () => {
+  it("removes known state-db and MCP schema noise while keeping actionable stderr", () => {
+    const stderr = [
+      "2026-03-10T21:26:29.129342Z  WARN codex_state::runtime: failed to open state db at /Users/test/.codex/state_5.sqlite: migration 18 was previously applied but is missing in the resolved migrations",
+      "2026-03-10T21:26:29.153116Z  WARN codex_core::state_db: state db record_discrepancy: find_thread_path_by_id_str_in_subdir, falling_back",
+      "2026-03-10T21:26:29.183289Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/test/.codex: migration 18 was previously applied but is missing in the resolved migrations",
+      "2026-03-10T21:26:29.382296Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at \"/Users/test/.codex/shell_snapshots/tmp\": Os { code: 2, kind: NotFound, message: \"No such file or directory\" }",
+      "2026-03-10T21:26:30.702740Z ERROR codex_core::tools::spec: Failed to convert \"mcp__paddle__preview_subscription_update\" MCP tool to OpenAI tool: Error(\"unknown variant `null`, expected one of `boolean`, `string`, `integer`, `number`, `array`, `object`\", line: 0, column: 0)",
+      "fatal: repository not found",
+    ].join("\n");
+
+    expect(stripCodexStderrNoise(stderr)).toBe("fatal: repository not found");
   });
 });
 

@@ -91,6 +91,12 @@ const ADAPTER_DEFAULT_RULES_BY_TYPE: Record<string, Array<{ path: string[]; valu
     { path: ["role"], value: "operator" },
     { path: ["scopes"], value: ["operator.admin"] },
   ],
+  cerebrouter: [
+    { path: ["baseUrl"], value: "http://127.0.0.1:7777" },
+    { path: ["model"], value: "gpt-oss-120b" },
+    { path: ["apiKeyEnvVar"], value: "ROUTER_API_KEY" },
+    { path: ["timeoutSec"], value: 120 },
+  ],
 };
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

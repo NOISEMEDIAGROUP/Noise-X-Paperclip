@@ -22,6 +22,7 @@ const adapterLabels: Record<string, string> = {
   cursor: "Cursor (local)",
   process: "Process",
   http: "HTTP",
+  cerebrouter: "Cerebrouter",
 };
 
 const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;

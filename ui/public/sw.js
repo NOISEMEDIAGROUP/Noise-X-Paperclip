@@ -1,4 +1,8 @@
 const CACHE_NAME = "paperclip-v2";
+const OFFLINE_RESPONSE = new Response("Offline", {
+  status: 503,
+  statusText: "Service Unavailable",
+});
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -34,9 +38,12 @@ self.addEventListener("fetch", (event) => {
       })
       .catch(() => {
         if (request.mode === "navigate") {
-          return caches.match("/") || new Response("Offline", { status: 503 });
+          return caches.match("/").then((cachedRoot) => {
+            if (cachedRoot) return cachedRoot;
+            return caches.match("/index.html").then((cachedIndex) => cachedIndex || OFFLINE_RESPONSE);
+          });
         }
-        return caches.match(request);
+        return caches.match(request).then((cached) => cached || OFFLINE_RESPONSE);
       })
   );
 });

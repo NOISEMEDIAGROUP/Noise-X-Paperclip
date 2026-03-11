@@ -34,6 +34,7 @@ import {
   agentConfigurationDoc as openclawGatewayAgentConfigurationDoc,
   models as openclawGatewayModels,
 } from "@paperclipai/adapter-openclaw-gateway";
+import { cerebrouterAdapter } from "./cerebrouter/index.js";
 import { listCodexModels } from "./codex-models.js";
 import { listCursorModels } from "./cursor-models.js";
 import {
@@ -119,6 +120,7 @@ const adaptersByType = new Map<string, ServerAdapterModule>(
     piLocalAdapter,
     cursorLocalAdapter,
     openclawGatewayAdapter,
+    cerebrouterAdapter,
     processAdapter,
     httpAdapter,
   ].map((a) => [a.type, a]),

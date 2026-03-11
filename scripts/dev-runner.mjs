@@ -160,17 +160,142 @@ if (mode === "watch") {
   env.PAPERCLIP_MIGRATION_PROMPT = "never";
 }
 
-const serverScript = mode === "watch" ? "dev:watch" : "dev";
-const child = spawn(
-  pnpmBin,
-  ["--filter", "@paperclipai/server", serverScript, ...forwardedArgs],
-  { stdio: "inherit", env, shell: process.platform === "win32" },
-);
-
-child.on("exit", (code, signal) => {
-  if (signal) {
-    process.kill(process.pid, signal);
-    return;
+function parseIntWithMin(value, fallback, min) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed) || parsed < min) {
+    return fallback;
   }
-  process.exit(code ?? 0);
-});
+  return parsed;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function runServerProcess(args) {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(pnpmBin, args, {
+      stdio: "inherit",
+      env,
+      shell: process.platform === "win32",
+    });
+    child.on("error", reject);
+    child.on("exit", (code, signal) => {
+      resolve({ code: code ?? 0, signal });
+    });
+  });
+}
+
+const watchdogEnabled = process.env.PAPERCLIP_DEV_WATCHDOG !== "false";
+const watchdogMaxRestarts = parseIntWithMin(
+  process.env.PAPERCLIP_DEV_WATCHDOG_MAX_RESTARTS,
+  12,
+  1,
+);
+const watchdogWindowMs = parseIntWithMin(
+  process.env.PAPERCLIP_DEV_WATCHDOG_WINDOW_MS,
+  120_000,
+  1_000,
+);
+const watchdogResetAfterMs = parseIntWithMin(
+  process.env.PAPERCLIP_DEV_WATCHDOG_RESET_AFTER_MS,
+  60_000,
+  1_000,
+);
+const watchdogMaxDelayMs = parseIntWithMin(
+  process.env.PAPERCLIP_DEV_WATCHDOG_MAX_DELAY_MS,
+  15_000,
+  500,
+);
+const watchdogCooldownMs = parseIntWithMin(
+  process.env.PAPERCLIP_DEV_WATCHDOG_COOLDOWN_MS,
+  30_000,
+  1_000,
+);
+const watchdogFailFast = process.env.PAPERCLIP_DEV_WATCHDOG_FAIL_FAST === "true";
+
+const serverScript = mode === "watch" ? "dev:watch" : "dev";
+const serverArgs = ["--filter", "@paperclipai/server", serverScript, ...forwardedArgs];
+
+if (watchdogEnabled) {
+  console.log(
+    `[paperclip] dev watchdog enabled (max ${watchdogMaxRestarts} restarts / ${watchdogWindowMs}ms window)`,
+  );
+  if (watchdogFailFast) {
+    console.log("[paperclip] dev watchdog fail-fast mode is enabled");
+  }
+}
+
+let restartAttempt = 0;
+const restartTimestamps = [];
+
+while (true) {
+  const startedAt = Date.now();
+  let exit;
+  try {
+    exit = await runServerProcess(serverArgs);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[paperclip] failed to start dev server process: ${message}`);
+    process.exit(1);
+  }
+
+  if (!watchdogEnabled) {
+    if (exit.signal) {
+      process.kill(process.pid, exit.signal);
+      break;
+    }
+    process.exit(exit.code ?? 0);
+  }
+
+  if (exit.signal) {
+    process.kill(process.pid, exit.signal);
+    break;
+  }
+
+  // In dev:once mode, honor clean exit and only auto-restart on failures.
+  if (mode === "dev" && (exit.code ?? 0) === 0) {
+    process.exit(0);
+  }
+
+  const uptimeMs = Date.now() - startedAt;
+  if (uptimeMs >= watchdogResetAfterMs) {
+    restartAttempt = 0;
+    restartTimestamps.length = 0;
+  }
+
+  const now = Date.now();
+  restartTimestamps.push(now);
+  while (restartTimestamps.length > 0 && now - restartTimestamps[0] > watchdogWindowMs) {
+    restartTimestamps.shift();
+  }
+
+  if (restartTimestamps.length > watchdogMaxRestarts) {
+    if (watchdogFailFast) {
+      console.error(
+        `[paperclip] dev server exited too often (${restartTimestamps.length} exits within ${watchdogWindowMs}ms). Stopping watchdog.`,
+      );
+      process.exit(exit.code ?? 1);
+    }
+
+    console.error(
+      `[paperclip] dev server exited too often (${restartTimestamps.length} exits within ${watchdogWindowMs}ms). Cooling down for ${watchdogCooldownMs}ms before retrying.`,
+    );
+    restartAttempt = 0;
+    restartTimestamps.length = 0;
+    await sleep(watchdogCooldownMs);
+    continue;
+  }
+
+  restartAttempt += 1;
+  const delayMs = Math.min(
+    watchdogMaxDelayMs,
+    1_000 * 2 ** Math.min(restartAttempt - 1, 4),
+  );
+  console.warn(
+    `[paperclip] dev server exited with code ${exit.code ?? "unknown"}; restarting in ${delayMs}ms (attempt ${restartAttempt})`,
+  );
+  await sleep(delayMs);
+}

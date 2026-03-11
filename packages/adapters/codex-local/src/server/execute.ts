@@ -14,6 +14,7 @@ import {
   ensureAbsoluteDirectory,
   ensureCommandResolvable,
   ensurePathInEnv,
+  applyUserEnvOverrides,
   renderTemplate,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
@@ -24,10 +25,20 @@ const PAPERCLIP_SKILLS_CANDIDATES = [
   path.resolve(__moduleDir, "../../skills"),         // published: <pkg>/dist/server/ -> <pkg>/skills/
   path.resolve(__moduleDir, "../../../../../skills"), // dev: src/server/ -> repo root/skills/
 ];
-const CODEX_ROLLOUT_NOISE_RE =
-  /^\d{4}-\d{2}-\d{2}T[^\s]+\s+ERROR\s+codex_core::rollout::list:\s+state db missing rollout path for thread\s+[a-z0-9-]+$/i;
+const CODEX_STDERR_NOISE_PATTERNS = [
+  /^\d{4}-\d{2}-\d{2}T[^\s]+\s+ERROR\s+codex_core::rollout::list:\s+state db missing rollout path for thread\s+[a-z0-9-]+$/i,
+  /^\d{4}-\d{2}-\d{2}T[^\s]+\s+WARN\s+codex_state::runtime:\s+failed to open state db at\s+.+\s+migration\s+\d+\s+was previously applied but is missing in the resolved migrations$/i,
+  /^\d{4}-\d{2}-\d{2}T[^\s]+\s+WARN\s+codex_core::state_db:\s+failed to initialize state runtime at\s+.+\s+migration\s+\d+\s+was previously applied but is missing in the resolved migrations$/i,
+  /^\d{4}-\d{2}-\d{2}T[^\s]+\s+WARN\s+codex_core::state_db:\s+state db record_discrepancy:\s+.+$/i,
+  /^\d{4}-\d{2}-\d{2}T[^\s]+\s+WARN\s+codex_core::shell_snapshot:\s+Failed to delete shell snapshot at\s+.+No such file or directory.+$/i,
+  /^\d{4}-\d{2}-\d{2}T[^\s]+\s+ERROR\s+codex_core::tools::spec:\s+Failed to convert "mcp__paddle__preview_subscription_update" MCP tool to OpenAI tool:\s+Error\("unknown variant `null`.+$/i,
+];
 
-function stripCodexRolloutNoise(text: string): string {
+function isCodexStderrNoiseLine(line: string): boolean {
+  return CODEX_STDERR_NOISE_PATTERNS.some((pattern) => pattern.test(line));
+}
+
+export function stripCodexStderrNoise(text: string): string {
   const parts = text.split(/\r?\n/);
   const kept: string[] = [];
   for (const part of parts) {
@@ -36,7 +47,7 @@ function stripCodexRolloutNoise(text: string): string {
       kept.push(part);
       continue;
     }
-    if (CODEX_ROLLOUT_NOISE_RE.test(trimmed)) continue;
+    if (isCodexStderrNoiseLine(trimmed)) continue;
     kept.push(part);
   }
   return kept.join("\n");
@@ -59,6 +70,34 @@ function hasNonEmptyEnvValue(env: Record<string, string>, key: string): boolean 
 function resolveCodexBillingType(env: Record<string, string>): "api" | "subscription" {
   // Codex uses API-key auth when OPENAI_API_KEY is present; otherwise rely on local login/session auth.
   return hasNonEmptyEnvValue(env, "OPENAI_API_KEY") ? "api" : "subscription";
+}
+
+function renderPaperclipRuntimeNote(env: Record<string, string>): string {
+  const keys = Object.keys(env)
+    .filter((key) => key.startsWith("PAPERCLIP_"))
+    .sort();
+  if (keys.length === 0) return "";
+
+  const activeIssueId = env.PAPERCLIP_TASK_ID?.trim() || "";
+  const wakeReason = env.PAPERCLIP_WAKE_REASON?.trim() || "";
+  const wakeCommentId = env.PAPERCLIP_WAKE_COMMENT_ID?.trim() || "";
+
+  const lines = [
+    "Paperclip heartbeat instructions:",
+    "- Use the $paperclip skill first for control-plane API coordination.",
+    `- Available PAPERCLIP_* env keys in this run: ${keys.join(", ")}`,
+    "- Never print secret values in logs or comments (PAPERCLIP_API_KEY, PAPERCLIP_AGENT_JWT_SECRET, OPENAI_API_KEY, or any token).",
+    "- If you need env diagnostics, report only presence/absence (e.g. KEY=<set|missing>) and redact values.",
+    "- Command shell is zsh. Avoid bash-only expansions like ${!name}; use printenv \"$name\" or explicit variables.",
+    activeIssueId
+      ? `- Current issue trigger: ${activeIssueId}. Checkout/read this issue first and execute it.`
+      : "- If no PAPERCLIP_TASK_ID is set, pull your assigned issues from Paperclip and continue highest-priority work.",
+    "- Do not ask for new tasks or acceptance criteria; execute and report progress in issue comments.",
+  ];
+  if (wakeReason) lines.push(`- Wake reason: ${wakeReason}`);
+  if (wakeCommentId) lines.push(`- Wake comment id: ${wakeCommentId}`);
+  lines.push("", "");
+  return lines.join("\n");
 }
 
 function codexHomeDir(): string {
@@ -122,6 +161,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     config.dangerouslyBypassApprovalsAndSandbox,
     asBoolean(config.dangerouslyBypassSandbox, false),
   );
+  const configuredInstructionsFilePath = asString(config.instructionsFilePath, "").trim();
 
   const workspaceContext = parseObject(context.paperclipWorkspace);
   const workspaceCwd = asString(workspaceContext.cwd, "");
@@ -152,11 +192,14 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const useConfiguredInsteadOfAgentHome = workspaceSource === "agent_home" && configuredCwd.length > 0;
   const effectiveWorkspaceCwd = useConfiguredInsteadOfAgentHome ? "" : workspaceCwd;
   const cwd = effectiveWorkspaceCwd || configuredCwd || process.cwd();
+  const resolvedInstructionsFilePath = configuredInstructionsFilePath
+    ? path.resolve(cwd, configuredInstructionsFilePath)
+    : "";
+  const instructionsHome = resolvedInstructionsFilePath ? path.dirname(resolvedInstructionsFilePath) : "";
+  const instructionsDir = instructionsHome ? `${instructionsHome}/` : "";
   await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
   await ensureCodexSkillsInjected(onLog);
   const envConfig = parseObject(config.env);
-  const hasExplicitApiKey =
-    typeof envConfig.PAPERCLIP_API_KEY === "string" && envConfig.PAPERCLIP_API_KEY.trim().length > 0;
   const env: Record<string, string> = { ...buildPaperclipEnv(agent) };
   env.PAPERCLIP_RUN_ID = runId;
   const wakeTaskId =
@@ -236,10 +279,18 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (runtimePrimaryUrl) {
     env.PAPERCLIP_RUNTIME_PRIMARY_URL = runtimePrimaryUrl;
   }
-  for (const [k, v] of Object.entries(envConfig)) {
-    if (typeof v === "string") env[k] = v;
+  if (instructionsHome) {
+    env.AGENT_HOME = instructionsHome;
+    env.AGENT_INSTRUCTIONS_FILE = resolvedInstructionsFilePath;
   }
-  if (!hasExplicitApiKey && authToken) {
+  const appliedEnv = applyUserEnvOverrides(env, envConfig);
+  if (appliedEnv.skippedReservedKeys.length > 0) {
+    await onLog(
+      "stderr",
+      `[paperclip] Ignored reserved env key overrides: ${appliedEnv.skippedReservedKeys.join(", ")}\n`,
+    );
+  }
+  if (!hasNonEmptyEnvValue(env, "PAPERCLIP_API_KEY") && authToken) {
     env.PAPERCLIP_API_KEY = authToken;
   }
   const billingType = resolveCodexBillingType(env);
@@ -267,38 +318,36 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       `[paperclip] Codex session "${runtimeSessionId}" was saved for cwd "${runtimeSessionCwd}" and will not be resumed in "${cwd}".\n`,
     );
   }
-  const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
-  const instructionsDir = instructionsFilePath ? `${path.dirname(instructionsFilePath)}/` : "";
   let instructionsPrefix = "";
-  if (instructionsFilePath) {
+  if (resolvedInstructionsFilePath) {
     try {
-      const instructionsContents = await fs.readFile(instructionsFilePath, "utf8");
+      const instructionsContents = await fs.readFile(resolvedInstructionsFilePath, "utf8");
       instructionsPrefix =
         `${instructionsContents}\n\n` +
-        `The above agent instructions were loaded from ${instructionsFilePath}. ` +
+        `The above agent instructions were loaded from ${resolvedInstructionsFilePath}. ` +
         `Resolve any relative file references from ${instructionsDir}.\n\n`;
       await onLog(
         "stderr",
-        `[paperclip] Loaded agent instructions file: ${instructionsFilePath}\n`,
+        `[paperclip] Loaded agent instructions file: ${resolvedInstructionsFilePath}\n`,
       );
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       await onLog(
         "stderr",
-        `[paperclip] Warning: could not read agent instructions file "${instructionsFilePath}": ${reason}\n`,
+        `[paperclip] Warning: could not read agent instructions file "${resolvedInstructionsFilePath}": ${reason}\n`,
       );
     }
   }
   const commandNotes = (() => {
-    if (!instructionsFilePath) return [] as string[];
+    if (!resolvedInstructionsFilePath) return [] as string[];
     if (instructionsPrefix.length > 0) {
       return [
-        `Loaded agent instructions from ${instructionsFilePath}`,
+        `Loaded agent instructions from ${resolvedInstructionsFilePath}`,
         `Prepended instructions + path directive to stdin prompt (relative references from ${instructionsDir}).`,
       ];
     }
     return [
-      `Configured instructionsFilePath ${instructionsFilePath}, but file could not be read; continuing without injected instructions.`,
+      `Configured instructionsFilePath ${resolvedInstructionsFilePath}, but file could not be read; continuing without injected instructions.`,
     ];
   })();
   const renderedPrompt = renderTemplate(promptTemplate, {
@@ -310,7 +359,8 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     run: { id: runId, source: "on_demand" },
     context,
   });
-  const prompt = `${instructionsPrefix}${renderedPrompt}`;
+  const paperclipRuntimeNote = renderPaperclipRuntimeNote(env);
+  const prompt = `${instructionsPrefix}${paperclipRuntimeNote}${renderedPrompt}`;
 
   const buildArgs = (resumeSessionId: string | null) => {
     const args = ["exec", "--json"];
@@ -353,12 +403,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
           await onLog(stream, chunk);
           return;
         }
-        const cleaned = stripCodexRolloutNoise(chunk);
+        const cleaned = stripCodexStderrNoise(chunk);
         if (!cleaned.trim()) return;
         await onLog(stream, cleaned);
       },
     });
-    const cleanedStderr = stripCodexRolloutNoise(proc.stderr);
+    const cleanedStderr = stripCodexStderrNoise(proc.stderr);
     return {
       proc: {
         ...proc,

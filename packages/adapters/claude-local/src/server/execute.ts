@@ -16,6 +16,7 @@ import {
   ensureAbsoluteDirectory,
   ensureCommandResolvable,
   ensurePathInEnv,
+  applyUserEnvOverrides,
   renderTemplate,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
@@ -144,8 +145,6 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
   await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
 
   const envConfig = parseObject(config.env);
-  const hasExplicitApiKey =
-    typeof envConfig.PAPERCLIP_API_KEY === "string" && envConfig.PAPERCLIP_API_KEY.trim().length > 0;
   const env: Record<string, string> = { ...buildPaperclipEnv(agent) };
   env.PAPERCLIP_RUN_ID = runId;
 
@@ -228,11 +227,14 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
     env.PAPERCLIP_RUNTIME_PRIMARY_URL = runtimePrimaryUrl;
   }
 
-  for (const [key, value] of Object.entries(envConfig)) {
-    if (typeof value === "string") env[key] = value;
+  const appliedEnv = applyUserEnvOverrides(env, envConfig);
+  if (appliedEnv.skippedReservedKeys.length > 0) {
+    console.warn(
+      `[paperclip] Ignored reserved env key overrides for agent ${agent.id}: ${appliedEnv.skippedReservedKeys.join(", ")}`,
+    );
   }
 
-  if (!hasExplicitApiKey && authToken) {
+  if (!hasNonEmptyEnvValue(env, "PAPERCLIP_API_KEY") && authToken) {
     env.PAPERCLIP_API_KEY = authToken;
   }
 

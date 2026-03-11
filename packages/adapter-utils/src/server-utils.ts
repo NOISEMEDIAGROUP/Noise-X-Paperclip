@@ -32,6 +32,60 @@ export const runningProcesses = new Map<string, RunningProcess>();
 export const MAX_CAPTURE_BYTES = 4 * 1024 * 1024;
 export const MAX_EXCERPT_BYTES = 32 * 1024;
 const SENSITIVE_ENV_KEY = /(key|token|secret|password|passwd|authorization|cookie)/i;
+const RESERVED_RUNTIME_ENV_KEYS = new Set([
+  "PAPERCLIP_AGENT_ID",
+  "PAPERCLIP_COMPANY_ID",
+  "PAPERCLIP_API_URL",
+  "PAPERCLIP_RUN_ID",
+  "PAPERCLIP_TASK_ID",
+  "PAPERCLIP_WAKE_REASON",
+  "PAPERCLIP_WAKE_COMMENT_ID",
+  "PAPERCLIP_APPROVAL_ID",
+  "PAPERCLIP_APPROVAL_STATUS",
+  "PAPERCLIP_LINKED_ISSUE_IDS",
+  "PAPERCLIP_API_KEY",
+  "PAPERCLIP_WORKSPACE_CWD",
+  "PAPERCLIP_WORKSPACE_SOURCE",
+  "PAPERCLIP_WORKSPACE_STRATEGY",
+  "PAPERCLIP_WORKSPACE_ID",
+  "PAPERCLIP_WORKSPACE_REPO_URL",
+  "PAPERCLIP_WORKSPACE_REPO_REF",
+  "PAPERCLIP_WORKSPACE_BRANCH",
+  "PAPERCLIP_WORKSPACE_WORKTREE_PATH",
+  "PAPERCLIP_WORKSPACES_JSON",
+  "PAPERCLIP_RUNTIME_SERVICE_INTENTS_JSON",
+  "PAPERCLIP_RUNTIME_SERVICES_JSON",
+  "PAPERCLIP_RUNTIME_PRIMARY_URL",
+  "AGENT_HOME",
+  "AGENT_INSTRUCTIONS_FILE",
+]);
+
+export interface AppliedUserEnvOverrides {
+  appliedKeys: string[];
+  skippedReservedKeys: string[];
+}
+
+export function isReservedRuntimeEnvKey(key: string): boolean {
+  return RESERVED_RUNTIME_ENV_KEYS.has(key);
+}
+
+export function applyUserEnvOverrides(
+  targetEnv: Record<string, string>,
+  envConfig: Record<string, unknown>,
+): AppliedUserEnvOverrides {
+  const appliedKeys: string[] = [];
+  const skippedReservedKeys: string[] = [];
+  for (const [key, value] of Object.entries(envConfig)) {
+    if (typeof value !== "string") continue;
+    if (isReservedRuntimeEnvKey(key)) {
+      skippedReservedKeys.push(key);
+      continue;
+    }
+    targetEnv[key] = value;
+    appliedKeys.push(key);
+  }
+  return { appliedKeys, skippedReservedKeys };
+}
 
 export function parseObject(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {

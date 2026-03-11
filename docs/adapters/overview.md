@@ -24,6 +24,7 @@ When a heartbeat fires, Paperclip:
 | OpenClaw | `openclaw` | Sends wake payloads to an OpenClaw webhook |
 | [Process](/adapters/process) | `process` | Executes arbitrary shell commands |
 | [HTTP](/adapters/http) | `http` | Sends webhooks to external agents |
+| [Cerebrouter](/adapters/cerebrouter) | `cerebrouter` | Sends prompts to a Cerebrouter OpenAI-compatible endpoint |
 
 ## Adapter Architecture
 
@@ -57,4 +58,5 @@ Three registries consume these modules:
 - **Need a coding agent?** Use `claude_local`, `codex_local`, or `opencode_local`
 - **Need to run a script or command?** Use `process`
 - **Need to call an external service?** Use `http`
+- **Need OpenAI-compatible routing through Cerebrouter?** Use `cerebrouter`
 - **Need something custom?** [Create your own adapter](/adapters/creating-an-adapter)

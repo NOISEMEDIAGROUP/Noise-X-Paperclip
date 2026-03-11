@@ -37,6 +37,23 @@ function createApproval(status: string): ApprovalRecord {
   };
 }
 
+function createApprovalWithoutAgentId(status: string): ApprovalRecord {
+  return {
+    id: "approval-2",
+    companyId: "company-1",
+    type: "hire_agent",
+    status,
+    payload: {
+      name: "Founding Engineer",
+      role: "engineer",
+      adapterType: "codex_local",
+      adapterConfig: { command: "codex" },
+      runtimeConfig: { heartbeat: { enabled: false, wakeOnDemand: true } },
+    },
+    requestedByAgentId: "requester-1",
+  };
+}
+
 function createDbStub(selectResults: ApprovalRecord[][], updateResults: ApprovalRecord[]) {
   const pendingSelectResults = [...selectResults];
   const selectWhere = vi.fn(async () => pendingSelectResults.shift() ?? []);
@@ -103,5 +120,23 @@ describe("approvalService resolution idempotency", () => {
     expect(result.applied).toBe(true);
     expect(mockAgentService.activatePendingApproval).toHaveBeenCalledWith("agent-1");
     expect(mockNotifyHireApproved).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes runtimeConfig through when creating a new approved hire", async () => {
+    const approved = createApprovalWithoutAgentId("approved");
+    const dbStub = createDbStub([[createApprovalWithoutAgentId("pending")]], [approved]);
+
+    const svc = approvalService(dbStub.db as any);
+    const result = await svc.approve("approval-2", "board", "ship it");
+
+    expect(result.applied).toBe(true);
+    expect(mockAgentService.create).toHaveBeenCalledWith(
+      "company-1",
+      expect.objectContaining({
+        adapterType: "codex_local",
+        adapterConfig: { command: "codex" },
+        runtimeConfig: { heartbeat: { enabled: false, wakeOnDemand: true } },
+      }),
+    );
   });
 });

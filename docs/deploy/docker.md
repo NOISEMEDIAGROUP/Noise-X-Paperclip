@@ -17,6 +17,8 @@ Defaults:
 
 - Host port: `3100`
 - Data directory: `./data/docker-paperclip`
+- Restart policy: `unless-stopped`
+- Healthcheck: `GET /api/health`
 
 Override with environment variables:
 
@@ -25,11 +27,32 @@ PAPERCLIP_PORT=3200 PAPERCLIP_DATA_DIR=./data/pc \
   docker compose -f docker-compose.quickstart.yml up --build
 ```
 
+`PAPERCLIP_DATA_DIR` may be either a bind-mount path (default) or a Docker volume name.
+
+## Server-Only Compose (API)
+
+Run only the Paperclip API server and Postgres in Docker:
+
+```sh
+docker compose -f docker-compose.server.yml up --build
+```
+
+This uses `SERVE_UI=false`, so the container serves API endpoints only.
+Both `db` and `server` are configured with restart policy `unless-stopped`, and `server` has a healthcheck on `/api/health`.
+
+Quick checks:
+
+```sh
+curl http://localhost:3100/api/health
+curl http://localhost:3100/api/companies
+```
+
 ## Manual Docker Build
 
 ```sh
 docker build -t paperclip-local .
 docker run --name paperclip \
+  -u "$(id -u):$(id -g)" \
   -p 3100:3100 \
   -e HOST=0.0.0.0 \
   -e PAPERCLIP_HOME=/paperclip \
@@ -39,7 +62,7 @@ docker run --name paperclip \
 
 ## Data Persistence
 
-All data is persisted under the bind mount (`./data/docker-paperclip`):
+All data is persisted under your mounted `/paperclip` path:
 
 - Embedded PostgreSQL data
 - Uploaded assets
@@ -57,6 +80,7 @@ Pass API keys to enable local adapter runs inside the container:
 
 ```sh
 docker run --name paperclip \
+  -u "$(id -u):$(id -g)" \
   -p 3100:3100 \
   -e HOST=0.0.0.0 \
   -e PAPERCLIP_HOME=/paperclip \

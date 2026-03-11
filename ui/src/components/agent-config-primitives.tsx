@@ -43,7 +43,8 @@ export const help: Record<string, string> = {
   localCommand: "Override the path to the CLI command you want the adapter to call (e.g. /usr/local/bin/claude, codex, opencode).",
   args: "Command-line arguments, comma-separated.",
   extraArgs: "Extra CLI arguments for local adapters, comma-separated.",
-  envVars: "Environment variables injected into the adapter process. Use plain values or secret references.",
+  envVars:
+    "Environment variables injected into the adapter process. Use plain values or secret references. Reserved runtime keys like PAPERCLIP_* and AGENT_HOME are managed by Paperclip and cannot be overridden.",
   bootstrapPrompt: "Optional prompt prepended on the first run to bootstrap the agent's environment or habits.",
   payloadTemplateJson: "Optional JSON merged into remote adapter request payloads before Paperclip adds its standard wake and workspace fields.",
   webhookUrl: "The URL that receives POST requests when the agent is invoked.",
@@ -65,6 +66,7 @@ export const adapterLabels: Record<string, string> = {
   cursor: "Cursor (local)",
   process: "Process",
   http: "HTTP",
+  cerebrouter: "Cerebrouter",
 };
 
 export const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;

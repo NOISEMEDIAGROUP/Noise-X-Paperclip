@@ -39,6 +39,26 @@ This starts:
 
 `pnpm dev` runs the server in watch mode and restarts on changes from workspace packages (including adapter packages). Use `pnpm dev:once` to run without file watching.
 
+`pnpm dev` and `pnpm dev:once` enable a watchdog for the server process. If the server exits unexpectedly, the runner restarts it automatically with backoff. (`dev:once` still exits cleanly when the server exits with code `0`.) Tune behavior with environment variables:
+
+- `PAPERCLIP_DEV_WATCHDOG=false` to disable auto-restart
+- `PAPERCLIP_DEV_WATCHDOG_MAX_RESTARTS` (default `12`)
+- `PAPERCLIP_DEV_WATCHDOG_WINDOW_MS` (default `120000`)
+- `PAPERCLIP_DEV_WATCHDOG_RESET_AFTER_MS` (default `60000`)
+- `PAPERCLIP_DEV_WATCHDOG_MAX_DELAY_MS` (default `15000`)
+- `PAPERCLIP_DEV_WATCHDOG_COOLDOWN_MS` (default `30000`) cooldown applied when restart storm threshold is exceeded
+- `PAPERCLIP_DEV_WATCHDOG_FAIL_FAST=true` to restore old behavior and exit instead of cooldown-retry
+
+Service worker behavior:
+
+- Paperclip now purges previously registered service workers in dev to prevent stale cache/network interception loops.
+- Production service worker registration is disabled by default. Enable only when explicitly needed by setting `VITE_ENABLE_SERVICE_WORKER=true`.
+
+UI network resilience:
+
+- The UI API client uses a network circuit breaker plus GET auto-recovery probes against `/api/health` to mask short backend restarts.
+- React Query defaults now retry network-like failures with bounded exponential backoff, reducing transient `ERR_CONNECTION_REFUSED` noise.
+
 Tailscale/private-auth dev mode:
 
 ```sh
@@ -74,6 +94,7 @@ Build and run Paperclip in Docker:
 ```sh
 docker build -t paperclip-local .
 docker run --name paperclip \
+  -u "$(id -u):$(id -g)" \
   -p 3100:3100 \
   -e HOST=0.0.0.0 \
   -e PAPERCLIP_HOME=/paperclip \

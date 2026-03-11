@@ -1,6 +1,8 @@
 FROM node:lts-trixie-slim AS base
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl git \
+  && apt-get install -y --no-install-recommends ca-certificates curl git gosu locales \
+  && sed -i '/^# *en_US.UTF-8 UTF-8$/s/^# *//' /etc/locale.gen \
+  && locale-gen en_US.UTF-8 \
   && rm -rf /var/lib/apt/lists/*
 RUN corepack enable
 
@@ -33,9 +35,11 @@ RUN test -f server/dist/index.js || (echo "ERROR: server build output missing" &
 FROM base AS production
 WORKDIR /app
 COPY --chown=node:node --from=build /app /app
+COPY scripts/container-entrypoint.sh /usr/local/bin/paperclip-entrypoint.sh
 RUN npm install --global --omit=dev @anthropic-ai/claude-code@latest @openai/codex@latest opencode-ai \
   && mkdir -p /paperclip \
-  && chown node:node /paperclip
+  && chown node:node /paperclip \
+  && chmod +x /usr/local/bin/paperclip-entrypoint.sh
 
 ENV NODE_ENV=production \
   HOME=/paperclip \
@@ -50,6 +54,8 @@ ENV NODE_ENV=production \
 
 VOLUME ["/paperclip"]
 EXPOSE 3100
+HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=12 \
+  CMD curl -fsS http://127.0.0.1:3100/api/health >/dev/null || exit 1
 
-USER node
+ENTRYPOINT ["/usr/local/bin/paperclip-entrypoint.sh"]
 CMD ["node", "--import", "./server/node_modules/tsx/dist/loader.mjs", "server/dist/index.js"]

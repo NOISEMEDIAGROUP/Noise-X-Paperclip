@@ -12,6 +12,7 @@ import type { Company } from "@paperclipai/shared";
 import { companiesApi } from "../api/companies";
 import { ApiError } from "../api/client";
 import { queryKeys } from "../lib/queryKeys";
+import { isNetworkErrorLike, networkRetryDelayMs } from "../lib/networkError";
 
 type CompanySelectionSource = "manual" | "route_sync" | "bootstrap";
 type CompanySelectionOptions = { source?: CompanySelectionSource };
@@ -53,7 +54,11 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         throw err;
       }
     },
-    retry: false,
+    retry: (failureCount, err) => isNetworkErrorLike(err) && failureCount < 6,
+    retryDelay: (attempt) => networkRetryDelayMs(attempt),
+    refetchInterval: (query) =>
+      query.state.error && isNetworkErrorLike(query.state.error) ? 15_000 : false,
+    refetchIntervalInBackground: true,
   });
   const sidebarCompanies = useMemo(
     () => companies.filter((company) => company.status !== "archived"),

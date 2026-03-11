@@ -1,6 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { companySecrets, companySecretVersions } from "@paperclipai/db";
+import { isReservedRuntimeEnvKey } from "@paperclipai/adapter-utils/server-utils";
 import type { AgentEnvConfig, EnvBinding, SecretProvider } from "@paperclipai/shared";
 import { envBindingSchema } from "@paperclipai/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
@@ -103,6 +104,9 @@ export function secretService(db: Db) {
     for (const [key, rawBinding] of Object.entries(record)) {
       if (!ENV_KEY_RE.test(key)) {
         throw unprocessable(`Invalid environment variable name: ${key}`);
+      }
+      if (isReservedRuntimeEnvKey(key)) {
+        throw unprocessable(`Environment variable key is reserved for Paperclip runtime: ${key}`);
       }
 
       const parsed = envBindingSchema.safeParse(rawBinding);
@@ -317,6 +321,9 @@ export function secretService(db: Db) {
       for (const [key, rawBinding] of Object.entries(record)) {
         if (!ENV_KEY_RE.test(key)) {
           throw unprocessable(`Invalid environment variable name: ${key}`);
+        }
+        if (isReservedRuntimeEnvKey(key)) {
+          throw unprocessable(`Environment variable key is reserved for Paperclip runtime: ${key}`);
         }
         const parsed = envBindingSchema.safeParse(rawBinding);
         if (!parsed.success) {

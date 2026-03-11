@@ -29,6 +29,7 @@ import { AuthPage } from "./pages/Auth";
 import { BoardClaimPage } from "./pages/BoardClaim";
 import { InviteLandingPage } from "./pages/InviteLanding";
 import { queryKeys } from "./lib/queryKeys";
+import { isNetworkErrorLike, networkRetryDelayMs } from "./lib/networkError";
 import { useCompany } from "./context/CompanyContext";
 import { useDialog } from "./context/DialogContext";
 
@@ -55,11 +56,15 @@ function CloudAccessGate() {
   const healthQuery = useQuery({
     queryKey: queryKeys.health,
     queryFn: () => healthApi.get(),
-    retry: false,
+    retry: (failureCount, error) => isNetworkErrorLike(error) && failureCount < 6,
+    retryDelay: (attempt) => networkRetryDelayMs(attempt),
     refetchInterval: (query) => {
       const data = query.state.data as
         | { deploymentMode?: "local_trusted" | "authenticated"; bootstrapStatus?: "ready" | "bootstrap_pending" }
         | undefined;
+      if (query.state.error && isNetworkErrorLike(query.state.error)) {
+        return 15_000;
+      }
       return data?.deploymentMode === "authenticated" && data.bootstrapStatus === "bootstrap_pending"
         ? 2000
         : false;
@@ -72,7 +77,8 @@ function CloudAccessGate() {
     queryKey: queryKeys.auth.session,
     queryFn: () => authApi.getSession(),
     enabled: isAuthenticatedMode,
-    retry: false,
+    retry: (failureCount, error) => isNetworkErrorLike(error) && failureCount < 3,
+    retryDelay: (attempt) => networkRetryDelayMs(attempt),
   });
 
   if (healthQuery.isLoading || (isAuthenticatedMode && sessionQuery.isLoading)) {
@@ -80,9 +86,24 @@ function CloudAccessGate() {
   }
 
   if (healthQuery.error) {
+    const networkOutage = isNetworkErrorLike(healthQuery.error);
+    const message =
+      healthQuery.error instanceof Error ? healthQuery.error.message : "Failed to load app state";
     return (
-      <div className="mx-auto max-w-xl py-10 text-sm text-destructive">
-        {healthQuery.error instanceof Error ? healthQuery.error.message : "Failed to load app state"}
+      <div className="mx-auto max-w-xl py-10">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+          <div>{message}</div>
+          {networkOutage ? (
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                Server is temporarily unreachable. Retrying automatically.
+              </span>
+              <Button variant="outline" size="sm" onClick={() => void healthQuery.refetch()}>
+                Retry now
+              </Button>
+            </div>
+          ) : null}
+        </div>
       </div>
     );
   }

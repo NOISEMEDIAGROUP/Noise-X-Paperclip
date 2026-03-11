@@ -50,6 +50,18 @@ function applyStatusSideEffects(
   return patch;
 }
 
+export function resolveIssueGoalForCreate(input: {
+  explicitGoalId: string | null | undefined;
+  parentGoalId: string | null;
+  projectGoalId: string | null;
+  companyActiveGoalId: string | null;
+}) {
+  if (input.explicitGoalId !== undefined) return input.explicitGoalId;
+  if (input.parentGoalId) return input.parentGoalId;
+  if (input.projectGoalId) return input.projectGoalId;
+  return input.companyActiveGoalId;
+}
+
 export interface IssueFilters {
   status?: string;
   assigneeAgentId?: string;
@@ -641,6 +653,47 @@ export function issueService(db: Db) {
         throw unprocessable("in_progress issues require an assignee");
       }
       return db.transaction(async (tx) => {
+        const explicitGoalId = issueData.goalId;
+        const shouldResolveImplicitGoal = explicitGoalId === undefined;
+        const parentGoalId =
+          shouldResolveImplicitGoal && issueData.parentId
+            ? await tx
+                .select({ goalId: issues.goalId })
+                .from(issues)
+                .where(and(eq(issues.id, issueData.parentId), eq(issues.companyId, companyId)))
+                .then((rows) => rows[0]?.goalId ?? null)
+            : null;
+        const projectGoalId =
+          shouldResolveImplicitGoal && issueData.projectId
+            ? await tx
+                .select({ goalId: projects.goalId })
+                .from(projects)
+                .where(and(eq(projects.id, issueData.projectId), eq(projects.companyId, companyId)))
+                .then((rows) => rows[0]?.goalId ?? null)
+            : null;
+        const companyActiveGoalId =
+          shouldResolveImplicitGoal && !parentGoalId && !projectGoalId
+            ? await tx
+                .select({ id: goals.id })
+                .from(goals)
+                .where(
+                  and(
+                    eq(goals.companyId, companyId),
+                    eq(goals.level, "company"),
+                    eq(goals.status, "active"),
+                  ),
+                )
+                .orderBy(asc(goals.createdAt), asc(goals.id))
+                .limit(1)
+                .then((rows) => rows[0]?.id ?? null)
+            : null;
+        const resolvedGoalId = resolveIssueGoalForCreate({
+          explicitGoalId,
+          parentGoalId,
+          projectGoalId,
+          companyActiveGoalId,
+        });
+
         let executionWorkspaceSettings =
           (issueData.executionWorkspaceSettings as Record<string, unknown> | null | undefined) ?? null;
         if (executionWorkspaceSettings == null && issueData.projectId) {
@@ -665,6 +718,7 @@ export function issueService(db: Db) {
 
         const values = {
           ...issueData,
+          ...(resolvedGoalId !== undefined ? { goalId: resolvedGoalId } : {}),
           ...(executionWorkspaceSettings ? { executionWorkspaceSettings } : {}),
           companyId,
           issueNumber,
