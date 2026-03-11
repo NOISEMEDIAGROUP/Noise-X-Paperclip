@@ -447,6 +447,23 @@ export function agentRoutes(db: Db) {
     res.json(result.map((agent) => redactForRestrictedAgentView(agent)));
   });
 
+  router.patch("/companies/:companyId/agents/reorder", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+    const { orderedIds } = req.body as { orderedIds?: string[] };
+    if (!Array.isArray(orderedIds) || orderedIds.some((id) => typeof id !== "string")) {
+      res.status(400).json({ error: "orderedIds must be an array of agent id strings" });
+      return;
+    }
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db
+        .update(agentsTable)
+        .set({ sortOrder: i, updatedAt: new Date() })
+        .where(and(eq(agentsTable.id, orderedIds[i]!), eq(agentsTable.companyId, companyId)));
+    }
+    res.json({ ok: true });
+  });
+
   router.get("/companies/:companyId/org", async (req, res) => {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
