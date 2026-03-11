@@ -977,11 +977,12 @@ export function heartbeatService(db: Db) {
         and(
           eq(heartbeatRuns.agentId, agentId),
           inArray(heartbeatRuns.status, ["failed", "timed_out"]),
+          inArray(heartbeatRuns.errorCode, [...TRANSIENT_ERROR_CODES]),
           gte(heartbeatRuns.finishedAt, cutoff),
         ),
       );
 
-    return recentFailures.length < AUTO_REQUEUE_MAX_RETRIES;
+    return recentFailures.length <= AUTO_REQUEUE_MAX_RETRIES;
   }
 
   async function autoRequeueOnTransientFailure(agentId: string, errorCode: string | null) {
