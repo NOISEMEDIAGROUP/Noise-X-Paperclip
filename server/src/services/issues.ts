@@ -1236,10 +1236,17 @@ export function issueService(db: Db) {
       }),
 
     findMentionedAgents: async (companyId: string, body: string) => {
-      const re = /\B@([^\s@,!?.]+)/g;
+      // Match @slug-format names (e.g., @code-reviewer, @backend-engineer)
+      // \B ensures we don't match emails like user@example.com
+      const re = /\B@([\w-]+)/g;
       const tokens = new Set<string>();
       let m: RegExpExecArray | null;
-      while ((m = re.exec(body)) !== null) tokens.add(m[1].toLowerCase());
+      while ((m = re.exec(body)) !== null) {
+        const mention = m[1].toLowerCase();
+        // Add both hyphenated and space versions for matching
+        tokens.add(mention);
+        tokens.add(mention.replace(/-/g, ' ')); // "code-reviewer" -> "code reviewer"
+      }
       if (tokens.size === 0) return [];
       const rows = await db.select({ id: agents.id, name: agents.name })
         .from(agents).where(eq(agents.companyId, companyId));
