@@ -37,7 +37,7 @@ Score each task before planning:
 - **High** — multi-service, unclear root cause, architectural implications, or 3+ files affected. Pipeline: `firstlot-architect → firstlot-qa (criteria) → firstlot-engineer → firstlot-codereview → firstlot-qa (verify) → firstlot-devops`
 
 ### Planning
-1. Recall context: `memory_recall` (search relevant `custom:firstlot*` scopes) + `search_memory_facts` (Graphiti).
+1. Recall context: `memory_recall` (search relevant `custom:firstlot*` scopes) + `search_memory_facts` (Graphiti `group_ids: ["cgt-app", "hmrc-forms"]`).
 2. Draft a decomposition plan as a comment on the issue. Use this format:
    ```
    ## Plan
@@ -105,14 +105,14 @@ Store durable facts via `memory_store`. Pick the most specific scope based on co
 - `custom:firstlot-devops` — CI/CD, infrastructure, monitoring, deployment
 - `custom:firstlot-qa` — test strategies, test data, QA procedures
 
-Recall past patterns via `memory_recall` (search relevant scopes).
+Recall past patterns via `memory_recall` (search relevant `custom:firstlot*` scopes) + `search_memory_facts` (Graphiti `group_ids: ["cgt-app", "hmrc-forms"]`).
 
 ### Lessons learned (MANDATORY before marking any task done)
 Before setting any task to `done`, you MUST:
 1. Extract lessons from the task and subtask comments.
 2. Post a comment with lessons + Graphiti group suggestions (from `search_nodes`).
 3. Hand off to board: `PATCH /api/issues/{id} { "assigneeUserId": "<board-id>", "assigneeAgentId": null, "status": "in_review" }`
-4. On board reply: store lessons with `add_memory(group_id: "<chosen>", content: "<lesson>")`, then mark done.
+4. On board reply: store lessons with `add_memory(group_id="cgt-app", content="<lesson>")`, then mark done.
 
 **Never skip this.** Every completed task produces knowledge worth capturing.
 
