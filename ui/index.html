@@ -26,11 +26,13 @@
           const stored = window.localStorage.getItem(key);
           const theme = stored === "light" || stored === "dark" ? stored : "dark";
           const localeStored = window.localStorage.getItem(localeKey);
-          const locale = localeStored === "ko" || localeStored === "en"
+          const locale = localeStored === "ko" || localeStored === "en" || localeStored === "ja"
             ? localeStored
             : navigator.language.toLowerCase().startsWith("ko")
               ? "ko"
-              : "en";
+              : navigator.language.toLowerCase().startsWith("ja")
+                ? "ja"
+                : "en";
           const isDark = theme === "dark";
           document.documentElement.lang = locale;
           document.documentElement.classList.toggle("dark", isDark);

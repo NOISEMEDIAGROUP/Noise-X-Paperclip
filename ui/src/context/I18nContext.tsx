@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 
-export type Locale = "en" | "ko";
+export type Locale = "en" | "ko" | "ja";
 
 interface I18nContextValue {
   locale: Locale;
@@ -24,7 +24,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "layout.skipToMain": "Skip to Main Content",
     "layout.documentation": "Documentation",
     "layout.switchTheme": "Switch to {theme} mode",
-    "layout.switchLanguage": "Switch to Korean",
+    "layout.switchLanguage": "Switch language",
     "theme.light": "light",
     "theme.dark": "dark",
 
@@ -242,7 +242,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "layout.skipToMain": "메인 콘텐츠로 건너뛰기",
     "layout.documentation": "문서",
     "layout.switchTheme": "{theme} 모드로 전환",
-    "layout.switchLanguage": "영어로 전환",
+    "layout.switchLanguage": "언어 전환",
     "theme.light": "라이트",
     "theme.dark": "다크",
 
@@ -456,12 +456,94 @@ const messages: Record<Locale, Record<string, string>> = {
     "org.selectCompany": "조직도를 보려면 회사를 선택하세요.",
     "org.empty": "정의된 조직 계층이 없습니다.",
   },
+  ja: {
+    "layout.skipToMain": "メインコンテンツへスキップ",
+    "layout.documentation": "ドキュメント",
+    "layout.switchTheme": "{theme}モードに切り替え",
+    "layout.switchLanguage": "言語を切り替え",
+    "theme.light": "ライト",
+    "theme.dark": "ダーク",
+
+    "sidebar.selectCompany": "会社を選択",
+    "sidebar.newIssue": "新しいイシュー",
+    "sidebar.dashboard": "ダッシュボード",
+    "sidebar.inbox": "受信トレイ",
+    "sidebar.work": "作業",
+    "sidebar.issues": "イシュー",
+    "sidebar.goals": "目標",
+    "sidebar.company": "会社",
+    "sidebar.org": "組織",
+    "sidebar.costs": "コスト",
+    "sidebar.activity": "アクティビティ",
+    "sidebar.settings": "設定",
+    "sidebar.projects": "プロジェクト",
+    "sidebar.newProject": "新しいプロジェクト",
+    "sidebar.agents": "エージェント",
+    "sidebar.newAgent": "新しいエージェント",
+
+    "issues.breadcrumb": "イシュー",
+    "issues.selectCompany": "イシューを見るには会社を選択してください。",
+
+    "goals.breadcrumb": "目標",
+    "goals.selectCompany": "目標を見るには会社を選択してください。",
+    "goals.empty": "まだ目標がありません。",
+    "goals.add": "目標を追加",
+    "goals.new": "新しい目標",
+
+    "dashboard.breadcrumb": "ダッシュボード",
+    "dashboard.selectCompany": "ダッシュボードを見るには会社を作成または選択してください。",
+    "dashboard.agentsEnabled": "有効なエージェント",
+    "dashboard.tasksInProgress": "進行中のタスク",
+    "dashboard.monthSpend": "月間支出",
+    "dashboard.pendingApprovals": "承認待ち",
+
+    "inbox.breadcrumb": "受信トレイ",
+    "inbox.tabNew": "新着",
+    "inbox.tabAll": "すべて",
+
+    "agents.breadcrumb": "エージェント",
+    "agents.selectCompany": "エージェントを見るには会社を選択してください。",
+    "agents.tab.all": "すべて",
+    "agents.tab.active": "アクティブ",
+    "agents.tab.paused": "一時停止",
+    "agents.tab.error": "エラー",
+    "agents.filters": "フィルター",
+    "agents.newAgent": "新しいエージェント",
+    "agents.emptyCreate": "最初のエージェントを作成してください。",
+    "agents.emptyNoOrg": "定義された組織階層がありません。",
+
+    "issuesList.newIssue": "新しいイシュー",
+    "issuesList.searchIssues": "イシューを検索",
+    "issuesList.empty": "現在のフィルター/検索条件に一致するイシューがありません。",
+    "issuesList.create": "イシューを作成",
+
+    "issueDialog.newIssue": "新しいイシュー",
+    "issueDialog.issueTitle": "イシュータイトル",
+    "issueDialog.for": "担当",
+    "issueDialog.in": "プロジェクト",
+    "issueDialog.assignee": "担当者",
+    "issueDialog.project": "プロジェクト",
+    "issueDialog.addDescription": "説明を追加...",
+    "issueDialog.priority": "優先度",
+    "issueDialog.labels": "ラベル",
+    "issueDialog.image": "画像",
+    "issueDialog.discardDraft": "下書きを破棄",
+    "issueDialog.createIssue": "イシューを作成",
+    "issueDialog.creating": "作成中...",
+    "issueDialog.todo": "ToDo",
+
+    "mobileNav.home": "ホーム",
+    "mobileNav.issues": "イシュー",
+    "mobileNav.create": "作成",
+    "mobileNav.agents": "エージェント",
+    "mobileNav.inbox": "受信トレイ",
+  },
 };
 
 const I18nContext = createContext<I18nContextValue | undefined>(undefined);
 
 function isLocale(value: string | null): value is Locale {
-  return value === "en" || value === "ko";
+  return value === "en" || value === "ko" || value === "ja";
 }
 
 function resolveInitialLocale(): Locale {
@@ -475,6 +557,7 @@ function resolveInitialLocale(): Locale {
 
   const browserLocale = navigator.language.toLowerCase();
   if (browserLocale.startsWith("ko")) return "ko";
+  if (browserLocale.startsWith("ja")) return "ja";
   return "en";
 }
 
@@ -495,7 +578,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggleLocale = useCallback(() => {
-    setLocaleState((current) => (current === "en" ? "ko" : "en"));
+    setLocaleState((current) => (current === "en" ? "ko" : current === "ko" ? "ja" : "en"));
   }, []);
 
   const t = useCallback(
