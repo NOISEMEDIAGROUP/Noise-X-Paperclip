@@ -32,6 +32,7 @@ interface AgentUpdateOptions extends BaseClientOptions {
   adapterType?: string;
   role?: string;
   title?: string;
+  reportsTo?: string;
 }
 
 interface AgentDeleteOptions extends BaseClientOptions {
@@ -311,11 +312,21 @@ export function registerAgentCommands(program: Command): void {
       .option("--reports-to <agentId>", "Manager agent ID")
       .action(async (opts: AgentCreateOptions) => {
         try {
+          if (!AGENT_ADAPTER_TYPES.includes(opts.adapterType)) {
+            throw new Error(
+              `Invalid adapter type "${opts.adapterType}". Must be one of: ${AGENT_ADAPTER_TYPES.join(", ")}`,
+            );
+          }
+          if (opts.role && !AGENT_ROLES.includes(opts.role)) {
+            throw new Error(
+              `Invalid role "${opts.role}". Must be one of: ${AGENT_ROLES.join(", ")}`,
+            );
+          }
           const ctx = resolveCommandContext(opts, { requireCompany: true });
           const body: Record<string, unknown> = {
             name: opts.name,
             adapterType: opts.adapterType,
-            role: opts.role ?? "general",
+            role: opts.role,
           };
           if (opts.title) body.title = opts.title;
           if (opts.reportsTo) body.reportsTo = opts.reportsTo;
@@ -360,18 +371,30 @@ export function registerAgentCommands(program: Command): void {
       )
       .option("-r, --role <role>", `Agent role (${AGENT_ROLES.join(", ")})`)
       .option("-t, --title <title>", "Agent title")
+      .option("--reports-to <agentId>", "Manager agent ID")
       .action(async (agentId: string, opts: AgentUpdateOptions) => {
         try {
+          if (opts.adapterType && !AGENT_ADAPTER_TYPES.includes(opts.adapterType)) {
+            throw new Error(
+              `Invalid adapter type "${opts.adapterType}". Must be one of: ${AGENT_ADAPTER_TYPES.join(", ")}`,
+            );
+          }
+          if (opts.role && !AGENT_ROLES.includes(opts.role)) {
+            throw new Error(
+              `Invalid role "${opts.role}". Must be one of: ${AGENT_ROLES.join(", ")}`,
+            );
+          }
           const ctx = resolveCommandContext(opts);
           const body: Record<string, unknown> = {};
           if (opts.name) body.name = opts.name;
           if (opts.adapterType) body.adapterType = opts.adapterType;
           if (opts.role) body.role = opts.role;
           if (opts.title) body.title = opts.title;
+          if (opts.reportsTo) body.reportsTo = opts.reportsTo;
 
           if (Object.keys(body).length === 0) {
             throw new Error(
-              "No update fields provided. Use --name, --role, --title, or --adapter-type.",
+              "No update fields provided. Use --name, --role, --title, --adapter-type, or --reports-to.",
             );
           }
 
