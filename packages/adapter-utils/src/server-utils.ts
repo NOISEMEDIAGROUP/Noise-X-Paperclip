@@ -127,6 +127,10 @@ export function buildPaperclipEnv(agent: { id: string; companyId: string; name?:
   vars.GIT_AUTHOR_NAME = gitName;
   vars.GIT_COMMITTER_NAME = gitName;
 
+  const gitEmail = `agent-${agent.id}@paperclip.local`;
+  vars.GIT_AUTHOR_EMAIL = gitEmail;
+  vars.GIT_COMMITTER_EMAIL = gitEmail;
+
   return vars;
 }
 

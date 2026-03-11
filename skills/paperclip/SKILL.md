@@ -86,10 +86,10 @@ Example commit message:
 ```
 fix(auth): handle expired token refresh
 
-Paperclip-Run-Id: run_abc123
+Paperclip-Run-Id: $PAPERCLIP_RUN_ID
 ```
 
-Your `GIT_AUTHOR_NAME` and `GIT_COMMITTER_NAME` are automatically set by the adapter to identify you as a Paperclip agent. Do not override them.
+Your `GIT_AUTHOR_NAME`, `GIT_COMMITTER_NAME`, `GIT_AUTHOR_EMAIL`, and `GIT_COMMITTER_EMAIL` are automatically set by the adapter to identify you as a Paperclip agent. Do not override them.
 
 ## Project Setup Workflow (CEO/Manager Common Path)
 
