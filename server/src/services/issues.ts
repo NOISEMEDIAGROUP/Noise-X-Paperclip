@@ -215,6 +215,16 @@ export function deriveIssueUserContext(
   };
 }
 
+function shouldClearExecutionLocksOnUpdate(input: {
+  nextStatus: string | undefined;
+  assigneeAgentChanged: boolean;
+  assigneeUserChanged: boolean;
+}) {
+  if (input.nextStatus && input.nextStatus !== "in_progress") return true;
+  if (input.assigneeAgentChanged || input.assigneeUserChanged) return true;
+  return false;
+}
+
 async function labelMapForIssues(dbOrTx: any, issueIds: string[]): Promise<Map<string, IssueLabelRow[]>> {
   const map = new Map<string, IssueLabelRow[]>();
   if (issueIds.length === 0) return map;
@@ -711,11 +721,23 @@ export function issueService(db: Db) {
       if (issueData.status && issueData.status !== "in_progress") {
         patch.checkoutRunId = null;
       }
-      if (
-        (issueData.assigneeAgentId !== undefined && issueData.assigneeAgentId !== existing.assigneeAgentId) ||
-        (issueData.assigneeUserId !== undefined && issueData.assigneeUserId !== existing.assigneeUserId)
-      ) {
+      const assigneeAgentChanged =
+        issueData.assigneeAgentId !== undefined && issueData.assigneeAgentId !== existing.assigneeAgentId;
+      const assigneeUserChanged =
+        issueData.assigneeUserId !== undefined && issueData.assigneeUserId !== existing.assigneeUserId;
+      if (assigneeAgentChanged || assigneeUserChanged) {
         patch.checkoutRunId = null;
+      }
+      if (
+        shouldClearExecutionLocksOnUpdate({
+          nextStatus: issueData.status,
+          assigneeAgentChanged,
+          assigneeUserChanged,
+        })
+      ) {
+        patch.executionRunId = null;
+        patch.executionAgentNameKey = null;
+        patch.executionLockedAt = null;
       }
 
       return db.transaction(async (tx) => {
@@ -1065,6 +1087,7 @@ export function issueService(db: Db) {
           assigneeAgentId: null,
           checkoutRunId: null,
           executionRunId: null,
+          executionAgentNameKey: null,
           executionLockedAt: null,
           updatedAt: new Date(),
         })
