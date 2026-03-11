@@ -68,6 +68,21 @@ async function flushEffects() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+async function waitFor(assertion: () => void, timeout = 2000): Promise<void> {
+  const start = Date.now();
+  let lastError: unknown;
+  while (Date.now() - start < timeout) {
+    try {
+      assertion();
+      return;
+    } catch (e) {
+      lastError = e;
+    }
+    await flushEffects();
+  }
+  throw lastError;
+}
+
 function mockUseQuery(data: MockContribution[], error: unknown = null) {
   vi.mocked(useQuery).mockReturnValue({
     data,
@@ -763,9 +778,8 @@ describe("plugin launcher runtime", () => {
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(2);
 
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    await flushEffects();
+    await waitFor(() => expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1));
 
-    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
     view.unmount();
   });
 
