@@ -1076,6 +1076,43 @@ export function issueService(db: Db) {
       return enriched;
     },
 
+    forceReleaseExecutionLock: async (id: string) => {
+      const existing = await db
+        .select()
+        .from(issues)
+        .where(eq(issues.id, id))
+        .then((rows) => rows[0] ?? null);
+
+      if (!existing) return null;
+
+      const hasExecutionLock =
+        existing.checkoutRunId !== null ||
+        existing.executionRunId !== null ||
+        existing.executionAgentNameKey !== null ||
+        existing.executionLockedAt !== null;
+
+      if (!hasExecutionLock) {
+        const [enrichedExisting] = await withIssueLabels(db, [existing]);
+        return enrichedExisting;
+      }
+
+      const updated = await db
+        .update(issues)
+        .set({
+          checkoutRunId: null,
+          executionRunId: null,
+          executionAgentNameKey: null,
+          executionLockedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(issues.id, id))
+        .returning()
+        .then((rows) => rows[0] ?? null);
+      if (!updated) return null;
+      const [enriched] = await withIssueLabels(db, [updated]);
+      return enriched;
+    },
+
     listLabels: (companyId: string) =>
       db.select().from(labels).where(eq(labels.companyId, companyId)).orderBy(asc(labels.name), asc(labels.id)),
 

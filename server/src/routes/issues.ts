@@ -779,6 +779,46 @@ export function issueRoutes(db: Db, storage: StorageService) {
     res.json(released);
   });
 
+  router.post("/issues/:id/force-release", async (req, res) => {
+    const id = req.params.id as string;
+    const existing = await svc.getById(id);
+    if (!existing) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, existing.companyId);
+    if (req.actor.type !== "board") {
+      res.status(403).json({ error: "Board or admin authentication required" });
+      return;
+    }
+
+    const forced = await svc.forceReleaseExecutionLock(id);
+    if (!forced) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: forced.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "issue.force_released",
+      entityType: "issue",
+      entityId: forced.id,
+      details: {
+        previousCheckoutRunId: existing.checkoutRunId,
+        previousExecutionRunId: existing.executionRunId,
+        previousExecutionAgentNameKey: existing.executionAgentNameKey,
+        previousExecutionLockedAt: existing.executionLockedAt,
+      },
+    });
+
+    res.json(forced);
+  });
+
   router.get("/issues/:id/comments", async (req, res) => {
     const id = req.params.id as string;
     const issue = await svc.getById(id);
