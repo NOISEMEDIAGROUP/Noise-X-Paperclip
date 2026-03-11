@@ -98,6 +98,8 @@ const messages: Record<Locale, Record<string, string>> = {
 
     "inbox.breadcrumb": "Inbox",
     "inbox.tabNew": "New",
+    "inbox.tabRecent": "Recent",
+    "inbox.tabUnread": "Unread",
     "inbox.tabAll": "All",
     "inbox.allCategories": "All categories",
     "inbox.myRecentIssues": "My recent issues",
@@ -107,6 +109,8 @@ const messages: Record<Locale, Record<string, string>> = {
     "inbox.alerts": "Alerts",
     "inbox.staleWork": "Stale work",
     "inbox.emptyNew": "No issues you're involved in yet.",
+    "inbox.emptyRecent": "No recent inbox items.",
+    "inbox.emptyUnread": "No new inbox items.",
     "inbox.emptyFiltered": "No inbox items match these filters.",
     "inbox.approvalsNeedAction": "Approvals Needing Action",
 
@@ -210,6 +214,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "issueDialog.image": "Image",
     "issueDialog.uploading": "Uploading...",
     "issueDialog.discardDraft": "Discard Draft",
+    "issueDialog.autosaveHint": "Draft autosaves locally",
     "issueDialog.creating": "Creating...",
     "issueDialog.createIssue": "Create Issue",
     "issueDialog.todo": "Todo",
@@ -324,6 +329,8 @@ const messages: Record<Locale, Record<string, string>> = {
 
     "inbox.breadcrumb": "받은함",
     "inbox.tabNew": "새 항목",
+    "inbox.tabRecent": "최근",
+    "inbox.tabUnread": "읽지 않음",
     "inbox.tabAll": "전체",
     "inbox.allCategories": "모든 카테고리",
     "inbox.myRecentIssues": "내 최근 이슈",
@@ -333,6 +340,8 @@ const messages: Record<Locale, Record<string, string>> = {
     "inbox.alerts": "알림",
     "inbox.staleWork": "정체 작업",
     "inbox.emptyNew": "아직 내가 관여한 이슈가 없습니다.",
+    "inbox.emptyRecent": "최근 받은함 항목이 없습니다.",
+    "inbox.emptyUnread": "새 받은함 항목이 없습니다.",
     "inbox.emptyFiltered": "필터에 맞는 받은함 항목이 없습니다.",
     "inbox.approvalsNeedAction": "조치 필요한 승인",
 
@@ -436,6 +445,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "issueDialog.image": "이미지",
     "issueDialog.uploading": "업로드 중...",
     "issueDialog.discardDraft": "임시저장 버리기",
+    "issueDialog.autosaveHint": "초안은 로컬에 자동 저장됩니다",
     "issueDialog.creating": "생성 중...",
     "issueDialog.createIssue": "이슈 생성",
     "issueDialog.todo": "할 일",
@@ -517,7 +527,11 @@ const messages: Record<Locale, Record<string, string>> = {
 
     "inbox.breadcrumb": "受信トレイ",
     "inbox.tabNew": "新着",
+    "inbox.tabRecent": "最近",
+    "inbox.tabUnread": "未読",
     "inbox.tabAll": "すべて",
+    "inbox.emptyRecent": "最近の受信トレイ項目はありません。",
+    "inbox.emptyUnread": "新しい受信トレイ項目はありません。",
 
     "agents.breadcrumb": "エージェント",
     "agents.selectCompany": "エージェントを見るには会社を選択してください。",
@@ -547,6 +561,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "issueDialog.labels": "ラベル",
     "issueDialog.image": "画像",
     "issueDialog.discardDraft": "下書きを破棄",
+    "issueDialog.autosaveHint": "下書きはローカルに自動保存されます",
     "issueDialog.createIssue": "イシューを作成",
     "issueDialog.creating": "作成中...",
     "issueDialog.todo": "ToDo",

@@ -257,7 +257,7 @@ export function Dashboard() {
               to="/approvals"
               description={
                 <span>
-                  {data.staleTasks} stale tasks
+                  Awaiting board review
                 </span>
               }
             />

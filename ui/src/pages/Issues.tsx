@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useCallback, useRef } from "react";
-import { useSearchParams } from "@/lib/router";
+import { useLocation, useSearchParams } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
@@ -7,6 +7,7 @@ import { heartbeatsApi } from "../api/heartbeats";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
+import { createIssueDetailLocationState } from "../lib/issueDetailBreadcrumb";
 import { EmptyState } from "../components/EmptyState";
 import { IssuesList } from "../components/IssuesList";
 import { useI18n } from "../context/I18nContext";
@@ -16,6 +17,7 @@ export function Issues() {
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const { t } = useI18n();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
 
@@ -65,6 +67,15 @@ export function Issues() {
     return ids;
   }, [liveRuns]);
 
+  const issueLinkState = useMemo(
+    () =>
+      createIssueDetailLocationState(
+        "Issues",
+        `${location.pathname}${location.search}${location.hash}`,
+      ),
+    [location.pathname, location.search, location.hash],
+  );
+
   useEffect(() => {
     setBreadcrumbs([{ label: t("issues.breadcrumb") }]);
   }, [setBreadcrumbs, t]);
@@ -95,6 +106,7 @@ export function Issues() {
       agents={agents}
       liveIssueIds={liveIssueIds}
       viewStateKey="paperclip:issues-view"
+      issueLinkState={issueLinkState}
       initialAssignees={searchParams.get("assignee") ? [searchParams.get("assignee")!] : undefined}
       initialSearch={initialSearch}
       onSearchChange={handleSearchChange}
