@@ -164,7 +164,7 @@ export function OrgChart() {
 
   useEffect(() => {
     setBreadcrumbs([{ label: t("org.breadcrumb") }]);
-  }, [setBreadcrumbs]);
+  }, [setBreadcrumbs, t]);
 
   // Layout computation
   const layout = useMemo(() => layoutForest(orgTree ?? []), [orgTree]);
