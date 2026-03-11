@@ -119,11 +119,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   );
   const search = asBoolean(config.search, false);
   const bypass = (() => {
-    const explicit = asBoolean(
-      config.dangerouslyBypassApprovalsAndSandbox,
-      asBoolean(config.dangerouslyBypassSandbox, false),
-    );
-    if (explicit) return true;
+    if (typeof config.dangerouslyBypassApprovalsAndSandbox === "boolean") {
+      return config.dangerouslyBypassApprovalsAndSandbox;
+    }
+    if (typeof config.dangerouslyBypassSandbox === "boolean") {
+      return config.dangerouslyBypassSandbox;
+    }
     // Heartbeat runs are non-interactive. Without bypass, Codex will stall on
     // approval prompts with no user to approve, causing the agent to loop
     // and waste tokens. Auto-enable for headless execution. See: #447

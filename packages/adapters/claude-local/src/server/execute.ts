@@ -309,8 +309,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const chrome = asBoolean(config.chrome, false);
   const maxTurns = asNumber(config.maxTurnsPerRun, 0);
   const dangerouslySkipPermissions = (() => {
-    const explicit = asBoolean(config.dangerouslySkipPermissions, false);
-    if (explicit) return true;
+    if (typeof config.dangerouslySkipPermissions === "boolean") {
+      return config.dangerouslySkipPermissions;
+    }
     // Heartbeat runs always use --print (non-interactive). Without --dangerously-skip-permissions,
     // Claude will stall on permission prompts with no user to approve, causing the agent to loop
     // and waste tokens. Auto-enable for headless execution. See: #447
