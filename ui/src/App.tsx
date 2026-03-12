@@ -26,6 +26,8 @@ import { McpServers } from "./pages/McpServers";
 import { JiraIntegration } from "./pages/JiraIntegration";
 import { Webhooks } from "./pages/Webhooks";
 import { DesignGuide } from "./pages/DesignGuide";
+import { GitControl } from "./pages/GitControl";
+import { KillSwitch } from "./pages/KillSwitch";
 import { OrgChart } from "./pages/OrgChart";
 import { NewAgent } from "./pages/NewAgent";
 import { AuthPage } from "./pages/Auth";
@@ -112,6 +114,8 @@ function boardRoutes() {
       <Route path="company/jira" element={<JiraIntegration />} />
       <Route path="company/mcp-servers" element={<McpServers />} />
       <Route path="company/webhooks" element={<Webhooks />} />
+      <Route path="company/git" element={<GitControl />} />
+      <Route path="company/kill-switch" element={<KillSwitch />} />
       <Route path="org" element={<OrgChart />} />
       <Route path="agents" element={<Navigate to="/agents/all" replace />} />
       <Route path="agents/all" element={<Agents />} />
@@ -127,6 +131,7 @@ function boardRoutes() {
       <Route path="projects/:projectId/overview" element={<ProjectDetail />} />
       <Route path="projects/:projectId/issues" element={<ProjectDetail />} />
       <Route path="projects/:projectId/issues/:filter" element={<ProjectDetail />} />
+      <Route path="projects/:projectId/git" element={<ProjectDetail />} />
       <Route path="issues" element={<Issues />} />
       <Route path="issues/all" element={<Navigate to="/issues" replace />} />
       <Route path="issues/active" element={<Navigate to="/issues" replace />} />
@@ -241,6 +246,7 @@ export function App() {
           <Route path="projects/:projectId/overview" element={<UnprefixedBoardRedirect />} />
           <Route path="projects/:projectId/issues" element={<UnprefixedBoardRedirect />} />
           <Route path="projects/:projectId/issues/:filter" element={<UnprefixedBoardRedirect />} />
+          <Route path="projects/:projectId/git" element={<UnprefixedBoardRedirect />} />
           <Route path=":companyPrefix" element={<Layout />}>
             {boardRoutes()}
           </Route>

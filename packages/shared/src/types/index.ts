@@ -74,6 +74,14 @@ export type {
   WebhookIssueLink,
 } from "./webhook.js";
 export type {
+  GitFileStatus,
+  GitBranchInfo,
+  GitStatus,
+  GitLogEntry,
+  GitCommitResult,
+  GitResetResult,
+} from "./git.js";
+export type {
   CompanyPortabilityInclude,
   CompanyPortabilitySecretRequirement,
   CompanyPortabilityCompanyManifestEntry,
@@ -91,3 +99,4 @@ export type {
   CompanyPortabilityImportResult,
   CompanyPortabilityExportRequest,
 } from "./company-portability.js";
+export type { KillSwitchProcessInfo, KillSwitchStatus, KillAllResult } from "./kill-switch.js";

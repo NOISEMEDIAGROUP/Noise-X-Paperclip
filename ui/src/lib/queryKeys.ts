@@ -86,6 +86,14 @@ export const queryKeys = {
     forProject: (companyId: string, projectId: string) =>
       ["mcp-servers", companyId, projectId] as const,
   },
+  killSwitch: {
+    status: (companyId: string) => ["kill-switch", "status", companyId] as const,
+  },
+  git: {
+    status: (workspaceId: string) => ["git", "status", workspaceId] as const,
+    log: (workspaceId: string) => ["git", "log", workspaceId] as const,
+    branches: (workspaceId: string) => ["git", "branches", workspaceId] as const,
+  },
   dashboard: (companyId: string) => ["dashboard", companyId] as const,
   sidebarBadges: (companyId: string) => ["sidebar-badges", companyId] as const,
   activity: (companyId: string) => ["activity", companyId] as const,

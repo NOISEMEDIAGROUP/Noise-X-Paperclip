@@ -23,11 +23,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { SlidersHorizontal, Plug, Pencil, Trash2 } from "lucide-react";
+import { SlidersHorizontal, Plug, Pencil, Trash2, GitBranch, FolderGit2 } from "lucide-react";
+import { WorkspaceGitControl } from "../components/WorkspaceGitControl";
 
 /* ── Top-level tab types ── */
 
-type ProjectTab = "overview" | "list";
+type ProjectTab = "overview" | "list" | "git";
 
 function resolveProjectTab(pathname: string, projectId: string): ProjectTab | null {
   const segments = pathname.split("/").filter(Boolean);
@@ -36,6 +37,7 @@ function resolveProjectTab(pathname: string, projectId: string): ProjectTab | nu
   const tab = segments[projectsIdx + 2];
   if (tab === "overview") return "overview";
   if (tab === "issues") return "list";
+  if (tab === "git") return "git";
   return null;
 }
 
@@ -374,6 +376,10 @@ export function ProjectDetail() {
       navigate(`/projects/${canonicalProjectRef}/issues`, { replace: true });
       return;
     }
+    if (activeTab === "git") {
+      navigate(`/projects/${canonicalProjectRef}/git`, { replace: true });
+      return;
+    }
     navigate(`/projects/${canonicalProjectRef}`, { replace: true });
   }, [project, routeProjectRef, canonicalProjectRef, activeTab, filter, navigate]);
 
@@ -396,10 +402,14 @@ export function ProjectDetail() {
   const handleTabChange = (tab: ProjectTab) => {
     if (tab === "overview") {
       navigate(`/projects/${canonicalProjectRef}/overview`);
+    } else if (tab === "git") {
+      navigate(`/projects/${canonicalProjectRef}/git`);
     } else {
       navigate(`/projects/${canonicalProjectRef}/issues`);
     }
   };
+
+  const hasGitWorkspaces = project?.workspaces.some((w) => w.cwd) ?? false;
 
   return (
     <div className="space-y-6">
@@ -461,6 +471,19 @@ export function ProjectDetail() {
         >
           List
         </button>
+        {hasGitWorkspaces && (
+          <button
+            className={`px-3 py-2 text-sm font-medium transition-colors border-b-2 flex items-center gap-1.5 ${
+              activeTab === "git"
+                ? "border-foreground text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+            onClick={() => handleTabChange("git")}
+          >
+            <GitBranch className="h-3.5 w-3.5" />
+            Git
+          </button>
+        )}
       </div>
 
       {/* Tab content */}
@@ -482,6 +505,30 @@ export function ProjectDetail() {
 
       {activeTab === "list" && project?.id && resolvedCompanyId && (
         <ProjectIssuesList projectId={project.id} companyId={resolvedCompanyId} />
+      )}
+
+      {activeTab === "git" && project && (
+        <div className="space-y-4">
+          {project.workspaces
+            .filter((w) => w.cwd)
+            .map((workspace) => (
+              <div key={workspace.id} className="rounded-md border border-border">
+                <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/20">
+                  <FolderGit2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-sm font-medium">{workspace.name}</span>
+                  {workspace.isPrimary && (
+                    <Badge variant="secondary" className="text-[10px] font-normal">primary</Badge>
+                  )}
+                  <code className="text-[10px] text-muted-foreground font-mono ml-auto truncate max-w-[300px]">
+                    {workspace.cwd}
+                  </code>
+                </div>
+                <div className="px-3 py-3">
+                  <WorkspaceGitControl workspace={workspace} compact />
+                </div>
+              </div>
+            ))}
+        </div>
       )}
 
       {/* Mobile properties drawer */}

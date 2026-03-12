@@ -12,6 +12,8 @@ import {
   Plug,
   Unplug,
   Webhook,
+  GitBranch,
+  ShieldOff,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarSection } from "./SidebarSection";
@@ -105,6 +107,8 @@ export function Sidebar() {
           <SidebarNavItem to="/company/jira" label="Jira" icon={Unplug} />
           <SidebarNavItem to="/company/mcp-servers" label="MCP Servers" icon={Plug} />
           <SidebarNavItem to="/company/webhooks" label="Webhooks" icon={Webhook} />
+          <SidebarNavItem to="/company/git" label="Git" icon={GitBranch} />
+          <SidebarNavItem to="/company/kill-switch" label="Kill Switch" icon={ShieldOff} />
           <SidebarNavItem to="/company/settings" label="Settings" icon={Settings} />
         </SidebarSection>
       </nav>

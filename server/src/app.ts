@@ -28,6 +28,8 @@ import { assetRoutes } from "./routes/assets.js";
 import { accessRoutes } from "./routes/access.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { webhookIngestionRoutes } from "./routes/webhook-ingestion.js";
+import { gitRoutes } from "./routes/git.js";
+import { killSwitchRoutes } from "./routes/kill-switch.js";
 import type { BetterAuthSessionResult } from "./auth/better-auth.js";
 
 type UiMode = "none" | "static" | "vite-dev";
@@ -118,6 +120,8 @@ export async function createApp(
   api.use(mcpServerRoutes(db));
   api.use(jiraIntegrationRoutes(db));
   api.use(webhookRoutes(db));
+  api.use(gitRoutes(db));
+  api.use(killSwitchRoutes(db));
   api.use(costRoutes(db));
   api.use(activityRoutes(db));
   api.use(dashboardRoutes(db));
