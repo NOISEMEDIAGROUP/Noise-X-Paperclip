@@ -392,11 +392,7 @@ export function OrgChart() {
                 {/* Agent icon + status dot */}
                 <div className="relative shrink-0">
                   <div className={`w-9 h-9 rounded-full flex items-center justify-center ${agent?.adapterType === "human" ? "bg-blue-100 dark:bg-blue-900/30" : "bg-muted"}`}>
-                    {agent?.adapterType === "human" ? (
-                      <User className="h-4.5 w-4.5 text-blue-600 dark:text-blue-400" />
-                    ) : (
-                      <AgentIcon icon={agent?.icon} className="h-4.5 w-4.5 text-foreground/70" />
-                    )}
+                    <AgentIcon icon={agent?.icon} adapterType={agent?.adapterType} className={`h-4.5 w-4.5 ${agent?.adapterType === "human" ? "text-blue-600 dark:text-blue-400" : "text-foreground/70"}`} />
                   </div>
                   <span
                     className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card"

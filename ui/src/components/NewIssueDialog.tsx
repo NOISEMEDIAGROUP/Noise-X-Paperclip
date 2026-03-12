@@ -677,7 +677,7 @@ export function NewIssueDialog() {
                 renderTriggerValue={(option) =>
                   option && currentAssignee ? (
                     <>
-                      <AgentIcon icon={currentAssignee.icon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <AgentIcon icon={currentAssignee.icon} adapterType={currentAssignee.adapterType} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                       <span className="truncate">{option.label}</span>
                     </>
                   ) : (
@@ -689,7 +689,7 @@ export function NewIssueDialog() {
                   const assignee = (agents ?? []).find((agent) => agent.id === option.id);
                   return (
                     <>
-                      <AgentIcon icon={assignee?.icon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <AgentIcon icon={assignee?.icon} adapterType={assignee?.adapterType} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                       <span className="truncate">{option.label}</span>
                     </>
                   );
