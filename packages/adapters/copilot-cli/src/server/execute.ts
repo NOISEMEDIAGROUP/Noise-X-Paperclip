@@ -53,8 +53,27 @@ async function ensureCopilotSkillsInjected(onLog: AdapterExecutionContext["onLog
   if (!skillsDir) return;
 
   const skillsHome = copilotInstructionsHome();
-  await fs.mkdir(skillsHome, { recursive: true });
-  const entries = await fs.readdir(skillsDir, { withFileTypes: true });
+  try {
+    await fs.mkdir(skillsHome, { recursive: true });
+  } catch (err) {
+    await onLog(
+      "stderr",
+      `[paperclip] Failed to prepare Copilot skills directory ${skillsHome}: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    return;
+  }
+
+  let entries: import("node:fs").Dirent[];
+  try {
+    entries = await fs.readdir(skillsDir, { withFileTypes: true });
+  } catch (err) {
+    await onLog(
+      "stderr",
+      `[paperclip] Failed to read Paperclip skills from ${skillsDir}: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    return;
+  }
+
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const source = path.join(skillsDir, entry.name);
