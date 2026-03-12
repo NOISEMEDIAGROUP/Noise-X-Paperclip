@@ -37,6 +37,7 @@ describe("built-in template registry", () => {
     const detail = await getBuiltInTemplate("solo-founder-lite", { templatesRoot });
     expect(detail.id).toBe("solo-founder-lite");
     expect(detail.manifest.agents.map((agent) => agent.slug)).toEqual(["ceo", "operator"]);
+    expect(detail.setupMarkdown).toBeNull();
   });
 
   it("loads safe autonomous organization detail", async () => {
@@ -50,6 +51,7 @@ describe("built-in template registry", () => {
       "finance-risk-lead",
       "operator",
     ]);
+    expect(detail.setupMarkdown).toContain("Safe Autonomous Organization Setup");
   });
 
   it("loads the full built-in template bundle", async () => {

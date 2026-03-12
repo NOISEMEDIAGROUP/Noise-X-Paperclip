@@ -156,4 +156,5 @@ export interface CompanyTemplateCatalogEntry {
 
 export interface CompanyTemplateDetail extends CompanyTemplateCatalogEntry {
   manifest: CompanyPortabilityManifest;
+  setupMarkdown: string | null;
 }

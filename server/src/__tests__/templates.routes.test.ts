@@ -52,12 +52,24 @@ describe("template routes", () => {
     expect(res.body).toEqual(
       expect.objectContaining({
         id: "solo-founder-lite",
+        setupMarkdown: null,
         manifest: expect.objectContaining({
           includes: {
             company: true,
             agents: true,
           },
         }),
+      }),
+    );
+  });
+
+  it("returns setup guidance when a template provides it", async () => {
+    const res = await request(buildApp()).get("/templates/safe-autonomous-organization");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(
+      expect.objectContaining({
+        id: "safe-autonomous-organization",
+        setupMarkdown: expect.stringContaining("Safe Autonomous Organization Setup"),
       }),
     );
   });

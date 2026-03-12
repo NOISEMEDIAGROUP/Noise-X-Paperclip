@@ -38,6 +38,7 @@ import { AsciiArtAnimation } from "./AsciiArtAnimation";
 import { ChoosePathButton } from "./PathInstructionsModal";
 import { HintIcon } from "./agent-config-primitives";
 import { OpenCodeLogoIcon } from "./OpenCodeLogoIcon";
+import { MarkdownBody } from "./MarkdownBody";
 import {
   Building2,
   Bot,
@@ -83,6 +84,7 @@ interface ImportedTemplateSummary {
   agentCount: number;
   warnings: string[];
   requiredSecrets: CompanyPortabilitySecretRequirement[];
+  setupMarkdown: string | null;
 }
 
 export function OnboardingWizard() {
@@ -440,6 +442,9 @@ export function OnboardingWizard() {
           agents: "all" as const,
           collisionStrategy: "rename" as const,
         };
+        const templateDetail =
+          selectedTemplateDetail ??
+          (await templatesApi.get(selectedTemplateId));
 
         const preview = await companiesApi.importPreview(payload);
         if (preview.errors.length > 0) {
@@ -461,6 +466,7 @@ export function OnboardingWizard() {
             new Set([...preview.warnings, ...imported.warnings])
           ),
           requiredSecrets: preview.requiredSecrets,
+          setupMarkdown: templateDetail.setupMarkdown,
         });
         setSelectedCompanyId(company.id);
         queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
@@ -952,6 +958,11 @@ export function OnboardingWizard() {
                                 ? ""
                                 : "s"}
                               .
+                            </p>
+                          )}
+                          {selectedTemplateDetail.setupMarkdown && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Includes a setup guide after import.
                             </p>
                           )}
                         </div>
@@ -1592,7 +1603,8 @@ export function OnboardingWizard() {
 
                   {importedTemplateSummary &&
                     (importedTemplateSummary.warnings.length > 0 ||
-                      importedTemplateSummary.requiredSecrets.length > 0) && (
+                      importedTemplateSummary.requiredSecrets.length > 0 ||
+                      importedTemplateSummary.setupMarkdown) && (
                       <div className="space-y-2 rounded-md border border-border p-3">
                         {importedTemplateSummary.warnings.length > 0 && (
                           <div className="space-y-1">
@@ -1628,6 +1640,14 @@ export function OnboardingWizard() {
                                 </p>
                               )
                             )}
+                          </div>
+                        )}
+                        {importedTemplateSummary.setupMarkdown && (
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium">Setup guide</p>
+                            <MarkdownBody className="text-[11px] text-muted-foreground prose-p:my-1 prose-headings:my-1">
+                              {importedTemplateSummary.setupMarkdown}
+                            </MarkdownBody>
                           </div>
                         )}
                       </div>

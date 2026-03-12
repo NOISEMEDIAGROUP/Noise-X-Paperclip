@@ -131,6 +131,15 @@ async function readTemplateFile(templateDir: string, relativePath: string) {
   return fs.readFile(resolved, "utf8");
 }
 
+async function readOptionalTemplateFile(templateDir: string, relativePath: string) {
+  try {
+    return await readTemplateFile(templateDir, relativePath);
+  } catch (err) {
+    if (isDirectoryError(err)) return null;
+    throw err;
+  }
+}
+
 async function readTemplateFiles(
   templateDir: string,
   manifest: CompanyPortabilityManifest,
@@ -189,9 +198,11 @@ export async function getBuiltInTemplate(
   try {
     const metadata = await readTemplateMetadata(templateDir);
     const manifest = await readTemplateManifest(templateDir);
+    const setupMarkdown = await readOptionalTemplateFile(templateDir, "SETUP.md");
     return {
       ...buildCatalogEntry(metadata, manifest),
       manifest,
+      setupMarkdown,
     };
   } catch (err) {
     if (isDirectoryError(err)) {
