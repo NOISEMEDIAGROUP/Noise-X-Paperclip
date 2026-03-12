@@ -1,11 +1,11 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
 
 /**
  * End-to-end test for the OPENAI_API_KEY resolution fix (#497).
  *
- * These tests spawn real child processes (using `env` command) with the same
- * merge logic used by runChildProcess: `{ ...process.env, ...adapterEnv }`.
+ * These tests spawn real child processes with the same merge logic used by
+ * runChildProcess: `{ ...process.env, ...adapterEnv }`.
  * They verify the key the child process actually receives — not a simulation.
  */
 
@@ -34,17 +34,21 @@ function applyOpenaiKeyFix(
 
 /**
  * Spawn a real child process with the given env, read its OPENAI_API_KEY.
- * Uses `printenv OPENAI_API_KEY` which outputs the value or exits 1 if unset.
+ * Uses `node -e` to print the env var, which works cross-platform (unlike printenv).
  */
 function readKeyFromChildProcess(
   mergedEnv: Record<string, string | undefined>,
 ): Promise<{ value: string | null; exitCode: number }> {
   return new Promise((resolve) => {
-    const child = spawn("printenv", ["OPENAI_API_KEY"], {
-      env: mergedEnv as NodeJS.ProcessEnv,
-      shell: false,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const child = spawn(
+      process.execPath,
+      ["-e", "process.stdout.write(process.env.OPENAI_API_KEY ?? '')"],
+      {
+        env: mergedEnv as NodeJS.ProcessEnv,
+        shell: false,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
     let stdout = "";
     child.stdout.on("data", (chunk) => (stdout += String(chunk)));
     child.on("close", (code) => {
@@ -73,7 +77,7 @@ describe("OPENAI_API_KEY resolution (#497)", () => {
 
       const result = await readKeyFromChildProcess(mergedEnv);
       // BUG: child gets empty string, NOT the valid key
-      expect(result.value).toBeNull(); // printenv exits 1 for empty
+      expect(result.value).toBeNull();
       expect(result.value).not.toBe(VALID_KEY);
     });
 
