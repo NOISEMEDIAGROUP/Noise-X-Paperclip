@@ -263,6 +263,17 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   const runtimeSessionParams = parseObject(runtime.sessionParams);
   const runtimeSessionId = asString(runtimeSessionParams.sessionId, runtime.sessionId ?? "");
+  const runtimeSessionCwd = asString(runtimeSessionParams.cwd, "");
+  const canReuseSession =
+    runtimeSessionId.length === 0 ||
+    runtimeSessionCwd.length === 0 ||
+    path.resolve(runtimeSessionCwd) === path.resolve(cwd);
+  if (runtimeSessionId && !canReuseSession) {
+    await onLog(
+      "stderr",
+      `[paperclip] Copilot session "${runtimeSessionId}" was saved for cwd "${runtimeSessionCwd}" and may not apply in "${cwd}".\n`,
+    );
+  }
 
   const args = ["copilot"];
   if (model) args.push("--model", model);
