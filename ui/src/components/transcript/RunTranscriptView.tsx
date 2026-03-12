@@ -278,7 +278,10 @@ function parseSystemActivity(text: string): { activityId?: string; name: string;
 
 function shouldHideNiceModeStderr(text: string): boolean {
   const normalized = compactWhitespace(text).toLowerCase();
-  return normalized.startsWith("[paperclip] skipping saved session resume");
+  if (!normalized.startsWith("[paperclip]")) return false;
+  // Keep actual errors visible
+  if (/\b(error|fatal|panic|exception)\b/.test(normalized)) return false;
+  return true;
 }
 
 function groupCommandBlocks(blocks: TranscriptBlock[]): TranscriptBlock[] {
