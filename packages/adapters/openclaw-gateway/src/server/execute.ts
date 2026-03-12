@@ -1080,8 +1080,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   };
   delete agentParams.text;
 
-  if (resolvedAgentId && !nonEmpty(agentParams.agentId)) {
-    agentParams.agentId = resolvedAgentId;
+  const effectiveAgentId = resolvedAgentId ?? "main";
+  if (!nonEmpty(agentParams.agentId)) {
+    agentParams.agentId = effectiveAgentId;
   }
 
   if (typeof agentParams.timeout !== "number") {
