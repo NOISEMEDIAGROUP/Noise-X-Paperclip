@@ -245,6 +245,9 @@ export function registerNodeCommands(program: Command): void {
 
         // Build env for the local adapter
         const childEnv: Record<string, string> = { ...process.env as Record<string, string> };
+        // Prevent "nested session" error if runner is launched from within Claude Code
+        delete (childEnv as Record<string, string | undefined>).CLAUDECODE;
+        delete (childEnv as Record<string, string | undefined>).CLAUDE_CODE_ENTRYPOINT;
         childEnv.PAPERCLIP_API_URL = _apiUrl;
         childEnv.PAPERCLIP_AGENT_ID = claim.agentId;
         childEnv.PAPERCLIP_COMPANY_ID = claim.companyId;
