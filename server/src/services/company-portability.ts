@@ -163,6 +163,24 @@ function entityKeyForText(value: string, fallback: string) {
   return normalizeAgentUrlKey(value) ?? fallback;
 }
 
+function compareByCreatedAt<T extends { createdAt: Date; id: string }>(a: T, b: T) {
+  return a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id);
+}
+
+function buildEntityKeyMap<T extends { id: string; createdAt: Date }>(
+  rows: T[],
+  getLabel: (row: T) => string,
+  fallbackPrefix: string,
+) {
+  const usedKeys = new Set<string>();
+  const keyById = new Map<string, string>();
+  for (const row of [...rows].sort(compareByCreatedAt)) {
+    const key = uniqueSlug(toSafeSlug(getLabel(row), fallbackPrefix), usedKeys);
+    keyById.set(row.id, key);
+  }
+  return keyById;
+}
+
 function normalizeInclude(input?: Partial<CompanyPortabilityInclude>): CompanyPortabilityInclude {
   return {
     company: input?.company ?? DEFAULT_INCLUDE.company,
@@ -616,10 +634,6 @@ export function companyPortabilityService(db: Db, opts?: CompanyPortabilityServi
       requiredSecrets: [],
     };
 
-    if (include.goals || include.projects || include.issues) {
-      warnings.push("Exporting goals, projects, and issues is not implemented yet; those sections were omitted.");
-    }
-
     const allAgentRows =
       include.agents || include.goals || include.projects || include.issues
         ? await agents.list(companyId, { includeTerminated: true })
@@ -639,6 +653,21 @@ export function companyPortabilityService(db: Db, opts?: CompanyPortabilityServi
       const slug = uniqueSlug(baseSlug, usedSlugs);
       idToSlug.set(agent.id, slug);
     }
+
+    const goalRows = include.goals || include.projects || include.issues
+      ? await goalsSvc.list(companyId)
+      : [];
+    const goalIdToKey = buildEntityKeyMap(goalRows, (goal) => goal.title, "goal");
+
+    const projectRows = include.projects || include.issues
+      ? await projectsSvc.list(companyId)
+      : [];
+    const projectIdToKey = buildEntityKeyMap(projectRows, (project) => project.name, "project");
+
+    const issueRows = include.issues
+      ? await issuesSvc.list(companyId)
+      : [];
+    const issueIdToKey = buildEntityKeyMap(issueRows, (issue) => issue.title, "issue");
 
     if (include.company) {
       const companyPath = "COMPANY.md";
@@ -729,6 +758,138 @@ export function companyPortabilityService(db: Db, opts?: CompanyPortabilityServi
           permissions: portablePermissions,
           budgetMonthlyCents: agent.budgetMonthlyCents ?? 0,
           metadata: (agent.metadata as Record<string, unknown> | null) ?? null,
+        });
+      }
+    }
+
+    let warnedAgentRefsWithoutAgents = false;
+    let warnedGoalRefsWithoutGoals = false;
+    let warnedProjectRefsWithoutProjects = false;
+    let warnedArchivedProjectState = false;
+    let warnedIssuePortableMetadata = false;
+
+    if (include.goals) {
+      for (const goal of [...goalRows].sort(compareByCreatedAt)) {
+        const ownerAgentSlug = goal.ownerAgentId ? (idToSlug.get(goal.ownerAgentId) ?? null) : null;
+        if (goal.ownerAgentId && !ownerAgentSlug && include.agents) {
+          warnings.push(`Skipped owner agent reference for goal ${goal.title}; agent was not exportable.`);
+        }
+        if (goal.ownerAgentId && !include.agents && !warnedAgentRefsWithoutAgents) {
+          warnings.push("Exported goals/projects/issues include agent references, but agents were not included; those links may not resolve on import.");
+          warnedAgentRefsWithoutAgents = true;
+        }
+        manifest.goals.push({
+          key: goalIdToKey.get(goal.id)!,
+          title: goal.title,
+          description: goal.description,
+          level: goal.level as CompanyPortabilityGoalManifestEntry["level"],
+          status: goal.status as CompanyPortabilityGoalManifestEntry["status"],
+          parentKey: goal.parentId ? (goalIdToKey.get(goal.parentId) ?? null) : null,
+          ownerAgentSlug,
+        });
+      }
+    }
+
+    if (include.projects) {
+      for (const project of [...projectRows].sort(compareByCreatedAt)) {
+        const goalKeys = (project.goalIds ?? [])
+          .map((goalId) => goalIdToKey.get(goalId) ?? null)
+          .filter((value): value is string => Boolean(value));
+        const leadAgentSlug = project.leadAgentId ? (idToSlug.get(project.leadAgentId) ?? null) : null;
+
+        if ((project.goalIds?.length ?? 0) > 0 && !include.goals && !warnedGoalRefsWithoutGoals) {
+          warnings.push("Exported projects/issues include goal references, but goals were not included; those links may not resolve on import.");
+          warnedGoalRefsWithoutGoals = true;
+        }
+        if (project.leadAgentId && !include.agents && !warnedAgentRefsWithoutAgents) {
+          warnings.push("Exported goals/projects/issues include agent references, but agents were not included; those links may not resolve on import.");
+          warnedAgentRefsWithoutAgents = true;
+        }
+        if (project.leadAgentId && !leadAgentSlug && include.agents) {
+          warnings.push(`Skipped lead agent reference for project ${project.name}; agent was not exportable.`);
+        }
+        if (project.archivedAt && !warnedArchivedProjectState) {
+          warnings.push("Project archived timestamps are not preserved by portability export.");
+          warnedArchivedProjectState = true;
+        }
+
+        manifest.projects.push({
+          key: projectIdToKey.get(project.id)!,
+          name: project.name,
+          description: project.description,
+          status: project.status as CompanyPortabilityProjectManifestEntry["status"],
+          goalKeys,
+          leadAgentSlug,
+          targetDate: project.targetDate,
+          color: project.color,
+          workspaces: (project.workspaces ?? []).map((workspace) => ({
+            name: workspace.name,
+            cwd: workspace.cwd,
+            repoUrl: workspace.repoUrl,
+            repoRef: workspace.repoRef,
+            metadata: workspace.metadata ?? null,
+            isPrimary: workspace.isPrimary,
+          })),
+        });
+      }
+    }
+
+    if (include.issues) {
+      for (const issue of [...issueRows].sort(compareByCreatedAt)) {
+        const projectKey = issue.projectId ? (projectIdToKey.get(issue.projectId) ?? null) : null;
+        const goalKey = issue.goalId ? (goalIdToKey.get(issue.goalId) ?? null) : null;
+        const parentKey = issue.parentId ? (issueIdToKey.get(issue.parentId) ?? null) : null;
+        const assigneeAgentSlug = issue.assigneeAgentId ? (idToSlug.get(issue.assigneeAgentId) ?? null) : null;
+
+        if (issue.projectId && !include.projects && !warnedProjectRefsWithoutProjects) {
+          warnings.push("Exported issues include project references, but projects were not included; those links may not resolve on import.");
+          warnedProjectRefsWithoutProjects = true;
+        }
+        if (issue.goalId && !include.goals && !warnedGoalRefsWithoutGoals) {
+          warnings.push("Exported projects/issues include goal references, but goals were not included; those links may not resolve on import.");
+          warnedGoalRefsWithoutGoals = true;
+        }
+        if (issue.assigneeAgentId && !include.agents && !warnedAgentRefsWithoutAgents) {
+          warnings.push("Exported goals/projects/issues include agent references, but agents were not included; those links may not resolve on import.");
+          warnedAgentRefsWithoutAgents = true;
+        }
+        if (
+          (issue.assigneeAgentId && !assigneeAgentSlug && include.agents) ||
+          (issue.projectId && !projectKey && include.projects) ||
+          (issue.goalId && !goalKey && include.goals) ||
+          (issue.parentId && !parentKey)
+        ) {
+          warnings.push(`Some references on issue ${issue.title} could not be exported and were omitted.`);
+        }
+        if (
+          issue.assigneeUserId ||
+          (issue.labels?.length ?? 0) > 0 ||
+          issue.assigneeAdapterOverrides ||
+          issue.startedAt ||
+          issue.completedAt ||
+          issue.cancelledAt ||
+          issue.hiddenAt
+        ) {
+          if (!warnedIssuePortableMetadata) {
+            warnings.push(
+              "Issue user assignees, labels, adapter overrides, visibility flags, and status timestamps are not preserved by portability export.",
+            );
+            warnedIssuePortableMetadata = true;
+          }
+        }
+
+        manifest.issues.push({
+          key: issueIdToKey.get(issue.id)!,
+          title: issue.title,
+          description: issue.description,
+          status: issue.status as CompanyPortabilityIssueManifestEntry["status"],
+          priority: issue.priority as CompanyPortabilityIssueManifestEntry["priority"],
+          projectKey,
+          goalKey,
+          parentKey,
+          assigneeAgentSlug,
+          requestDepth: issue.requestDepth,
+          billingCode: issue.billingCode,
         });
       }
     }
