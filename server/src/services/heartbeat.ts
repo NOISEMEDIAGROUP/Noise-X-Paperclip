@@ -988,6 +988,10 @@ export function heartbeatService(db: Db) {
     for (const run of activeRuns) {
       if (runningProcesses.has(run.id)) continue;
 
+      // Queued runs are legitimately waiting for a concurrency slot —
+      // they have no process yet, so they should not be reaped.
+      if (run.status === "queued") continue;
+
       // Apply staleness threshold to avoid false positives
       if (staleThresholdMs > 0) {
         const refTime = run.updatedAt ? new Date(run.updatedAt).getTime() : 0;
