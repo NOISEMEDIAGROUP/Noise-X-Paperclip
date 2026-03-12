@@ -959,6 +959,7 @@ export function heartbeatService(db: Db) {
     const reaped: string[] = [];
 
     for (const run of activeRuns) {
+      if (run.status === "queued") continue;
       if (runningProcesses.has(run.id)) continue;
 
       // Apply staleness threshold to avoid false positives
