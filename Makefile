@@ -1,9 +1,13 @@
-.PHONY: install onboard dev bootstrap-ceo setup
+.PHONY: help install onboard dev bootstrap-ceo setup
 
 APP_PORT = 3100
 
--include .env
-export
+## Show available targets
+help:
+	@echo "Usage:"
+	@echo "  make setup          First-time setup (.env + install + onboard)"
+	@echo "  make dev            Start dev server with hot reload"
+	@echo "  make bootstrap-ceo  Generate the first admin invite URL"
 
 ## Create .env for local development (no external DB needed)
 .env:
@@ -26,7 +30,7 @@ bootstrap-ceo:
 	pnpm paperclipai auth bootstrap-ceo
 
 ## Start dev server with hot reload
-dev:
+dev: .env
 	pnpm dev
 
 ## Full first-time setup: .env + install + onboard
