@@ -21,7 +21,6 @@ Core fields:
 - agentCommand (string, optional): ACPX runtime name (for example gemini, claude, codex, openclaw)
 - customAgentCommand (string, optional): raw ACP server command passed via \`acpx --agent\`; use this for custom ACP shims such as DeerFlow
 - cwd (string, optional): sidecar-local working directory for session scoping
-- instructionsFilePath (string, optional): absolute path to a markdown instructions file prepended to the run prompt
 - promptTemplate (string, optional): run prompt template
 - model (string, optional): model/config value applied with \`acpx <agent> set model <value>\`
 - sessionNameTemplate (string, optional): template for ACPX session name, defaults to paperclip-{{agent.id}}-{{runtime.taskKey}}

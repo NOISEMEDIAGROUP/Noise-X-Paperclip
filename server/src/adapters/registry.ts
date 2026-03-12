@@ -70,7 +70,7 @@ const acpxSidecarAdapter: ServerAdapterModule = {
   testEnvironment: acpxSidecarTestEnvironment,
   sessionCodec: acpxSidecarSessionCodec,
   models: acpxSidecarModels,
-  supportsLocalAgentJwt: true,
+  supportsLocalAgentJwt: false,
   agentConfigurationDoc: acpxSidecarAgentConfigurationDoc,
 };
 

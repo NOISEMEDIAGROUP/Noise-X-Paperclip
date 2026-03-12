@@ -1,12 +1,9 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import type { AdapterExecutionContext, AdapterExecutionResult } from "@paperclipai/adapter-utils";
 import {
   asString,
   asNumber,
   asStringArray,
   parseObject,
-  buildPaperclipEnv,
   renderTemplate,
   redactEnvForLogs,
 } from "@paperclipai/adapter-utils/server-utils";
@@ -59,21 +56,31 @@ async function sidecarRun(input: {
 }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Math.max(1, input.timeout + 30) * 1000);
-  const response = await fetch(`${input.url.replace(/\/+$/, "")}/run`, {
-    method: "POST",
-    signal: controller.signal,
-    headers: {
-      "content-type": "application/json",
-      ...input.headers,
-    },
-    body: JSON.stringify({
-      agent: input.agentId,
-      args: input.args,
-      timeout: input.timeout,
-      ...(input.cwd ? { cwd: input.cwd } : {}),
-      ...(input.stdin !== undefined ? { stdin: input.stdin } : {}),
-    }),
-  }).finally(() => clearTimeout(timer));
+  let response: Response;
+  try {
+    response = await fetch(`${input.url.replace(/\/+$/, "")}/run`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "content-type": "application/json",
+        ...input.headers,
+      },
+      body: JSON.stringify({
+        agent: input.agentId,
+        args: input.args,
+        timeout: input.timeout,
+        ...(input.cwd ? { cwd: input.cwd } : {}),
+        ...(input.stdin !== undefined ? { stdin: input.stdin } : {}),
+      }),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`sidecar_run_timeout:${input.timeout}`);
+    }
+    throw new Error(`sidecar_run_transport_failed:${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    clearTimeout(timer);
+  }
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
     throw new Error(`sidecar_run_failed:${response.status}:${JSON.stringify(payload)}`);
@@ -96,7 +103,7 @@ function buildSessionName(ctx: AdapterExecutionContext, template: string | null)
 }
 
 export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
-  const { runId, agent, config, context, runtime, onLog, onMeta, authToken } = ctx;
+  const { runId, agent, config, context, runtime, onLog, onMeta } = ctx;
   const url = asString(config.url, "").trim();
   if (!url) throw new Error("acpx_sidecar missing url");
 
@@ -121,28 +128,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   })();
   const sessionName = buildSessionName(ctx, nonEmptyString(config.sessionNameTemplate));
   const headers = parseHeaders(config.headers);
-  if (authToken && !headers.authorization) {
-    headers.authorization = `Bearer ${authToken}`;
-  }
-
-  const env = redactEnvForLogs(buildPaperclipEnv(agent));
-  const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
-  let instructionsPrefix = "";
-  if (instructionsFilePath) {
-    try {
-      const instructionsContents = await fs.readFile(instructionsFilePath, "utf8");
-      instructionsPrefix =
-        `${instructionsContents}\n\n` +
-        `The above agent instructions were loaded from ${instructionsFilePath}. Resolve relative paths from ${path.dirname(instructionsFilePath)}/.\n\n`;
-    } catch (err) {
-      await onLog(
-        "stderr",
-        `[paperclip] Warning: could not read acpx_sidecar instructions file "${instructionsFilePath}": ${err instanceof Error ? err.message : String(err)}\n`,
-      );
-    }
-  }
-
-  const prompt = instructionsPrefix + renderTemplate(promptTemplate, {
+  const prompt = renderTemplate(promptTemplate, {
     agent,
     runId,
     context,
@@ -157,104 +143,122 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       commandArgs: customAgentCommand
         ? ["acpx", "--agent", customAgentCommand, "sessions", "ensure", "set", "prompt"]
         : ["acpx", agentCommand, "sessions", "ensure", "set", "prompt"],
-      env,
       prompt,
       context,
       commandNotes: [`External ACPX sidecar at ${url}`],
     });
   }
 
-  const ensurePayload = await sidecarRun({
-    url,
-    headers,
-    agentId: agent.id,
-    timeout: Math.max(timeoutSec, 60),
-    cwd,
-    args: buildAcpxCommandArgs({
-      cwd,
-      extraArgs,
-      agentCommand: agentCommand || null,
-      customAgentCommand: customAgentCommand || null,
-      operation: "sessions",
-      sessionName,
-    }),
-  });
-  const ensureStdout = asString(ensurePayload.stdout, "");
-  const ensureLines = ensureStdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const ensureLast = ensureLines.at(-1);
-  let sessionId: string | null = null;
-  if (ensureLast) {
-    try {
-      const parsed = JSON.parse(ensureLast) as Record<string, unknown>;
-      sessionId = nonEmptyString(parsed.sessionId) ?? nonEmptyString(parsed.id);
-    } catch {
-      sessionId = null;
-    }
-  }
-
-  if (model) {
-    const setPayload = await sidecarRun({
+  try {
+    const ensurePayload = await sidecarRun({
       url,
       headers,
       agentId: agent.id,
-      timeout: 30,
+      timeout: Math.max(timeoutSec, 60),
       cwd,
       args: buildAcpxCommandArgs({
         cwd,
         extraArgs,
         agentCommand: agentCommand || null,
         customAgentCommand: customAgentCommand || null,
-        operation: "set",
+        operation: "sessions",
         sessionName,
-        model,
       }),
     });
-    const setExit = asNumber(setPayload.exit_code, 0);
-    if (setExit !== 0) {
-      await onLog("stderr", `[paperclip] Warning: failed to set model via acpx sidecar: ${asString(setPayload.stderr, "").trim() || asString(setPayload.stdout, "").trim()}\n`);
+    const ensureStdout = asString(ensurePayload.stdout, "");
+    const ensureLines = ensureStdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const ensureLast = ensureLines.at(-1);
+    let sessionId: string | null = null;
+    if (ensureLast) {
+      try {
+        const parsed = JSON.parse(ensureLast) as Record<string, unknown>;
+        sessionId = nonEmptyString(parsed.sessionId) ?? nonEmptyString(parsed.id);
+      } catch {
+        sessionId = null;
+      }
     }
-  }
 
-  const promptPayload = await sidecarRun({
-    url,
-    headers,
-    agentId: agent.id,
-    timeout: timeoutSec,
-    cwd,
-    stdin: prompt,
-    args: buildAcpxCommandArgs({
+    if (model) {
+      const setPayload = await sidecarRun({
+        url,
+        headers,
+        agentId: agent.id,
+        timeout: 30,
+        cwd,
+        args: buildAcpxCommandArgs({
+          cwd,
+          extraArgs,
+          agentCommand: agentCommand || null,
+          customAgentCommand: customAgentCommand || null,
+          operation: "set",
+          sessionName,
+          model,
+        }),
+      });
+      const setExit = asNumber(setPayload.exit_code, 0);
+      if (setExit !== 0) {
+        await onLog("stderr", `[paperclip] Warning: failed to set model via acpx sidecar: ${asString(setPayload.stderr, "").trim() || asString(setPayload.stdout, "").trim()}\n`);
+      }
+    }
+
+    const promptPayload = await sidecarRun({
+      url,
+      headers,
+      agentId: agent.id,
+      timeout: timeoutSec,
       cwd,
-      extraArgs,
-      agentCommand: agentCommand || null,
-      customAgentCommand: customAgentCommand || null,
-      operation: "prompt",
-      sessionName,
-    }),
-  });
+      stdin: prompt,
+      args: buildAcpxCommandArgs({
+        cwd,
+        extraArgs,
+        agentCommand: agentCommand || null,
+        customAgentCommand: customAgentCommand || null,
+        operation: "prompt",
+        sessionName,
+      }),
+    });
 
-  const stdout = asString(promptPayload.stdout, "");
-  const stderr = asString(promptPayload.stderr, "");
-  if (stdout) await onLog("stdout", stdout);
-  if (stderr) await onLog("stderr", stderr);
+    const stdout = asString(promptPayload.stdout, "");
+    const stderr = asString(promptPayload.stderr, "");
+    if (stdout) await onLog("stdout", stdout);
+    if (stderr) await onLog("stderr", stderr);
 
-  const parsed = parseAcpxJson(stdout);
-  const exitCode = asNumber(promptPayload.exit_code, 1);
-  const ok = promptPayload.ok === true && exitCode === 0;
-  const errorMessage = ok ? null : parsed.errorMessage || stderr.trim() || stdout.trim() || "acpx_sidecar_failed";
+    const parsed = parseAcpxJson(stdout);
+    const exitCode = asNumber(promptPayload.exit_code, 1);
+    const ok = promptPayload.ok === true && exitCode === 0;
+    const errorMessage = ok ? null : parsed.errorMessage || stderr.trim() || stdout.trim() || "acpx_sidecar_failed";
 
-  return {
-    exitCode,
-    signal: null,
-    timedOut: false,
-    errorMessage,
-    errorCode: ok ? null : "acpx_sidecar_error",
-    summary: parsed.summary,
-    sessionId,
-    sessionDisplayId: sessionName,
-    sessionParams: { sessionId, sessionName, cwd },
-    provider: `${(customAgentCommand || agentCommand || "acpx")}-sidecar`,
-    model: model || null,
-    billingType: "subscription",
-    resultJson: parsed.stopReason ? { stopReason: parsed.stopReason } : null,
-  };
+    return {
+      exitCode,
+      signal: null,
+      timedOut: false,
+      errorMessage,
+      errorCode: ok ? null : "acpx_sidecar_error",
+      summary: parsed.summary,
+      sessionId,
+      sessionDisplayId: sessionName,
+      sessionParams: { sessionId, sessionName, cwd },
+      provider: `${(customAgentCommand || agentCommand || "acpx")}-sidecar`,
+      model: model || null,
+      billingType: "subscription",
+      resultJson: parsed.stopReason ? { stopReason: parsed.stopReason } : null,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const timedOut = message.startsWith("sidecar_run_timeout:");
+    return {
+      exitCode: timedOut ? 124 : 1,
+      signal: null,
+      timedOut,
+      errorMessage: timedOut ? `Timed out after ${timeoutSec}s` : message,
+      errorCode: timedOut ? "timeout" : "acpx_sidecar_error",
+      summary: "",
+      sessionId: null,
+      sessionDisplayId: sessionName,
+      sessionParams: { sessionId: null, sessionName, cwd },
+      provider: `${(customAgentCommand || agentCommand || "acpx")}-sidecar`,
+      model: model || null,
+      billingType: "subscription",
+    };
+  }
 }

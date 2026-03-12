@@ -514,6 +514,24 @@ export function normalizeAgentDefaultsForJoin(input: {
 }) {
   const fatalErrors: string[] = [];
   const diagnostics: JoinDiagnostic[] = [];
+  if (input.adapterType === "acpx_sidecar") {
+    diagnostics.push({
+      code: "acpx_sidecar_invite_not_supported",
+      level: "warn",
+      message:
+        "ACPX sidecar agents cannot be provisioned through self-serve invite joins.",
+      hint:
+        "Create ACPX sidecar agents from the board UI after approval so the sidecar endpoint and runtime settings can be reviewed explicitly."
+    });
+    fatalErrors.push(
+      "adapterType=acpx_sidecar is not supported for invite joins"
+    );
+    return {
+      normalized: null as Record<string, unknown> | null,
+      diagnostics,
+      fatalErrors
+    };
+  }
   if (input.adapterType !== "openclaw_gateway") {
     const normalized = isPlainObject(input.defaultsPayload)
       ? (input.defaultsPayload as Record<string, unknown>)

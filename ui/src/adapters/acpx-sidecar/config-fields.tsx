@@ -1,7 +1,5 @@
 import type { AdapterConfigFieldsProps } from "../types";
 import { Field, DraftInput } from "../../components/agent-config-primitives";
-import { ChoosePathButton } from "../../components/PathInstructionsModal";
-
 const inputClass =
   "w-full rounded-md border border-border px-2.5 py-1.5 bg-transparent outline-none text-sm font-mono placeholder:text-muted-foreground/40";
 
@@ -34,28 +32,13 @@ export function AcpxSidecarConfigFields({
         />
       </Field>
       <Field label="Sidecar working directory" hint="Per-agent working directory inside the sidecar container.">
-        <div className="flex items-center gap-2">
-          <DraftInput
-            value={isCreate ? values!.cwd : eff("adapterConfig", "cwd", String(config.cwd ?? ""))}
-            onCommit={(v) => (isCreate ? set!({ cwd: v }) : mark("adapterConfig", "cwd", v || undefined))}
-            immediate
-            className={inputClass}
-            placeholder="/home/node/workspaces/agent"
-          />
-          <ChoosePathButton />
-        </div>
-      </Field>
-      <Field label="Agent instructions file" hint="Absolute path to a markdown instructions file prepended to the prompt.">
-        <div className="flex items-center gap-2">
-          <DraftInput
-            value={isCreate ? values!.instructionsFilePath ?? "" : eff("adapterConfig", "instructionsFilePath", String(config.instructionsFilePath ?? ""))}
-            onCommit={(v) => (isCreate ? set!({ instructionsFilePath: v }) : mark("adapterConfig", "instructionsFilePath", v || undefined))}
-            immediate
-            className={inputClass}
-            placeholder="/absolute/path/to/AGENTS.md"
-          />
-          <ChoosePathButton />
-        </div>
+        <DraftInput
+          value={isCreate ? values!.cwd : eff("adapterConfig", "cwd", String(config.cwd ?? ""))}
+          onCommit={(v) => (isCreate ? set!({ cwd: v }) : mark("adapterConfig", "cwd", v || undefined))}
+          immediate
+          className={inputClass}
+          placeholder="/home/node/workspaces/agent"
+        />
       </Field>
     </>
   );
