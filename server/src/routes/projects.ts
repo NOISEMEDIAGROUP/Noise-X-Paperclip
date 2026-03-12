@@ -17,6 +17,13 @@ export function projectRoutes(db: Db) {
   const svc = projectService(db);
 
   async function resolveCompanyIdForProjectReference(req: Request) {
+    const companyIdParam = req.params.companyId;
+    if (typeof companyIdParam === "string" && companyIdParam.trim().length > 0) {
+      const requestedCompanyId = companyIdParam.trim();
+      assertCompanyAccess(req, requestedCompanyId);
+      return requestedCompanyId;
+    }
+
     const companyIdQuery = req.query.companyId;
     const requestedCompanyId =
       typeof companyIdQuery === "string" && companyIdQuery.trim().length > 0
@@ -67,6 +74,18 @@ export function projectRoutes(db: Db) {
       return;
     }
     assertCompanyAccess(req, project.companyId);
+    res.json(project);
+  });
+
+  router.get("/companies/:companyId/projects/:id", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+    const id = req.params.id as string;
+    const project = await svc.getById(id);
+    if (!project || project.companyId !== companyId) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
     res.json(project);
   });
 
