@@ -659,9 +659,22 @@ export function issueService(db: Db) {
         throw unprocessable("in_progress issues require an assignee");
       }
       return db.transaction(async (tx) => {
+        const nextIssueCounterExpr = sql<number>`
+          GREATEST(
+            ${companies.issueCounter},
+            COALESCE(
+              (
+                SELECT MAX(${issues.issueNumber})
+                FROM ${issues}
+                WHERE ${issues.companyId} = ${companyId}
+              ),
+              0
+            )
+          ) + 1
+        `;
         const [company] = await tx
           .update(companies)
-          .set({ issueCounter: sql`${companies.issueCounter} + 1` })
+          .set({ issueCounter: nextIssueCounterExpr })
           .where(eq(companies.id, companyId))
           .returning({ issueCounter: companies.issueCounter, issuePrefix: companies.issuePrefix });
 

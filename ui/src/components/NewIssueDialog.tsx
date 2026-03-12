@@ -7,9 +7,11 @@ import { projectsApi } from "../api/projects";
 import { agentsApi } from "../api/agents";
 import { authApi } from "../api/auth";
 import { assetsApi } from "../api/assets";
+import { ApiError } from "../api/client";
 import { queryKeys } from "../lib/queryKeys";
 import { useProjectOrder } from "../hooks/useProjectOrder";
 import { getRecentAssigneeIds, sortAgentsByRecency, trackRecentAssignee } from "../lib/recent-assignees";
+import { useToast } from "../context/ToastContext";
 import {
   Dialog,
   DialogContent,
@@ -169,6 +171,7 @@ const priorities = [
 export function NewIssueDialog() {
   const { newIssueOpen, newIssueDefaults, closeNewIssue } = useDialog();
   const { companies, selectedCompanyId, selectedCompany } = useCompany();
+  const { pushToast } = useToast();
   const queryClient = useQueryClient();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -266,6 +269,17 @@ export function NewIssueDialog() {
       clearDraft();
       reset();
       closeNewIssue();
+    },
+    onError: (error) => {
+      const bodyError =
+        error instanceof ApiError && error.body && typeof error.body === "object" && "error" in error.body
+          ? String((error.body as { error?: unknown }).error ?? "")
+          : null;
+      pushToast({
+        tone: "error",
+        title: "Failed to create issue",
+        body: bodyError || (error instanceof Error ? error.message : "The issue could not be created."),
+      });
     },
   });
 

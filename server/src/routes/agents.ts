@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import { Router, type Request, type Response } from "express";
 import { generateKeyPairSync, randomUUID } from "node:crypto";
 import path from "node:path";
@@ -9,6 +10,7 @@ import {
   createAgentHireSchema,
   createAgentSchema,
   isUuidLike,
+  normalizeAgentUrlKey,
   resetAgentSessionSchema,
   testAdapterEnvironmentSchema,
   updateAgentPermissionsSchema,
@@ -60,6 +62,7 @@ export function agentRoutes(db: Db) {
   const access = accessService(db);
   const approvalsSvc = approvalService(db);
   const heartbeat = heartbeatService(db);
+  const issueSvc = issueService(db);
   const issueApprovalsSvc = issueApprovalService(db);
   const secretsSvc = secretService(db);
   const strictSecretsMode = process.env.PAPERCLIP_SECRETS_STRICT_MODE === "true";
@@ -212,6 +215,108 @@ export function agentRoutes(db: Db) {
     return privateKey.export({ type: "pkcs8", format: "pem" }).toString();
   }
 
+  async function resolveSharedAgentsDir(): Promise<string | null> {
+    const candidates = [
+      process.env.PAPERCLIP_AGENTS_SHARED_DIR,
+      "/paperclip-agents",
+      path.resolve(process.cwd(), "agents"),
+    ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+
+    for (const candidate of candidates) {
+      const exists = await fs.stat(candidate).then((s) => s.isDirectory()).catch(() => false);
+      if (exists) return candidate;
+    }
+    return null;
+  }
+
+  function buildDefaultAgentCapabilities(input: {
+    name: string;
+    role?: string | null;
+    title?: string | null;
+  }) {
+    const title = asNonEmptyString(input.title);
+    if (title) return `Owns ${title} execution and reports progress through Paperclip issues.`;
+    const role = asNonEmptyString(input.role)?.replace(/_/g, " ");
+    if (role) return `Owns ${role} execution and reports progress through Paperclip issues.`;
+    return `${input.name} execution scope and issue-driven delivery ownership.`;
+  }
+
+  function buildDefaultPromptTemplate(input: {
+    name: string;
+    companyName: string;
+    title?: string | null;
+    capabilities: string;
+  }) {
+    const title = asNonEmptyString(input.title);
+    const identity = title ? `${input.name} (${title})` : input.name;
+    return `You are ${identity} for ${input.companyName}. ${input.capabilities} Use assigned Paperclip issues as your source of truth, execute without waiting for redundant handoff, and report blockers with concrete next actions.`;
+  }
+
+  async function applyCanonicalLocalAgentDefaults(input: {
+    companyName: string;
+    name: string;
+    role?: string | null;
+    title?: string | null;
+    reportsTo?: string | null;
+    capabilities?: string | null;
+    adapterType?: string | null;
+    adapterConfig: Record<string, unknown>;
+  }) {
+    let capabilities = asNonEmptyString(input.capabilities);
+    if (!capabilities) {
+      capabilities = buildDefaultAgentCapabilities(input);
+    }
+
+    const next = { ...input.adapterConfig };
+    const manager =
+      input.reportsTo && isUuidLike(input.reportsTo) ? await svc.getById(input.reportsTo) : null;
+    const managerConfig =
+      manager && typeof manager.adapterConfig === "object" && manager.adapterConfig !== null
+        ? (manager.adapterConfig as Record<string, unknown>)
+        : null;
+
+    if (!asNonEmptyString(next.cwd) && managerConfig) {
+      const inheritedCwd = asNonEmptyString(managerConfig.cwd);
+      if (inheritedCwd) next.cwd = inheritedCwd;
+    }
+
+    if ((input.adapterType === "claude_local" || input.adapterType === "codex_local") && !asNonEmptyString(next.promptTemplate)) {
+      next.promptTemplate = buildDefaultPromptTemplate({
+        name: input.name,
+        companyName: input.companyName,
+        title: input.title,
+        capabilities,
+      });
+    }
+
+    if (input.adapterType === "claude_local" && typeof next.dangerouslySkipPermissions !== "boolean") {
+      next.dangerouslySkipPermissions = true;
+    }
+
+    if (!asNonEmptyString(next.instructionsFilePath)) {
+      const agentsDir = await resolveSharedAgentsDir();
+      const slug = normalizeAgentUrlKey(input.name) ?? normalizeAgentUrlKey(input.role ?? "") ?? "agent";
+      if (agentsDir && slug) {
+        const agentDir = path.join(agentsDir, slug);
+        const instructionsPath = path.join(agentDir, "AGENTS.md");
+        await fs.mkdir(agentDir, { recursive: true }).catch(() => {});
+        const exists = await fs.stat(instructionsPath).then((s) => s.isFile()).catch(() => false);
+        if (!exists) {
+          const title = asNonEmptyString(input.title);
+          const identity = title ? `${input.name} - ${title}` : input.name;
+          const content = `# ${identity}\n\n## Mission\n\n${capabilities}\n\n## Operating Rules\n\n- Use assigned Paperclip issues as your source of truth.\n- Do real execution work before asking for clarification that already exists in issue context.\n- Report blockers with concrete owners and next actions.\n`;
+          await fs.writeFile(instructionsPath, content, "utf8").catch(() => {});
+        }
+        next.instructionsFilePath = instructionsPath;
+      }
+    }
+
+    return {
+      capabilities,
+      adapterConfig: next,
+    };
+  }
+
   function ensureGatewayDeviceKey(
     adapterType: string | null | undefined,
     adapterConfig: Record<string, unknown>,
@@ -221,6 +326,51 @@ export function agentRoutes(db: Db) {
     if (disableDeviceAuth) return adapterConfig;
     if (asNonEmptyString(adapterConfig.devicePrivateKeyPem)) return adapterConfig;
     return { ...adapterConfig, devicePrivateKeyPem: generateEd25519PrivateKeyPem() };
+  }
+
+  async function autoWakeAgentOnResume(input: {
+    agentId: string;
+    companyId: string;
+    actorId: string | null;
+  }) {
+    const actionable = await issueSvc.list(input.companyId, {
+      assigneeAgentId: input.agentId,
+      status: "todo,in_progress,blocked",
+    });
+    if (actionable.length === 0) return null;
+
+    const statusPriority = new Map<string, number>([
+      ["in_progress", 0],
+      ["todo", 1],
+      ["blocked", 2],
+    ]);
+    const selectedIssue = [...actionable].sort((left, right) => {
+      const leftRank = statusPriority.get(left.status) ?? 99;
+      const rightRank = statusPriority.get(right.status) ?? 99;
+      if (leftRank !== rightRank) return leftRank - rightRank;
+      return 0;
+    })[0] ?? null;
+    if (!selectedIssue) return null;
+
+    const run = await heartbeat.wakeup(input.agentId, {
+      source: "assignment",
+      triggerDetail: "system",
+      reason: "issue_assigned",
+      payload: { issueId: selectedIssue.id, mutation: "resume" },
+      requestedByActorType: "user",
+      requestedByActorId: input.actorId,
+      contextSnapshot: {
+        issueId: selectedIssue.id,
+        taskId: selectedIssue.id,
+        source: "agent.resume",
+      },
+    });
+
+    return {
+      issueId: selectedIssue.id,
+      issueIdentifier: selectedIssue.identifier,
+      runId: run?.id ?? null,
+    };
   }
 
   function applyCreateDefaultsByAdapterType(
@@ -670,9 +820,19 @@ export function agentRoutes(db: Db) {
       hireInput.adapterType,
       ((hireInput.adapterConfig ?? {}) as Record<string, unknown>),
     );
+    const canonicalLocalDefaults = await applyCanonicalLocalAgentDefaults({
+      companyName: company.name,
+      name: hireInput.name,
+      role: hireInput.role,
+      title: hireInput.title ?? null,
+      reportsTo: hireInput.reportsTo ?? null,
+      capabilities: hireInput.capabilities ?? null,
+      adapterType: hireInput.adapterType,
+      adapterConfig: requestedAdapterConfig,
+    });
     const requestedAdapterConfigWithInstanceDefaults = applyInstanceAgentCreateDefaults(
       hireInput.adapterType,
-      requestedAdapterConfig,
+      canonicalLocalDefaults.adapterConfig,
     );
     const normalizedAdapterConfig = await secretsSvc.normalizeAdapterConfigForPersistence(
       companyId,
@@ -686,6 +846,7 @@ export function agentRoutes(db: Db) {
     );
     const normalizedHireInput = {
       ...hireInput,
+      capabilities: canonicalLocalDefaults.capabilities,
       adapterConfig: normalizedAdapterConfig,
       runtimeConfig: applyAgentHeartbeatProfileDefaults(
         hireInput.role,
@@ -811,9 +972,19 @@ export function agentRoutes(db: Db) {
       req.body.adapterType,
       ((req.body.adapterConfig ?? {}) as Record<string, unknown>),
     );
+    const canonicalLocalDefaults = await applyCanonicalLocalAgentDefaults({
+      companyName: company.name,
+      name: req.body.name,
+      role: req.body.role,
+      title: req.body.title ?? null,
+      reportsTo: req.body.reportsTo ?? null,
+      capabilities: req.body.capabilities ?? null,
+      adapterType: req.body.adapterType,
+      adapterConfig: requestedAdapterConfig,
+    });
     const requestedAdapterConfigWithInstanceDefaults = applyInstanceAgentCreateDefaults(
       req.body.adapterType,
-      requestedAdapterConfig,
+      canonicalLocalDefaults.adapterConfig,
     );
     const normalizedAdapterConfig = await secretsSvc.normalizeAdapterConfigForPersistence(
       companyId,
@@ -828,6 +999,7 @@ export function agentRoutes(db: Db) {
 
     const agent = await svc.create(companyId, {
       ...req.body,
+      capabilities: canonicalLocalDefaults.capabilities,
       adapterConfig: normalizedAdapterConfig,
       runtimeConfig: applyAgentHeartbeatProfileDefaults(
         req.body.role,
@@ -1143,7 +1315,18 @@ export function agentRoutes(db: Db) {
       entityId: agent.id,
     });
 
-    res.json(agent);
+    let wake = null;
+    try {
+      wake = await autoWakeAgentOnResume({
+        agentId: agent.id,
+        companyId: agent.companyId,
+        actorId: req.actor.userId ?? "board",
+      });
+    } catch (err) {
+      console.warn("failed to auto-wake resumed agent", { agentId: agent.id, err });
+    }
+
+    res.json({ ...agent, autoWake: wake });
   });
 
   router.post("/companies/:companyId/agents/resume", async (req, res) => {
@@ -1153,11 +1336,29 @@ export function agentRoutes(db: Db) {
 
     const companyAgents = await svc.list(companyId);
     const updated = [];
+    const autoWakes: Array<{ agentId: string; issueId: string; issueIdentifier: string | null; runId: string | null }> = [];
     for (const agent of companyAgents) {
       if (agent.status !== "paused" && agent.status !== "error") continue;
       const resumedAgent = await svc.resume(agent.id);
       if (!resumedAgent) continue;
       updated.push(resumedAgent);
+      try {
+        const wake = await autoWakeAgentOnResume({
+          agentId: resumedAgent.id,
+          companyId,
+          actorId: req.actor.userId ?? "board",
+        });
+        if (wake) {
+          autoWakes.push({
+            agentId: resumedAgent.id,
+            issueId: wake.issueId,
+            issueIdentifier: wake.issueIdentifier ?? null,
+            runId: wake.runId,
+          });
+        }
+      } catch (err) {
+        console.warn("failed to auto-wake resumed agent", { agentId: resumedAgent.id, err });
+      }
     }
 
     await logActivity(db, {
@@ -1167,10 +1368,14 @@ export function agentRoutes(db: Db) {
       action: "company.agents_resumed",
       entityType: "company",
       entityId: companyId,
-      details: { count: updated.length, agentIds: updated.map((agent) => agent.id) },
+      details: {
+        count: updated.length,
+        agentIds: updated.map((agent) => agent.id),
+        autoWakeIssueIds: autoWakes.map((wake) => wake.issueId),
+      },
     });
 
-    res.json({ ok: true, count: updated.length, agents: updated });
+    res.json({ ok: true, count: updated.length, agents: updated, autoWakes });
   });
 
   router.post("/agents/:id/terminate", async (req, res) => {

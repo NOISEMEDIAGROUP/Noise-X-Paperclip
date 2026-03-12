@@ -42,6 +42,7 @@ services:
       PAPERCLIP_AGENT_RUNTIME_SYNC_INTERVAL_MS: "${PAPERCLIP_AGENT_RUNTIME_SYNC_INTERVAL_MS:-300000}"
       PAPERCLIP_AGENT_RUNTIME_DIR: "${PAPERCLIP_AGENT_RUNTIME_DIR:-${PAPERCLIP_HOME_IN_CONTAINER:-/paperclip}/agent-home}"
     stop_grace_period: 120s
+    shm_size: "1gb"
     volumes:
       - "${PAPERCLIP_DATA_DIR:-./.paperclip-local}:${PAPERCLIP_HOME_IN_CONTAINER:-/paperclip}"
       - "${PAPERCLIP_REPO_MOUNT_SOURCE:-.}:${PAPERCLIP_REPO_MOUNT_TARGET:-/app-host}:ro"

@@ -2,9 +2,24 @@
 
 FROM node:lts-trixie-slim AS base
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl git locales \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    file \
+    git \
+    git-lfs \
+    iputils-ping \
+    jq \
+    less \
+    locales \
+    make \
+    netcat-openbsd \
+    procps \
+    python3 \
+    ripgrep \
   && sed -i '/^# *en_US.UTF-8 UTF-8/s/^# *//' /etc/locale.gen \
   && locale-gen en_US.UTF-8 \
+  && git lfs install --system \
   && rm -rf /var/lib/apt/lists/*
 RUN corepack enable
 ENV LANG=en_US.UTF-8 \
@@ -69,12 +84,15 @@ COPY --from=tools /usr/local/bin/codex /usr/local/bin/codex
 COPY --from=tools /usr/local/bin/opencode /usr/local/bin/opencode
 RUN if ! id postgres >/dev/null 2>&1; then adduser --system --group --home /var/lib/postgresql postgres; fi \
   && mkdir -p /paperclip \
+  && ln -sfn /usr/local/lib/node_modules/@anthropic-ai/claude-code/vendor /usr/local/bin/vendor \
+  && chown -h node:node /usr/local/bin/vendor \
   && chown node:node /paperclip
 
 ENV NODE_ENV=production \
   HOME=/paperclip \
   HOST=0.0.0.0 \
   PORT=3100 \
+  PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
   SERVE_UI=true \
   PAPERCLIP_IN_CONTAINER=true \
   PAPERCLIP_HOME=/paperclip \
@@ -82,6 +100,9 @@ ENV NODE_ENV=production \
   PAPERCLIP_CONFIG=/paperclip/instances/default/config.json \
   PAPERCLIP_DEPLOYMENT_MODE=authenticated \
   PAPERCLIP_DEPLOYMENT_EXPOSURE=private
+
+RUN pnpm exec playwright install --with-deps chromium \
+  && chown -R node:node /ms-playwright
 
 USER node
 
