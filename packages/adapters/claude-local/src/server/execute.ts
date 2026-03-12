@@ -365,7 +365,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const envFilePath = path.join(skillsDir, ".paperclip-env");
   const envFileLines = Object.entries(env)
     .filter(([k]) => k.startsWith("PAPERCLIP_"))
-    .map(([k, v]) => `export ${k}="${v.replace(/"/g, '\\"')}"`)
+    .map(([k, v]) => `export ${k}='${v.replace(/'/g, "'\\''")}'`)
     .join("\n");
   await fs.writeFile(envFilePath, envFileLines + "\n", "utf-8");
 
