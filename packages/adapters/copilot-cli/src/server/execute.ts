@@ -16,7 +16,7 @@ import {
   renderTemplate,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
-import { parseCopilotOutput } from "./parse.js";
+import { parseCopilotOutput, detectCopilotAuthRequired } from "./parse.js";
 
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const PAPERCLIP_SKILLS_CANDIDATES = [
@@ -301,16 +301,19 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     onLog,
   });
 
+  const parsed = parseCopilotOutput(proc.stdout);
+  const requiresAuth = detectCopilotAuthRequired(proc.stdout, proc.stderr);
+
   if (proc.timedOut) {
     return {
       exitCode: proc.exitCode,
       signal: proc.signal,
       timedOut: true,
       errorMessage: `Timed out after ${timeoutSec}s`,
+      errorCode: requiresAuth ? "copilot_auth_required" : null,
     };
   }
 
-  const parsed = parseCopilotOutput(proc.stdout);
   const stderrLine = firstNonEmptyLine(proc.stderr);
   const fallbackErrorMessage =
     parsed.errorMessage ||
@@ -336,6 +339,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     signal: proc.signal,
     timedOut: false,
     errorMessage: failed ? fallbackErrorMessage : null,
+    errorCode: failed && requiresAuth ? "copilot_auth_required" : null,
     usage: parsed.usage,
     sessionId: resolvedSessionId,
     sessionParams: resolvedSessionParams,
