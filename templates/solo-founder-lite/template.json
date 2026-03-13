@@ -4,8 +4,10 @@
   "description": "A minimal starter company with a CEO and an operator.",
   "category": "starter",
   "maturity": "starter",
+  "riskProfile": "low",
   "tags": ["starter", "2-agent", "local"],
   "useCases": ["first-time setup", "local experimentation"],
+  "recommendedFor": ["solo builders", "small local teams"],
   "recommended": true,
   "icon": "rocket"
 }

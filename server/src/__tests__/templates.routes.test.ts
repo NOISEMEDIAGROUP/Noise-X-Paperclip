@@ -37,10 +37,12 @@ describe("template routes", () => {
         expect.objectContaining({
           id: "solo-founder-lite",
           name: "Solo Founder Lite",
+          riskProfile: "low",
         }),
         expect.objectContaining({
           id: "safe-autonomous-organization",
           name: "Safe Autonomous Organization",
+          riskProfile: "high-control",
         }),
       ]),
     );
@@ -72,6 +74,7 @@ describe("template routes", () => {
     expect(res.body).toEqual(
       expect.objectContaining({
         id: "safe-autonomous-organization",
+        recommendedFor: expect.arrayContaining(["regulated workflows"]),
         setupMarkdown: expect.stringContaining("Safe Autonomous Organization Setup"),
       }),
     );

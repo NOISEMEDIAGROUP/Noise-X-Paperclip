@@ -254,8 +254,10 @@ export interface CompanyTemplateCatalogEntry {
   description: string;
   category: string | null;
   maturity: string | null;
+  riskProfile: string | null;
   tags: string[];
   useCases: string[];
+  recommendedFor: string[];
   recommended: boolean;
   icon: string | null;
   agentCount: number;

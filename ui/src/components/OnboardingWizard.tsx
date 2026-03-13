@@ -899,7 +899,8 @@ export function OnboardingWizard() {
                                 </span>
                               </div>
                               {(template.tags.length > 0 ||
-                                template.category) && (
+                                template.category ||
+                                template.riskProfile) && (
                                 <div className="mt-2 flex flex-wrap gap-1.5">
                                   {template.category && (
                                     <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
@@ -909,6 +910,11 @@ export function OnboardingWizard() {
                                   {template.maturity && (
                                     <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
                                       {template.maturity}
+                                    </span>
+                                  )}
+                                  {template.riskProfile && (
+                                    <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                      {template.riskProfile}
                                     </span>
                                   )}
                                   {template.tags.map((tag) => (
@@ -949,6 +955,17 @@ export function OnboardingWizard() {
                             {selectedTemplateDetail.companyName ??
                               "Template-defined company"}
                           </p>
+                          {selectedTemplateDetail.riskProfile && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Risk profile: {selectedTemplateDetail.riskProfile}
+                            </p>
+                          )}
+                          {selectedTemplateDetail.recommendedFor.length > 0 && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Recommended for:{" "}
+                              {selectedTemplateDetail.recommendedFor.join(", ")}
+                            </p>
+                          )}
                           {selectedTemplateDetail.useCases.length > 0 && (
                             <p className="text-[11px] text-muted-foreground">
                               Best for: {selectedTemplateDetail.useCases.join(", ")}

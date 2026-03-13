@@ -27,6 +27,7 @@ describe("built-in template registry", () => {
           id: "safe-autonomous-organization",
           name: "Safe Autonomous Organization",
           maturity: "opinionated",
+          riskProfile: "high-control",
           agentCount: 6,
           companyName: "Safe Autonomous Organization",
         }),
@@ -55,6 +56,10 @@ describe("built-in template registry", () => {
     expect(detail.useCases).toEqual([
       "governance-first automation",
       "high-trust operations",
+    ]);
+    expect(detail.recommendedFor).toEqual([
+      "regulated workflows",
+      "governance-first operators",
     ]);
     expect(detail.manifest.issues).toHaveLength(4);
     expect(detail.manifest.agents[0]).toEqual(expect.objectContaining({
