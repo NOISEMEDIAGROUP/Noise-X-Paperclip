@@ -336,8 +336,9 @@ export function issueRoutes(db: Db, storage: StorageService) {
     assertCompanyAccess(req, issue.companyId);
 
     const { state, merge } = req.body;
-    const newState = merge ? { ...(issue.pipelineState ?? {}), ...state } : state;
-    const updated = await svc.update(id, { pipelineState: newState });
+    const updated = merge
+      ? await svc.mergePipelineState(id, state)
+      : await svc.update(id, { pipelineState: state });
     if (!updated) {
       res.status(404).json({ error: "Issue not found" });
       return;
