@@ -19,7 +19,7 @@ import { ActivityRow } from "../components/ActivityRow";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { cn, formatCents } from "../lib/utils";
-import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard } from "lucide-react";
+import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, Hexagon } from "lucide-react";
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
 import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
 import { PageSkeleton } from "../components/PageSkeleton";
@@ -81,6 +81,35 @@ export function Dashboard() {
 
   const recentIssues = issues ? getRecentIssues(issues) : [];
   const recentActivity = useMemo(() => (activity ?? []).slice(0, 10), [activity]);
+
+  const recentProjects = useMemo(() => {
+    if (!projects || !issues) return [];
+    const projectIssueCounts = new Map<string, number>();
+    const projectLastUpdate = new Map<string, Date>();
+    for (const issue of issues) {
+      if (issue.projectId) {
+        projectIssueCounts.set(issue.projectId, (projectIssueCounts.get(issue.projectId) ?? 0) + 1);
+        const existing = projectLastUpdate.get(issue.projectId);
+        const updated = new Date(issue.updatedAt);
+        if (!existing || updated > existing) {
+          projectLastUpdate.set(issue.projectId, updated);
+        }
+      }
+    }
+    return [...projects]
+      .filter((p) => !p.archivedAt)
+      .sort((a, b) => {
+        const aTime = projectLastUpdate.get(a.id)?.getTime() ?? 0;
+        const bTime = projectLastUpdate.get(b.id)?.getTime() ?? 0;
+        return bTime - aTime;
+      })
+      .slice(0, 5)
+      .map((p) => ({
+        ...p,
+        issueCount: projectIssueCounts.get(p.id) ?? 0,
+        lastIssueUpdate: projectLastUpdate.get(p.id) ?? new Date(p.updatedAt),
+      }));
+  }, [projects, issues]);
 
   useEffect(() => {
     for (const timer of activityAnimationTimersRef.current) {
@@ -276,7 +305,7 @@ export function Dashboard() {
             </ChartCard>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid md:grid-cols-3 gap-4">
             {/* Recent Activity */}
             {recentActivity.length > 0 && (
               <div className="min-w-0">
@@ -350,6 +379,38 @@ export function Dashboard() {
                 </div>
               )}
             </div>
+
+            {/* Recent Projects */}
+            {recentProjects.length > 0 && (
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                  Recent Projects
+                </h3>
+                <div className="border border-border divide-y divide-border overflow-hidden">
+                  {recentProjects.map((project) => (
+                    <Link
+                      key={project.id}
+                      to={`/projects/${project.urlKey ?? project.id}/issues`}
+                      className="px-4 py-3 text-sm cursor-pointer hover:bg-accent/50 transition-colors no-underline text-inherit block"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="shrink-0 h-3.5 w-3.5 rounded-sm"
+                          style={{ backgroundColor: project.color ?? "#6366f1" }}
+                        />
+                        <span className="flex-1 truncate font-medium">{project.name}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {project.issueCount} {project.issueCount === 1 ? "issue" : "issues"}
+                        </span>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {timeAgo(project.lastIssueUpdate)}
+                        </span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
         </>
