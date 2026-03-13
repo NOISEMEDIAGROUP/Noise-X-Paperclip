@@ -7,8 +7,10 @@ import {
   agentRuntimeState,
   agentTaskSessions,
   agentWakeupRequests,
+  approvals,
   heartbeatRunEvents,
   heartbeatRuns,
+  issueApprovals,
   issues,
   projects,
   projectWorkspaces,
@@ -1709,6 +1711,49 @@ export function heartbeatService(db: Db) {
         })
         .where(eq(issues.id, issue.id));
 
+      // Check for pending step_execution approvals linked to this issue.
+      // If any exist, hold deferred wakeups in awaiting_approval instead of promoting.
+      const pendingStepApprovals = await tx
+        .select({ id: approvals.id })
+        .from(issueApprovals)
+        .innerJoin(approvals, eq(issueApprovals.approvalId, approvals.id))
+        .where(
+          and(
+            eq(issueApprovals.issueId, issue.id),
+            eq(approvals.type, "step_execution"),
+            eq(approvals.status, "pending"),
+          ),
+        )
+        .limit(1)
+        .then((rows) => rows[0] ?? null);
+
+      if (pendingStepApprovals) {
+        // Hold all deferred wakeups for this issue as awaiting_approval
+        await tx
+          .update(agentWakeupRequests)
+          .set({
+            status: "awaiting_approval",
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(agentWakeupRequests.companyId, issue.companyId),
+              eq(agentWakeupRequests.status, "deferred_issue_execution"),
+              sql`${agentWakeupRequests.payload} ->> 'issueId' = ${issue.id}`,
+            ),
+          );
+
+        logger.info(
+          {
+            issueId: issue.id,
+            approvalId: pendingStepApprovals.id,
+            companyId: issue.companyId,
+          },
+          "deferred wakeups held awaiting step_execution approval",
+        );
+        return null;
+      }
+
       while (true) {
         const deferred = await tx
           .select()
@@ -1832,6 +1877,158 @@ export function heartbeatService(db: Db) {
     });
 
     await startNextQueuedRunForAgent(promotedRun.agentId);
+  }
+
+  /**
+   * Promote wakeup requests held in "awaiting_approval" status for a given issue.
+   * Called when a step_execution approval is approved—resumes deferred wakeups
+   * so the next pipeline step can proceed.
+   */
+  async function promoteApprovalHeldWakeups(issueId: string, companyId: string) {
+    const held = await db
+      .select()
+      .from(agentWakeupRequests)
+      .where(
+        and(
+          eq(agentWakeupRequests.companyId, companyId),
+          eq(agentWakeupRequests.status, "awaiting_approval"),
+          sql`${agentWakeupRequests.payload} ->> 'issueId' = ${issueId}`,
+        ),
+      )
+      .orderBy(asc(agentWakeupRequests.requestedAt));
+
+    if (held.length === 0) return;
+
+    // Transition held wakeups back to deferred_issue_execution,
+    // then trigger normal promotion via a lightweight issue release cycle.
+    await db
+      .update(agentWakeupRequests)
+      .set({
+        status: "deferred_issue_execution",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(agentWakeupRequests.companyId, companyId),
+          eq(agentWakeupRequests.status, "awaiting_approval"),
+          sql`${agentWakeupRequests.payload} ->> 'issueId' = ${issueId}`,
+        ),
+      );
+
+    // Check if issue execution lock is free; if so, promote the first deferred wakeup.
+    const issue = await db
+      .select({ id: issues.id, executionRunId: issues.executionRunId })
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .then((rows) => rows[0] ?? null);
+
+    if (issue && !issue.executionRunId) {
+      // Find the first deferred wakeup and promote it inline
+      const firstDeferred = await db
+        .select()
+        .from(agentWakeupRequests)
+        .where(
+          and(
+            eq(agentWakeupRequests.companyId, companyId),
+            eq(agentWakeupRequests.status, "deferred_issue_execution"),
+            sql`${agentWakeupRequests.payload} ->> 'issueId' = ${issueId}`,
+          ),
+        )
+        .orderBy(asc(agentWakeupRequests.requestedAt))
+        .limit(1)
+        .then((rows) => rows[0] ?? null);
+
+      if (firstDeferred) {
+        const agent = await getAgent(firstDeferred.agentId);
+        if (
+          agent &&
+          agent.companyId === companyId &&
+          agent.status !== "paused" &&
+          agent.status !== "terminated" &&
+          agent.status !== "pending_approval"
+        ) {
+          const deferredPayload = parseObject(firstDeferred.payload);
+          const deferredContextSeed = parseObject(deferredPayload[DEFERRED_WAKE_CONTEXT_KEY]);
+          const promotedReason = readNonEmptyString(firstDeferred.reason) ?? "approval_promoted";
+          const promotedSource =
+            (readNonEmptyString(firstDeferred.source) as WakeupOptions["source"]) ?? "automation";
+          const promotedTriggerDetail =
+            (readNonEmptyString(firstDeferred.triggerDetail) as WakeupOptions["triggerDetail"]) ?? null;
+          const promotedPayload = deferredPayload;
+          delete promotedPayload[DEFERRED_WAKE_CONTEXT_KEY];
+
+          const {
+            contextSnapshot: promotedContextSnapshot,
+            taskKey: promotedTaskKey,
+          } = enrichWakeContextSnapshot({
+            contextSnapshot: deferredContextSeed,
+            reason: promotedReason,
+            source: promotedSource,
+            triggerDetail: promotedTriggerDetail,
+            payload: promotedPayload,
+          });
+
+          const sessionBefore = await resolveSessionBeforeForWakeup(agent, promotedTaskKey);
+          const now = new Date();
+          const newRun = await db
+            .insert(heartbeatRuns)
+            .values({
+              companyId: agent.companyId,
+              agentId: agent.id,
+              invocationSource: promotedSource,
+              triggerDetail: promotedTriggerDetail,
+              status: "queued",
+              wakeupRequestId: firstDeferred.id,
+              contextSnapshot: promotedContextSnapshot,
+              sessionIdBefore: sessionBefore,
+            })
+            .returning()
+            .then((rows) => rows[0]);
+
+          await db
+            .update(agentWakeupRequests)
+            .set({
+              status: "queued",
+              reason: "approval_promoted",
+              runId: newRun.id,
+              claimedAt: null,
+              finishedAt: null,
+              error: null,
+              updatedAt: now,
+            })
+            .where(eq(agentWakeupRequests.id, firstDeferred.id));
+
+          await db
+            .update(issues)
+            .set({
+              executionRunId: newRun.id,
+              executionAgentNameKey: normalizeAgentNameKey(agent.name),
+              executionLockedAt: now,
+              updatedAt: now,
+            })
+            .where(eq(issues.id, issueId));
+
+          publishLiveEvent({
+            companyId: newRun.companyId,
+            type: "heartbeat.run.queued",
+            payload: {
+              runId: newRun.id,
+              agentId: newRun.agentId,
+              invocationSource: newRun.invocationSource,
+              triggerDetail: newRun.triggerDetail,
+              wakeupRequestId: newRun.wakeupRequestId,
+            },
+          });
+
+          await startNextQueuedRunForAgent(newRun.agentId);
+        }
+      }
+    }
+
+    logger.info(
+      { issueId, companyId, heldCount: held.length },
+      "promoted approval-held wakeups after step_execution approval",
+    );
   }
 
   async function enqueueWakeup(agentId: string, opts: WakeupOptions = {}) {
@@ -2422,6 +2619,8 @@ export function heartbeatService(db: Db) {
       }),
 
     wakeup: enqueueWakeup,
+
+    promoteApprovalHeldWakeups,
 
     reapOrphanedRuns,
 
