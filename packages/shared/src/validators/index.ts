@@ -122,6 +122,17 @@ export {
 } from "./asset.js";
 
 export {
+  createWorkflowSchema,
+  updateWorkflowSchema,
+  startWorkflowRunSchema,
+  advanceWorkflowRunSchema,
+  type CreateWorkflow,
+  type UpdateWorkflow,
+  type StartWorkflowRun,
+  type AdvanceWorkflowRun,
+} from "./workflow.js";
+
+export {
   createCompanyInviteSchema,
   createOpenClawInvitePromptSchema,
   acceptInviteSchema,
