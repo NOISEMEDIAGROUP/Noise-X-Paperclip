@@ -32,10 +32,6 @@ export function InlineEditor({
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    setDraft(value);
-  }, [value]);
-
   const autoSize = useCallback((el: HTMLTextAreaElement | null) => {
     if (!el) return;
     el.style.height = "auto";
@@ -137,7 +133,10 @@ export function InlineEditor({
         !value && "text-muted-foreground italic",
         className
       )}
-      onClick={() => setEditing(true)}
+      onClick={() => {
+        setDraft(value);
+        setEditing(true);
+      }}
     >
       {value && multiline ? (
         <MarkdownBody>{value}</MarkdownBody>

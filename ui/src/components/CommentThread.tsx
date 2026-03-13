@@ -232,7 +232,8 @@ export function CommentThread({
   const [reopen, setReopen] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [attaching, setAttaching] = useState(false);
-  const [reassignTarget, setReassignTarget] = useState(currentAssigneeValue);
+  const [reassignTargetOverride, setReassignTargetOverride] = useState<string | null>(null);
+  const reassignTarget = reassignTargetOverride ?? currentAssigneeValue;
   const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null);
   const editorRef = useRef<MarkdownEditorRef>(null);
   const attachInputRef = useRef<HTMLInputElement | null>(null);
@@ -293,9 +294,6 @@ export function CommentThread({
     };
   }, []);
 
-  useEffect(() => {
-    setReassignTarget(currentAssigneeValue);
-  }, [currentAssigneeValue]);
 
   // Scroll to comment when URL hash matches #comment-{id}
   useEffect(() => {
@@ -327,7 +325,7 @@ export function CommentThread({
       setBody("");
       if (draftKey) clearDraft(draftKey);
       setReopen(false);
-      setReassignTarget(currentAssigneeValue);
+      setReassignTargetOverride(null);
     } finally {
       setSubmitting(false);
     }
@@ -406,7 +404,7 @@ export function CommentThread({
               noneLabel="No assignee"
               searchPlaceholder="Search assignees..."
               emptyMessage="No assignees found."
-              onChange={setReassignTarget}
+              onChange={setReassignTargetOverride}
               className="text-xs h-8"
               renderTriggerValue={(option) => {
                 if (!option) return <span className="text-muted-foreground">Assignee</span>;
