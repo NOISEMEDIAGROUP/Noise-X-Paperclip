@@ -40,6 +40,7 @@ import {
   parseProjectExecutionWorkspacePolicy,
   resolveExecutionWorkspaceMode,
 } from "./execution-workspace-policy.js";
+import { redactCurrentUserText, redactCurrentUserValue } from "../log-redaction.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
@@ -455,6 +456,7 @@ export function heartbeatService(db: Db) {
   const runLogStore = getRunLogStore();
   const secretsSvc = secretService(db);
   const issuesSvc = issueService(db);
+  const activeRunExecutions = new Set<string>();
 
   async function getAgent(agentId: string) {
     return db
@@ -812,6 +814,9 @@ export function heartbeatService(db: Db) {
       payload?: Record<string, unknown>;
     },
   ) {
+    const sanitizedMessage = event.message ? redactCurrentUserText(event.message) : event.message;
+    const sanitizedPayload = event.payload ? redactCurrentUserValue(event.payload) : event.payload;
+
     await db.insert(heartbeatRunEvents).values({
       companyId: run.companyId,
       runId: run.id,
@@ -821,8 +826,8 @@ export function heartbeatService(db: Db) {
       stream: event.stream,
       level: event.level,
       color: event.color,
-      message: event.message,
-      payload: event.payload,
+      message: sanitizedMessage,
+      payload: sanitizedPayload,
     });
 
     publishLiveEvent({
@@ -836,8 +841,8 @@ export function heartbeatService(db: Db) {
         stream: event.stream ?? null,
         level: event.level ?? null,
         color: event.color ?? null,
-        message: event.message ?? null,
-        payload: event.payload ?? null,
+        message: sanitizedMessage ?? null,
+        payload: sanitizedPayload ?? null,
       },
     });
   }
@@ -956,7 +961,7 @@ export function heartbeatService(db: Db) {
     const reaped: string[] = [];
 
     for (const run of activeRuns) {
-      if (runningProcesses.has(run.id)) continue;
+      if (runningProcesses.has(run.id) || activeRunExecutions.has(run.id)) continue;
 
       // Apply staleness threshold to avoid false positives
       if (staleThresholdMs > 0) {
@@ -993,6 +998,18 @@ export function heartbeatService(db: Db) {
       logger.warn({ reapedCount: reaped.length, runIds: reaped }, "reaped orphaned heartbeat runs");
     }
     return { reaped: reaped.length, runIds: reaped };
+  }
+
+  async function resumeQueuedRuns() {
+    const queuedRuns = await db
+      .select({ agentId: heartbeatRuns.agentId })
+      .from(heartbeatRuns)
+      .where(eq(heartbeatRuns.status, "queued"));
+
+    const agentIds = [...new Set(queuedRuns.map((r) => r.agentId))];
+    for (const agentId of agentIds) {
+      await startNextQueuedRunForAgent(agentId);
+    }
   }
 
   async function updateRuntimeState(
@@ -1086,6 +1103,9 @@ export function heartbeatService(db: Db) {
       run = claimed;
     }
 
+    activeRunExecutions.add(run.id);
+
+    try {
     const agent = await getAgent(run.agentId);
     if (!agent) {
       await setRunStatus(runId, "failed", {
@@ -1334,22 +1354,23 @@ export function heartbeatService(db: Db) {
         .where(eq(heartbeatRuns.id, runId));
 
       const onLog = async (stream: "stdout" | "stderr", chunk: string) => {
-        if (stream === "stdout") stdoutExcerpt = appendExcerpt(stdoutExcerpt, chunk);
-        if (stream === "stderr") stderrExcerpt = appendExcerpt(stderrExcerpt, chunk);
+        const sanitizedChunk = redactCurrentUserText(chunk);
+        if (stream === "stdout") stdoutExcerpt = appendExcerpt(stdoutExcerpt, sanitizedChunk);
+        if (stream === "stderr") stderrExcerpt = appendExcerpt(stderrExcerpt, sanitizedChunk);
         const ts = new Date().toISOString();
 
         if (handle) {
           await runLogStore.append(handle, {
             stream,
-            chunk,
+            chunk: sanitizedChunk,
             ts,
           });
         }
 
         const payloadChunk =
-          chunk.length > MAX_LIVE_LOG_CHUNK_BYTES
-            ? chunk.slice(chunk.length - MAX_LIVE_LOG_CHUNK_BYTES)
-            : chunk;
+          sanitizedChunk.length > MAX_LIVE_LOG_CHUNK_BYTES
+            ? sanitizedChunk.slice(sanitizedChunk.length - MAX_LIVE_LOG_CHUNK_BYTES)
+            : sanitizedChunk;
 
         publishLiveEvent({
           companyId: run.companyId,
@@ -1360,7 +1381,7 @@ export function heartbeatService(db: Db) {
             ts,
             stream,
             chunk: payloadChunk,
-            truncated: payloadChunk.length !== chunk.length,
+            truncated: payloadChunk.length !== sanitizedChunk.length,
           },
         });
       };
@@ -1551,7 +1572,9 @@ export function heartbeatService(db: Db) {
         error:
           outcome === "succeeded"
             ? null
-            : adapterResult.errorMessage ?? (outcome === "timed_out" ? "Timed out" : "Adapter failed"),
+            : redactCurrentUserText(
+                adapterResult.errorMessage ?? (outcome === "timed_out" ? "Timed out" : "Adapter failed"),
+              ),
         errorCode:
           outcome === "timed_out"
             ? "timeout"
@@ -1637,7 +1660,7 @@ export function heartbeatService(db: Db) {
 
       await finalizeAgentStatus(agent.id, outcome);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown adapter failure";
+      const message = redactCurrentUserText(err instanceof Error ? err.message : "Unknown adapter failure");
       logger.error({ err, runId }, "heartbeat execution failed");
 
       let logSummary: { bytes: number; sha256?: string; compressed: boolean } | null = null;
@@ -1705,10 +1728,41 @@ export function heartbeatService(db: Db) {
       }).catch(() => {});
 
       await finalizeAgentStatus(agent.id, "failed");
-    } finally {
-      await releaseRuntimeServicesForRun(run.id);
-      await startNextQueuedRunForAgent(agent.id);
     }
+    } catch (outerErr) {
+          // Setup code before adapter.execute threw (e.g. ensureRuntimeState, resolveWorkspaceForRun).
+          // The inner catch did not fire, so we must record the failure here.
+          const message = outerErr instanceof Error ? outerErr.message : "Unknown setup failure";
+          logger.error({ err: outerErr, runId }, "heartbeat execution setup failed");
+          await setRunStatus(runId, "failed", {
+            error: message,
+            errorCode: "adapter_failed",
+            finishedAt: new Date(),
+          }).catch(() => undefined);
+          await setWakeupStatus(run.wakeupRequestId, "failed", {
+            finishedAt: new Date(),
+            error: message,
+          }).catch(() => undefined);
+          const failedRun = await getRun(runId).catch(() => null);
+          if (failedRun) {
+            // Emit a run-log event so the failure is visible in the run timeline,
+            // consistent with what the inner catch block does for adapter failures.
+            await appendRunEvent(failedRun, 1, {
+              eventType: "error",
+              stream: "system",
+              level: "error",
+              message,
+            }).catch(() => undefined);
+            await releaseIssueExecutionAndPromote(failedRun).catch(() => undefined);
+          }
+          // Ensure the agent is not left stuck in "running" if the inner catch handler's
+          // DB calls threw (e.g. a transient DB error in finalizeAgentStatus).
+          await finalizeAgentStatus(run.agentId, "failed").catch(() => undefined);
+        } finally {
+          await releaseRuntimeServicesForRun(run.id).catch(() => undefined);
+          activeRunExecutions.delete(run.id);
+          await startNextQueuedRunForAgent(run.agentId);
+        }
   }
 
   async function releaseIssueExecutionAndPromote(run: typeof heartbeatRuns.$inferSelect) {
@@ -2442,6 +2496,7 @@ export function heartbeatService(db: Db) {
         store: run.logStore,
         logRef: run.logRef,
         ...result,
+        content: redactCurrentUserText(result.content),
       };
     },
 
@@ -2463,6 +2518,8 @@ export function heartbeatService(db: Db) {
     wakeup: enqueueWakeup,
 
     reapOrphanedRuns,
+
+    resumeQueuedRuns,
 
     tickTimers: async (now = new Date()) => {
       const allAgents = await db.select().from(agents);
