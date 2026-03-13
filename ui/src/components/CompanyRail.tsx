@@ -170,7 +170,12 @@ export function CompanyRail() {
     queries: companyIds.map((companyId) => ({
       queryKey: queryKeys.liveRuns(companyId),
       queryFn: () => heartbeatsApi.liveRunsForCompany(companyId),
-      refetchInterval: 10_000,
+      refetchInterval: (query: { state: { error: unknown } }) =>
+        query.state.error ? false : 10_000,
+      retry: (failureCount: number, error: unknown) => {
+        if (error && typeof error === "object" && "status" in error && (error as { status: number }).status === 404) return false;
+        return failureCount < 3;
+      },
     })),
   });
   const sidebarBadgeQueries = useQueries({
