@@ -1,3 +1,10 @@
+/**
+ * runId validation was moved from logActivity into actorMiddleware.
+ * See actor-middleware-run-id.test.ts for the validation tests.
+ *
+ * This file verifies that logActivity itself is simple: it writes whatever
+ * runId it receives directly, without performing any DB lookup.
+ */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { logActivity } from "../services/activity-log.js";
 
@@ -7,33 +14,23 @@ vi.mock("../services/live-events.js", () => ({
   publishLiveEvent: mockPublishLiveEvent,
 }));
 
-function createDbStub(runExists: boolean) {
+function makeDb() {
   const inserted: unknown[] = [];
-
-  // Chain for select().from().where().then()
-  const thenFn = vi.fn((cb: (rows: unknown[]) => unknown) =>
-    Promise.resolve(cb(runExists ? [{ id: "run-1" }] : [])),
-  );
-  const where = vi.fn(() => ({ then: thenFn }));
-  const from = vi.fn(() => ({ where }));
-  const select = vi.fn(() => ({ from }));
-
-  // Chain for insert().values()
   const values = vi.fn(async (row: unknown) => {
     inserted.push(row);
   });
   const insert = vi.fn(() => ({ values }));
-
-  return { db: { select, insert } as any, inserted, values };
+  const select = vi.fn(); // should not be called
+  return { db: { insert, select } as any, inserted, values, select };
 }
 
-describe("logActivity run_id validation", () => {
+describe("logActivity — simple pass-through (no run lookup)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("nulls out a runId that does not exist in heartbeat_runs", async () => {
-    const { db, values } = createDbStub(false);
+  it("writes the provided runId directly without querying heartbeat_runs", async () => {
+    const { db, values, select } = makeDb();
 
     await logActivity(db, {
       companyId: "company-1",
@@ -42,32 +39,16 @@ describe("logActivity run_id validation", () => {
       action: "issue.updated",
       entityType: "issue",
       entityId: "issue-1",
-      runId: "nonexistent-run-id",
+      runId: "run-abc",
     });
 
     const inserted = (values.mock.calls[0] as any)[0];
-    expect(inserted.runId).toBeNull();
+    expect(inserted.runId).toBe("run-abc");
+    expect((select as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
   });
 
-  it("preserves a runId that exists in heartbeat_runs", async () => {
-    const { db, values } = createDbStub(true);
-
-    await logActivity(db, {
-      companyId: "company-1",
-      actorType: "agent",
-      actorId: "agent-1",
-      action: "issue.updated",
-      entityType: "issue",
-      entityId: "issue-1",
-      runId: "run-1",
-    });
-
-    const inserted = (values.mock.calls[0] as any)[0];
-    expect(inserted.runId).toBe("run-1");
-  });
-
-  it("passes null through without querying heartbeat_runs", async () => {
-    const { db, values } = createDbStub(false);
+  it("writes null when runId is null, without querying heartbeat_runs", async () => {
+    const { db, values, select } = makeDb();
 
     await logActivity(db, {
       companyId: "company-1",
@@ -81,7 +62,6 @@ describe("logActivity run_id validation", () => {
 
     const inserted = (values.mock.calls[0] as any)[0];
     expect(inserted.runId).toBeNull();
-    // select should not have been called since runId was null
-    expect((db.select as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
+    expect((select as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
   });
 });
