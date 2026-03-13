@@ -341,32 +341,25 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   const buildArgs = (sessionFile: string): string[] => {
     const args: string[] = [];
-    
-    // Use RPC mode for proper lifecycle management (waits for agent completion)
-    args.push("--mode", "rpc");
-    
+
+    // Use Pi's single-shot JSON mode so the process exits after the task completes.
+    args.push("--mode", "json");
+
     // Use --append-system-prompt to extend Pi's default system prompt
     args.push("--append-system-prompt", renderedSystemPromptExtension);
-    
+
     if (provider) args.push("--provider", provider);
     if (modelId) args.push("--model", modelId);
     if (thinking) args.push("--thinking", thinking);
-    
+
     args.push("--tools", "read,bash,edit,write,grep,find,ls");
     args.push("--session", sessionFile);
-    
-    if (extraArgs.length > 0) args.push(...extraArgs);
-    
-    return args;
-  };
 
-  const buildRpcStdin = (): string => {
-    // Send the prompt as an RPC command
-    const promptCommand = {
-      type: "prompt",
-      message: userPrompt,
-    };
-    return JSON.stringify(promptCommand) + "\n";
+    if (extraArgs.length > 0) args.push(...extraArgs);
+
+    args.push("-p", userPrompt);
+
+    return args;
   };
 
   const runAttempt = async (sessionFile: string) => {
@@ -414,7 +407,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       timeoutSec,
       graceSec,
       onLog: bufferedOnLog,
-      stdin: buildRpcStdin(),
     });
     
     // Flush any remaining buffer content
@@ -453,14 +445,16 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       : null;
 
     const stderrLine = firstNonEmptyLine(attempt.proc.stderr);
+    const parsedError = attempt.parsed.errors[0]?.trim() || "";
     const rawExitCode = attempt.proc.exitCode;
-    const fallbackErrorMessage = stderrLine || `Pi exited with code ${rawExitCode ?? -1}`;
+    const effectiveExitCode = (rawExitCode ?? 0) === 0 && parsedError ? 1 : rawExitCode;
+    const fallbackErrorMessage = parsedError || stderrLine || `Pi exited with code ${effectiveExitCode ?? -1}`;
 
     return {
-      exitCode: rawExitCode,
+      exitCode: effectiveExitCode,
       signal: attempt.proc.signal,
       timedOut: false,
-      errorMessage: (rawExitCode ?? 0) === 0 ? null : fallbackErrorMessage,
+      errorMessage: (effectiveExitCode ?? 0) === 0 ? null : fallbackErrorMessage,
       usage: {
         inputTokens: attempt.parsed.usage.inputTokens,
         outputTokens: attempt.parsed.usage.outputTokens,

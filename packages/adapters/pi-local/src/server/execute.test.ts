@@ -145,14 +145,60 @@ describe("pi execute", () => {
         }),
       );
 
-      const [, , args] = mockRunChildProcess.mock.calls[0];
+      const [, , args, runOptions] = mockRunChildProcess.mock.calls[0];
       const sessionFlagIndex = args.indexOf("--session");
       expect(sessionFlagIndex).toBeGreaterThanOrEqual(0);
       const sessionPath = args[sessionFlagIndex + 1] as string;
       expect(sessionPath.startsWith(path.join(cwd, ".paperclip", "pi", "sessions"))).toBe(true);
       expect(sessionPath.includes(`${path.sep}.pi${path.sep}paperclips${path.sep}`)).toBe(false);
+      expect(args).toContain("--mode");
+      expect(args).toContain("json");
+      const promptFlagIndex = args.indexOf("-p");
+      expect(promptFlagIndex).toBeGreaterThanOrEqual(0);
+      expect(args[promptFlagIndex + 1]).toContain("Continue your Paperclip work.");
+      expect(runOptions.stdin).toBeUndefined();
     } finally {
       await fs.rm(cwd, { recursive: true, force: true });
     }
+  });
+
+  it("surfaces Pi logical errors even when the process exits with code 0", async () => {
+    mockEnsureCommandResolvable.mockResolvedValue(undefined);
+    mockListPaperclipSkillEntries.mockResolvedValue([]);
+    mockRemoveMaintainerOnlySkillSymlinks.mockResolvedValue([]);
+    mockEnsurePiModelConfiguredAndAvailable.mockResolvedValue([]);
+    mockRunChildProcess.mockResolvedValue({
+      exitCode: 0,
+      signal: null,
+      timedOut: false,
+      stdout: [
+        JSON.stringify({
+          type: "turn_end",
+          message: {
+            role: "assistant",
+            content: "",
+            stopReason: "error",
+            errorMessage: "Failed to extract accountId from token",
+          },
+        }),
+        JSON.stringify({
+          type: "agent_end",
+          messages: [
+            {
+              role: "assistant",
+              content: "",
+              stopReason: "error",
+              errorMessage: "Failed to extract accountId from token",
+            },
+          ],
+        }),
+      ].join("\n"),
+      stderr: "",
+    });
+
+    const result = await execute(buildContext());
+
+    expect(result.exitCode).toBe(1);
+    expect(result.errorMessage).toBe("Failed to extract accountId from token");
   });
 });
