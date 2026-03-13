@@ -57,6 +57,14 @@ describe("built-in template registry", () => {
       "high-trust operations",
     ]);
     expect(detail.manifest.issues).toHaveLength(4);
+    expect(detail.manifest.agents[0]).toEqual(expect.objectContaining({
+      slug: "ceo",
+      budgetMonthlyCents: 15000,
+      adapterConfig: expect.objectContaining({
+        dangerouslyBypassApprovalsAndSandbox: false,
+        modelReasoningEffort: "high",
+      }),
+    }));
     expect(detail.setupMarkdown).toContain("Safe Autonomous Organization Setup");
   });
 

@@ -161,16 +161,25 @@ export function OnboardingWizard() {
   useEffect(() => {
     if (!onboardingOpen) return;
     const cId = onboardingOptions.companyId ?? null;
+    const setupMode = onboardingOptions.setupMode ?? "blank";
     setStep(onboardingOptions.initialStep ?? 1);
     setCreatedCompanyId(cId);
     setCreatedCompanyPrefix(null);
-    setCompanySetupMode("blank");
-    setSelectedTemplateId(null);
+    setCompanySetupMode(setupMode);
+    setSelectedTemplateId(
+      setupMode === "template" ? onboardingOptions.templateId ?? null : null
+    );
+    setCompanyName("");
+    setCompanyGoal("");
+    setCreatedAgentId(null);
+    setCreatedIssueRef(null);
     setImportedTemplateSummary(null);
   }, [
     onboardingOpen,
     onboardingOptions.companyId,
-    onboardingOptions.initialStep
+    onboardingOptions.initialStep,
+    onboardingOptions.setupMode,
+    onboardingOptions.templateId,
   ]);
 
   // Backfill issue prefix for an existing company once companies are loaded.

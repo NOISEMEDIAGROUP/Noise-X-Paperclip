@@ -29,7 +29,9 @@
       "adapterType": "codex_local",
       "adapterConfig": {
         "model": "gpt-5.3-codex",
-        "search": true
+        "modelReasoningEffort": "high",
+        "search": true,
+        "dangerouslyBypassApprovalsAndSandbox": false
       },
       "runtimeConfig": {
         "heartbeat": {
@@ -44,7 +46,7 @@
       "permissions": {
         "canCreateAgents": true
       },
-      "budgetMonthlyCents": 0,
+      "budgetMonthlyCents": 15000,
       "metadata": null
     },
     {
@@ -59,7 +61,9 @@
       "adapterType": "codex_local",
       "adapterConfig": {
         "model": "gpt-5.3-codex",
-        "search": true
+        "modelReasoningEffort": "high",
+        "search": true,
+        "dangerouslyBypassApprovalsAndSandbox": false
       },
       "runtimeConfig": {
         "heartbeat": {
@@ -72,7 +76,7 @@
         }
       },
       "permissions": {},
-      "budgetMonthlyCents": 0,
+      "budgetMonthlyCents": 12000,
       "metadata": null
     },
     {
@@ -86,7 +90,9 @@
       "reportsToSlug": "ceo",
       "adapterType": "codex_local",
       "adapterConfig": {
-        "model": "gpt-5.3-codex"
+        "model": "gpt-5.3-codex",
+        "modelReasoningEffort": "medium",
+        "dangerouslyBypassApprovalsAndSandbox": false
       },
       "runtimeConfig": {
         "heartbeat": {
@@ -99,7 +105,7 @@
         }
       },
       "permissions": {},
-      "budgetMonthlyCents": 0,
+      "budgetMonthlyCents": 8000,
       "metadata": null
     },
     {
@@ -114,7 +120,9 @@
       "adapterType": "codex_local",
       "adapterConfig": {
         "model": "gpt-5.3-codex",
-        "search": true
+        "modelReasoningEffort": "high",
+        "search": true,
+        "dangerouslyBypassApprovalsAndSandbox": false
       },
       "runtimeConfig": {
         "heartbeat": {
@@ -127,7 +135,7 @@
         }
       },
       "permissions": {},
-      "budgetMonthlyCents": 0,
+      "budgetMonthlyCents": 15000,
       "metadata": null
     },
     {
@@ -142,7 +150,9 @@
       "adapterType": "codex_local",
       "adapterConfig": {
         "model": "gpt-5.3-codex",
-        "search": true
+        "modelReasoningEffort": "medium",
+        "search": true,
+        "dangerouslyBypassApprovalsAndSandbox": false
       },
       "runtimeConfig": {
         "heartbeat": {
@@ -155,7 +165,7 @@
         }
       },
       "permissions": {},
-      "budgetMonthlyCents": 0,
+      "budgetMonthlyCents": 8000,
       "metadata": null
     },
     {
@@ -169,7 +179,9 @@
       "reportsToSlug": "operations-lead",
       "adapterType": "codex_local",
       "adapterConfig": {
-        "model": "gpt-5.3-codex"
+        "model": "gpt-5.3-codex",
+        "modelReasoningEffort": "low",
+        "dangerouslyBypassApprovalsAndSandbox": false
       },
       "runtimeConfig": {
         "heartbeat": {
@@ -182,7 +194,7 @@
         }
       },
       "permissions": {},
-      "budgetMonthlyCents": 0,
+      "budgetMonthlyCents": 5000,
       "metadata": null
     }
   ],

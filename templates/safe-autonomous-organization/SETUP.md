@@ -2,11 +2,12 @@
 
 Use this checklist after importing the template:
 
-1. Verify the adapter configuration for each agent and switch models or runtimes if your environment differs from the defaults.
-2. Confirm the `Safety Lead` and `Finance and Risk Lead` are part of any workflow that could spend money, touch production systems, or make irreversible changes.
-3. Create one company goal that defines the operating boundary for the organization so the CEO has a clear mission to optimize for.
-4. Start with a small research or policy task before assigning high-impact execution work.
-5. Review company permissions and approval settings before allowing the org to hire more agents or run broader automation.
+1. Verify Codex authentication for the imported agents. This template assumes `codex_local` agents with safe defaults and no approval/sandbox bypass.
+2. Review the per-agent monthly budgets. The template ships with modest non-zero caps so runaway spend pauses agents instead of silently continuing.
+3. Confirm the `Safety Lead` and `Finance and Risk Lead` are part of any workflow that could spend money, touch production systems, or make irreversible changes.
+4. Create or refine the company-level operating boundary goal so the CEO has a clear mission and explicit escalation rules.
+5. Start with a small research or policy task before assigning high-impact execution work.
+6. Review company permissions and approval settings before allowing the org to hire more agents or run broader automation.
 
 Suggested first tasks:
 
