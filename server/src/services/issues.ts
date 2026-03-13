@@ -783,6 +783,22 @@ export function issueService(db: Db) {
       });
     },
 
+    /**
+     * Atomically merge keys into pipelineState using PostgreSQL's JSONB || operator.
+     * This avoids the read-modify-write race condition that exists when merging in app code.
+     */
+    mergePipelineState: async (id: string, state: Record<string, unknown>) => {
+      const rows = await db
+        .update(issues)
+        .set({
+          pipelineState: sql`COALESCE(${issues.pipelineState}, '{}') || ${JSON.stringify(state)}::jsonb`,
+          updatedAt: new Date(),
+        })
+        .where(eq(issues.id, id))
+        .returning();
+      return rows[0] ?? null;
+    },
+
     remove: (id: string) =>
       db.transaction(async (tx) => {
         const attachmentAssetIds = await tx
