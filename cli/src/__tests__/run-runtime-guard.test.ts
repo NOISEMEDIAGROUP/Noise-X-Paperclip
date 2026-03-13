@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 import { acquireRunLock, isPidAlive, waitForReadiness } from "../commands/run-runtime-guard.js";
 
@@ -34,12 +35,18 @@ describe("run-runtime-guard", () => {
     lockA.release();
   });
 
-  it("replaces stale lock", () => {
+  it("replaces stale lock", async () => {
+    const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 10)"]);
+    const deadPid = child.pid ?? -1;
+    await new Promise<void>((resolve) => {
+      child.once("exit", () => resolve());
+    });
+
     const dir = mkTempDir();
     const lockPath = path.join(dir, "run.lock.json");
     fs.writeFileSync(
       lockPath,
-      JSON.stringify({ pid: 999999, startedAt: new Date().toISOString(), command: "x", instanceId: "default" }),
+      JSON.stringify({ pid: deadPid, startedAt: new Date().toISOString(), command: "x", instanceId: "default" }),
       "utf8",
     );
     const lock = acquireRunLock(dir, "default");
@@ -84,6 +91,22 @@ describe("run-runtime-guard", () => {
     expect(result.ok).toBe(false);
     expect(result.apiOk).toBe(true);
     expect(result.uiOk).toBe(false);
+  });
+
+  it("waitForReadiness passes in api-only mode when api is ok", async () => {
+    const fetcher = async (): Promise<Response> => new Response("ok", { status: 200 });
+
+    const result = await waitForReadiness({
+      baseUrl: "http://127.0.0.1:3100",
+      mode: "api-only",
+      timeoutMs: 100,
+      intervalMs: 10,
+      fetcher: fetcher as typeof fetch,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.apiOk).toBe(true);
+    expect(result.uiOk).toBe(true);
   });
 
   it("isPidAlive works for current process", () => {

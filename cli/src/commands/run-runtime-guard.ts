@@ -19,7 +19,9 @@ export function isPidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException | undefined)?.code;
+    if (code === "EPERM") return true;
     return false;
   }
 }
@@ -53,8 +55,20 @@ export function acquireRunLock(instanceRoot: string, instanceId: string): RunLoc
         `Another paperclipai run appears active for instance '${instanceId}' (pid=${existing.pid}, startedAt=${existing.startedAt}).`,
       );
     }
-    // stale/corrupt lock: replace
-    fs.writeFileSync(lockPath, JSON.stringify(state, null, 2), { encoding: "utf8" });
+
+    // stale/corrupt lock: attempt atomic re-acquire first
+    try {
+      fs.rmSync(lockPath, { force: true });
+      fs.writeFileSync(lockPath, JSON.stringify(state, null, 2), { encoding: "utf8", flag: "wx" });
+    } catch {
+      const contested = readLock(lockPath);
+      if (contested && isPidAlive(contested.pid)) {
+        throw new Error(
+          `Another paperclipai run appears active for instance '${instanceId}' (pid=${contested.pid}, startedAt=${contested.startedAt}).`,
+        );
+      }
+      throw new Error(`Failed to acquire run lock for instance '${instanceId}'. Retry startup.`);
+    }
   }
 
   let released = false;

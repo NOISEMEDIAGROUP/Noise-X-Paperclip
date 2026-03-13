@@ -51,8 +51,18 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   }
 
   const cleanup = () => lock.release();
-  process.once("SIGINT", cleanup);
-  process.once("SIGTERM", cleanup);
+  const onSigint = () => {
+    cleanup();
+    process.removeListener("SIGINT", onSigint);
+    process.kill(process.pid, "SIGINT");
+  };
+  const onSigterm = () => {
+    cleanup();
+    process.removeListener("SIGTERM", onSigterm);
+    process.kill(process.pid, "SIGTERM");
+  };
+  process.once("SIGINT", onSigint);
+  process.once("SIGTERM", onSigterm);
   process.once("exit", cleanup);
 
   const configPath = resolveConfigPath(opts.config);
