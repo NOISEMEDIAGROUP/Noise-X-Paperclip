@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { agentMemories } from "@paperclipai/db";
 
@@ -90,7 +90,7 @@ export function agentMemoryService(db: Db) {
           },
         })
         .returning()
-        .then((rows) => rows[0]);
+        .then((rows) => rows[0] ?? null);
     },
 
     /**
