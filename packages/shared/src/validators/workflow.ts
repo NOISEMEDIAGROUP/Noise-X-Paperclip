@@ -19,7 +19,7 @@ export const updateWorkflowSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   description: z.string().optional().nullable(),
   steps: z.array(workflowStepSchema).min(1).optional(),
-  enabled: z.enum(["true", "false"]).optional(),
+  enabled: z.boolean().optional(),
 });
 export type UpdateWorkflow = z.infer<typeof updateWorkflowSchema>;
 

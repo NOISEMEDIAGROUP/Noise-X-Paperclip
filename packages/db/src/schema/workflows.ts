@@ -1,13 +1,6 @@
-import { pgTable, uuid, text, timestamp, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, jsonb, index, boolean } from "drizzle-orm/pg-core";
 import { companies } from "./companies.js";
-
-export interface WorkflowStepDefinition {
-  stepIndex: number;
-  name: string;
-  agentId: string | null;
-  conditions?: Record<string, unknown>;
-  requiresApproval?: boolean;
-}
+import type { WorkflowStepDefinition } from "@paperclipai/shared";
 
 export const workflows = pgTable(
   "workflows",
@@ -17,7 +10,7 @@ export const workflows = pgTable(
     name: text("name").notNull(),
     description: text("description"),
     steps: jsonb("steps").$type<WorkflowStepDefinition[]>().notNull(),
-    enabled: text("enabled").notNull().default("true"),
+    enabled: boolean("enabled").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

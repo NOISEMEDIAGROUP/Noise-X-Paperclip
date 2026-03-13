@@ -112,7 +112,7 @@ export function workflowService(db: Db) {
         name?: string;
         description?: string | null;
         steps?: WorkflowStepDefinition[];
-        enabled?: string;
+        enabled?: boolean;
       },
     ) => {
       await getWorkflowOrThrow(id);
@@ -145,7 +145,7 @@ export function workflowService(db: Db) {
       if (workflow.companyId !== companyId) {
         throw notFound("Workflow not found");
       }
-      if (workflow.enabled !== "true") {
+      if (!workflow.enabled) {
         throw unprocessable("Workflow is disabled");
       }
 
@@ -155,33 +155,62 @@ export function workflowService(db: Db) {
       }
 
       const initialState = data.initialState ?? {};
+
+      // Find first step whose conditions are satisfied (Issue #4)
+      let selectedStep: WorkflowStepDefinition | null = null;
+      let selectedIndex = -1;
+      for (let i = 0; i < steps.length; i++) {
+        const step = steps[i];
+        if (step.conditions && !evaluateConditions(step.conditions, initialState)) {
+          continue;
+        }
+        selectedStep = step;
+        selectedIndex = i;
+        break;
+      }
+
+      if (!selectedStep) {
+        // No step's conditions matched — insert as completed immediately
+        const run = await db
+          .insert(workflowRuns)
+          .values({
+            companyId,
+            workflowId: data.workflowId,
+            issueId: data.issueId ?? null,
+            currentStepIndex: 0,
+            status: "completed",
+            state: initialState,
+            finishedAt: new Date(),
+          })
+          .returning()
+          .then((rows) => rows[0]);
+        return run;
+      }
+
+      // Determine initial status before inserting (Issue #2)
+      const initialStatus = selectedStep.requiresApproval ? "paused" : "running";
+
       const run = await db
         .insert(workflowRuns)
         .values({
           companyId,
           workflowId: data.workflowId,
           issueId: data.issueId ?? null,
-          currentStepIndex: 0,
-          status: "running",
+          currentStepIndex: selectedIndex,
+          status: initialStatus,
           state: initialState,
         })
         .returning()
         .then((rows) => rows[0]);
 
-      const firstStep = steps[0];
-      if (firstStep.requiresApproval) {
-        await db
-          .update(workflowRuns)
-          .set({ status: "paused", updatedAt: new Date() })
-          .where(eq(workflowRuns.id, run.id));
-
+      if (selectedStep.requiresApproval) {
         await approvalsSvc.create(companyId, {
           type: "workflow_step",
           payload: {
             workflowRunId: run.id,
             workflowId: workflow.id,
-            stepIndex: firstStep.stepIndex,
-            stepName: firstStep.name,
+            stepIndex: selectedStep.stepIndex,
+            stepName: selectedStep.name,
           },
           status: "pending",
           decisionNote: null,
@@ -190,10 +219,10 @@ export function workflowService(db: Db) {
           updatedAt: new Date(),
         });
 
-        return { ...run, status: "paused" };
+        return run;
       }
 
-      await triggerStepAgent(companyId, firstStep, run);
+      await triggerStepAgent(companyId, selectedStep, run);
       return run;
     },
 
@@ -217,9 +246,21 @@ export function workflowService(db: Db) {
         mergedState._lastOutcome = data.outcome;
       }
 
-      const nextIndex = run.currentStepIndex + 1;
+      // Find next step whose conditions are satisfied (Issue #1)
+      let nextStep: WorkflowStepDefinition | null = null;
+      let nextIndex = -1;
+      for (let i = run.currentStepIndex + 1; i < steps.length; i++) {
+        const candidate = steps[i];
+        if (candidate.conditions && !evaluateConditions(candidate.conditions, mergedState)) {
+          continue;
+        }
+        nextStep = candidate;
+        nextIndex = i;
+        break;
+      }
 
-      if (nextIndex >= steps.length) {
+      if (!nextStep) {
+        // No remaining step's conditions matched — mark as completed (not failed)
         const now = new Date();
         const completed = await db
           .update(workflowRuns)
@@ -230,31 +271,16 @@ export function workflowService(db: Db) {
             finishedAt: now,
             updatedAt: now,
           })
-          .where(eq(workflowRuns.id, runId))
-          .returning()
-          .then((rows) => rows[0]);
-        return completed;
-      }
-
-      const nextStep = steps[nextIndex];
-
-      if (nextStep.conditions) {
-        if (!evaluateConditions(nextStep.conditions, mergedState)) {
-          const now = new Date();
-          const failed = await db
-            .update(workflowRuns)
-            .set({
-              currentStepIndex: nextIndex,
-              status: "failed",
-              state: mergedState,
-              finishedAt: now,
-              updatedAt: now,
-            })
-            .where(eq(workflowRuns.id, runId))
-            .returning()
-            .then((rows) => rows[0]);
-          return failed;
-        }
+          .where(
+            and(
+              eq(workflowRuns.id, runId),
+              eq(workflowRuns.currentStepIndex, run.currentStepIndex),
+            ),
+          )
+          .returning();
+        if (completed.length === 0)
+          throw unprocessable("Run was already advanced by another caller");
+        return completed[0];
       }
 
       if (nextStep.requiresApproval) {
@@ -267,9 +293,15 @@ export function workflowService(db: Db) {
             state: mergedState,
             updatedAt: now,
           })
-          .where(eq(workflowRuns.id, runId))
-          .returning()
-          .then((rows) => rows[0]);
+          .where(
+            and(
+              eq(workflowRuns.id, runId),
+              eq(workflowRuns.currentStepIndex, run.currentStepIndex),
+            ),
+          )
+          .returning();
+        if (paused.length === 0)
+          throw unprocessable("Run was already advanced by another caller");
 
         await approvalsSvc.create(run.companyId, {
           type: "workflow_step",
@@ -286,11 +318,12 @@ export function workflowService(db: Db) {
           updatedAt: new Date(),
         });
 
-        return paused;
+        return paused[0];
       }
 
+      // Optimistic concurrency guard (Issue #3)
       const now = new Date();
-      const advanced = await db
+      const result = await db
         .update(workflowRuns)
         .set({
           currentStepIndex: nextIndex,
@@ -298,12 +331,18 @@ export function workflowService(db: Db) {
           state: mergedState,
           updatedAt: now,
         })
-        .where(eq(workflowRuns.id, runId))
-        .returning()
-        .then((rows) => rows[0]);
+        .where(
+          and(
+            eq(workflowRuns.id, runId),
+            eq(workflowRuns.currentStepIndex, run.currentStepIndex),
+          ),
+        )
+        .returning();
+      if (result.length === 0)
+        throw unprocessable("Run was already advanced by another caller");
 
-      await triggerStepAgent(run.companyId, nextStep, advanced);
-      return advanced;
+      await triggerStepAgent(run.companyId, nextStep, result[0]);
+      return result[0];
     },
 
     getRun: async (runId: string) => {

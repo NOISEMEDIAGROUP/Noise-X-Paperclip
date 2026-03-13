@@ -12,7 +12,7 @@ export interface Workflow {
   name: string;
   description: string | null;
   steps: WorkflowStepDefinition[];
-  enabled: string;
+  enabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
