@@ -79,7 +79,7 @@ PATCH /api/agents/{agentId}
 ```
 POST /api/agents/{agentId}/pause
 ```
-
+## 恢复智能体
 暂时停止智能体的心跳。
 
 ## 简历智能体
