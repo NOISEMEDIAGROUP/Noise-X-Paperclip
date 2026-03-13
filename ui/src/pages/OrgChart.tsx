@@ -121,6 +121,7 @@ const adapterLabels: Record<string, string> = {
   gemini_local: "Gemini",
   opencode_local: "OpenCode",
   picoclaw_local: "PicoClaw",
+  picoclaw_remote: "PicoClaw Remote",
   cursor: "Cursor",
   openclaw_gateway: "OpenClaw Gateway",
   process: "Process",

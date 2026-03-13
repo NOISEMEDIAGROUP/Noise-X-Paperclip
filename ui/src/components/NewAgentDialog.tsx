@@ -29,6 +29,7 @@ type AdvancedAdapterType =
   | "opencode_local"
   | "pi_local"
   | "picoclaw_local"
+  | "picoclaw_remote"
   | "cursor"
   | "openclaw_gateway";
 
@@ -76,6 +77,12 @@ const ADVANCED_ADAPTER_OPTIONS: Array<{
     label: "PicoClaw",
     icon: Terminal,
     desc: "Local PicoClaw agent",
+  },
+  {
+    value: "picoclaw_remote",
+    label: "PicoClaw Remote",
+    icon: Terminal,
+    desc: "Remote PicoClaw bridge",
   },
   {
     value: "cursor",

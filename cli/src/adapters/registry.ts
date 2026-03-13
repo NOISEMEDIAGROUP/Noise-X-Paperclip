@@ -6,6 +6,7 @@ import { printGeminiStreamEvent } from "@paperclipai/adapter-gemini-local/cli";
 import { printOpenCodeStreamEvent } from "@paperclipai/adapter-opencode-local/cli";
 import { printPiStreamEvent } from "@paperclipai/adapter-pi-local/cli";
 import { printPicoClawStreamEvent } from "@paperclipai/adapter-picoclaw-local/cli";
+import { printPicoClawRemoteStreamEvent } from "@paperclipai/adapter-picoclaw-remote/cli";
 import { printOpenClawGatewayStreamEvent } from "@paperclipai/adapter-openclaw-gateway/cli";
 import { processCLIAdapter } from "./process/index.js";
 import { httpCLIAdapter } from "./http/index.js";
@@ -35,6 +36,11 @@ const picoClawLocalCLIAdapter: CLIAdapterModule = {
   formatStdoutEvent: printPicoClawStreamEvent,
 };
 
+const picoClawRemoteCLIAdapter: CLIAdapterModule = {
+  type: "picoclaw_remote",
+  formatStdoutEvent: printPicoClawRemoteStreamEvent,
+};
+
 const cursorLocalCLIAdapter: CLIAdapterModule = {
   type: "cursor",
   formatStdoutEvent: printCursorStreamEvent,
@@ -57,6 +63,7 @@ const adaptersByType = new Map<string, CLIAdapterModule>(
     openCodeLocalCLIAdapter,
     piLocalCLIAdapter,
     picoClawLocalCLIAdapter,
+    picoClawRemoteCLIAdapter,
     cursorLocalCLIAdapter,
     geminiLocalCLIAdapter,
     openclawGatewayCLIAdapter,

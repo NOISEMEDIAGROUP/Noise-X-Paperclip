@@ -33,6 +33,7 @@ const SUPPORTED_ADVANCED_ADAPTER_TYPES = new Set<CreateConfigValues["adapterType
   "opencode_local",
   "pi_local",
   "picoclaw_local",
+  "picoclaw_remote",
   "cursor",
   "openclaw_gateway",
 ]);

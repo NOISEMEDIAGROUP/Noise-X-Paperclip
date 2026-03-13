@@ -20,6 +20,7 @@ const adapterLabels: Record<string, string> = {
   gemini_local: "Gemini CLI (local)",
   opencode_local: "OpenCode (local)",
   picoclaw_local: "PicoClaw (local)",
+  picoclaw_remote: "PicoClaw (remote)",
   openclaw_gateway: "OpenClaw Gateway",
   cursor: "Cursor (local)",
   process: "Process",

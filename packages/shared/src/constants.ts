@@ -30,6 +30,7 @@ export const AGENT_ADAPTER_TYPES = [
   "opencode_local",
   "pi_local",
   "picoclaw_local",
+  "picoclaw_remote",
   "cursor",
   "openclaw_gateway",
 ] as const;

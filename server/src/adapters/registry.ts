@@ -60,6 +60,14 @@ import {
 import {
   agentConfigurationDoc as picoClawAgentConfigurationDoc,
 } from "@paperclipai/adapter-picoclaw-local";
+import {
+  execute as picoClawRemoteExecute,
+  testEnvironment as picoClawRemoteTestEnvironment,
+  sessionCodec as picoClawRemoteSessionCodec,
+} from "@paperclipai/adapter-picoclaw-remote/server";
+import {
+  agentConfigurationDoc as picoClawRemoteAgentConfigurationDoc,
+} from "@paperclipai/adapter-picoclaw-remote";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
 
@@ -147,6 +155,16 @@ const picoClawLocalAdapter: ServerAdapterModule = {
   agentConfigurationDoc: picoClawAgentConfigurationDoc,
 };
 
+const picoClawRemoteAdapter: ServerAdapterModule = {
+  type: "picoclaw_remote",
+  execute: picoClawRemoteExecute,
+  testEnvironment: picoClawRemoteTestEnvironment,
+  sessionCodec: picoClawRemoteSessionCodec,
+  models: [],
+  supportsLocalAgentJwt: false,
+  agentConfigurationDoc: picoClawRemoteAgentConfigurationDoc,
+};
+
 const adaptersByType = new Map<string, ServerAdapterModule>(
   [
     claudeLocalAdapter,
@@ -154,6 +172,7 @@ const adaptersByType = new Map<string, ServerAdapterModule>(
     openCodeLocalAdapter,
     piLocalAdapter,
     picoClawLocalAdapter,
+    picoClawRemoteAdapter,
     cursorLocalAdapter,
     geminiLocalAdapter,
     openclawGatewayAdapter,
