@@ -97,10 +97,10 @@ export function Dashboard() {
       }
     }
     return [...projects]
-      .filter((p) => !p.archivedAt && (projectIssueCounts.get(p.id) ?? 0) > 0)
+      .filter((p) => !p.archivedAt)
       .sort((a, b) => {
-        const aTime = projectLastUpdate.get(a.id)?.getTime() ?? 0;
-        const bTime = projectLastUpdate.get(b.id)?.getTime() ?? 0;
+        const aTime = (projectLastUpdate.get(a.id) ?? new Date(a.updatedAt)).getTime();
+        const bTime = (projectLastUpdate.get(b.id) ?? new Date(b.updatedAt)).getTime();
         return bTime - aTime;
       })
       .slice(0, 5)
@@ -109,7 +109,6 @@ export function Dashboard() {
         issueCount: projectIssueCounts.get(p.id) ?? 0,
         lastIssueUpdate: projectLastUpdate.get(p.id) ?? new Date(p.updatedAt),
       }));
-  }, [projects, issues]);
 
   useEffect(() => {
     for (const timer of activityAnimationTimersRef.current) {
