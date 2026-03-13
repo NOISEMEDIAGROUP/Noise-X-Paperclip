@@ -60,7 +60,9 @@ vi.mock("../services/index.js", () => ({
 }));
 
 function createDbStub(projectPrimaryWorkspaceCwd: string) {
-  return createQueuedDbStub([[{ cwd: projectPrimaryWorkspaceCwd }]]);
+  return createQueuedDbStub([
+    [{ projectId: "11111111-1111-4111-8111-111111111111", cwd: projectPrimaryWorkspaceCwd }],
+  ]);
 }
 
 function createQueuedDbStub(results: unknown[][]) {
@@ -158,6 +160,43 @@ describe("POST /companies/:companyId/agents workspace normalization", () => {
         [
           { projectId: "11111111-1111-4111-8111-111111111111", cwd: "/Users/test/code/alpha" },
           { projectId: "22222222-2222-4222-8222-222222222222", cwd: "/Users/test/code/beta" },
+        ],
+      ]),
+    );
+
+    const res = await request(app)
+      .post("/api/companies/company-1/agents")
+      .send({
+        name: "CTO",
+        role: "engineer",
+        adapterType: "codex_local",
+        adapterConfig: {
+          cwd: wrapperWorkspaceCwd,
+        },
+      });
+
+    expect(res.status).toBe(201);
+    expect(mockAgentService.create).toHaveBeenCalledWith(
+      "company-1",
+      expect.objectContaining({
+        adapterConfig: expect.objectContaining({
+          cwd: wrapperWorkspaceCwd,
+        }),
+      }),
+    );
+  });
+
+  it("does not rewrite wrapper cwd when another primary project is repo-only", async () => {
+    const wrapperWorkspaceCwd = path.resolve(
+      resolvePaperclipInstanceRoot(),
+      "workspaces",
+      "wrapper-workspace",
+    );
+    const app = createApp(
+      createQueuedDbStub([
+        [
+          { projectId: "11111111-1111-4111-8111-111111111111", cwd: "/Users/test/code/alpha" },
+          { projectId: "22222222-2222-4222-8222-222222222222", cwd: "/__paperclip_repo_only__" },
         ],
       ]),
     );

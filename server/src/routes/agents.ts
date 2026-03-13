@@ -271,14 +271,16 @@ export function agentRoutes(db: Db) {
       .from(projectWorkspaces)
       .where(and(eq(projectWorkspaces.companyId, companyId), eq(projectWorkspaces.isPrimary, true)))
       .orderBy(projectWorkspaces.createdAt, projectWorkspaces.id);
+    const projectIds = Array.from(
+      new Set(rows.map((row) => asNonEmptyString(row.projectId)).filter((projectId) => projectId !== null)),
+    );
+    if (projectIds.length !== 1) {
+      return null;
+    }
     const usableRows = rows.filter((row) => {
       const cwd = asNonEmptyString(row.cwd);
       return Boolean(cwd && cwd !== "/__paperclip_repo_only__");
     });
-    const projectIds = Array.from(new Set(usableRows.map((row) => row.projectId)));
-    if (projectIds.length !== 1) {
-      return null;
-    }
     return asNonEmptyString(usableRows[0]?.cwd);
   }
 
