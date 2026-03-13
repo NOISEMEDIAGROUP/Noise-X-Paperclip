@@ -235,6 +235,8 @@ export function approvalRoutes(db: Db) {
       req.body.decidedByUserId ?? "board",
       req.body.decisionNote,
     );
+    const linkedIssues = await issueApprovalsSvc.listIssuesForApproval(approval.id);
+    const linkedIssueIds = linkedIssues.map((issue) => issue.id);
 
     if (applied) {
       await logActivity(db, {
@@ -244,8 +246,22 @@ export function approvalRoutes(db: Db) {
         action: "approval.rejected",
         entityType: "approval",
         entityId: approval.id,
-        details: { type: approval.type },
+        details: { type: approval.type, linkedIssueIds },
       });
+    }
+
+    // For step_execution approvals, fail any held wakeups on linked issues
+    if (approval.type === "step_execution") {
+      for (const issueId of linkedIssueIds) {
+        try {
+          await heartbeat.failApprovalHeldWakeups(issueId, approval.companyId);
+        } catch (err) {
+          logger.warn(
+            { err, approvalId: approval.id, issueId },
+            "failed to mark approval-held wakeups as failed after step_execution rejection",
+          );
+        }
+      }
     }
 
     res.json(redactApprovalPayload(approval));

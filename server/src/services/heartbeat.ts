@@ -856,6 +856,8 @@ export function heartbeatService(db: Db) {
       intervalSec: Math.max(0, asNumber(heartbeat.intervalSec, 0)),
       wakeOnDemand: asBoolean(heartbeat.wakeOnDemand ?? heartbeat.wakeOnAssignment ?? heartbeat.wakeOnOnDemand ?? heartbeat.wakeOnAutomation, true),
       maxConcurrentRuns: normalizeMaxConcurrentRuns(heartbeat.maxConcurrentRuns),
+      maxRetries: Math.max(0, Math.floor(asNumber(heartbeat.maxRetries, 3))),
+      retryBaseDelayMs: Math.max(0, Math.floor(asNumber(heartbeat.retryBaseDelayMs, 5000))),
     };
   }
 
@@ -865,6 +867,90 @@ export function heartbeatService(db: Db) {
       .from(heartbeatRuns)
       .where(and(eq(heartbeatRuns.agentId, agentId), eq(heartbeatRuns.status, "running")));
     return Number(count ?? 0);
+  }
+
+  async function maybeEnqueueRetry(
+    failedRun: typeof heartbeatRuns.$inferSelect,
+    outcome: "failed" | "timed_out",
+  ): Promise<typeof heartbeatRuns.$inferSelect | null> {
+    const agent = await getAgent(failedRun.agentId);
+    if (!agent) return null;
+
+    // Don't retry if agent is paused, terminated, or pending approval
+    if (agent.status === "paused" || agent.status === "terminated" || agent.status === "pending_approval") {
+      return null;
+    }
+
+    const policy = parseHeartbeatPolicy(agent);
+    if (policy.maxRetries <= 0) return null;
+
+    const currentRetryCount = failedRun.retryCount ?? 0;
+    if (currentRetryCount >= policy.maxRetries) {
+      logger.info(
+        { runId: failedRun.id, agentId: failedRun.agentId, retryCount: currentRetryCount, maxRetries: policy.maxRetries },
+        "run exceeded max retries, not requeuing",
+      );
+      return null;
+    }
+
+    // Don't retry cancelled runs or runs that were explicitly cancelled
+    if (failedRun.errorCode === "cancelled") return null;
+
+    const nextRetryCount = currentRetryCount + 1;
+    // Exponential backoff: baseDelay * 2^(retryCount)
+    const delayMs = policy.retryBaseDelayMs * Math.pow(2, currentRetryCount);
+
+    logger.info(
+      {
+        runId: failedRun.id,
+        agentId: failedRun.agentId,
+        retryCount: nextRetryCount,
+        maxRetries: policy.maxRetries,
+        delayMs,
+        outcome,
+      },
+      "auto-requeuing failed run",
+    );
+
+    const retryRun = await db
+      .insert(heartbeatRuns)
+      .values({
+        companyId: failedRun.companyId,
+        agentId: failedRun.agentId,
+        invocationSource: failedRun.invocationSource,
+        triggerDetail: failedRun.triggerDetail,
+        status: "queued",
+        wakeupRequestId: failedRun.wakeupRequestId,
+        contextSnapshot: failedRun.contextSnapshot as Record<string, unknown>,
+        sessionIdBefore: failedRun.sessionIdBefore,
+        retryCount: nextRetryCount,
+        retryOfRunId: failedRun.id,
+      })
+      .returning()
+      .then((rows) => rows[0]);
+
+    publishLiveEvent({
+      companyId: retryRun.companyId,
+      type: "heartbeat.run.queued",
+      payload: {
+        runId: retryRun.id,
+        agentId: retryRun.agentId,
+        invocationSource: retryRun.invocationSource,
+        triggerDetail: retryRun.triggerDetail,
+        wakeupRequestId: retryRun.wakeupRequestId,
+        retryCount: nextRetryCount,
+        retryOfRunId: failedRun.id,
+      },
+    });
+
+    // Schedule the retry after the backoff delay
+    setTimeout(() => {
+      void startNextQueuedRunForAgent(retryRun.agentId).catch((err) => {
+        logger.error({ err, runId: retryRun.id }, "failed to start retry run after backoff delay");
+      });
+    }, delayMs);
+
+    return retryRun;
   }
 
   async function claimQueuedRun(run: typeof heartbeatRuns.$inferSelect) {
@@ -989,6 +1075,10 @@ export function heartbeatService(db: Db) {
         await releaseIssueExecutionAndPromote(updatedRun);
       }
       await finalizeAgentStatus(run.agentId, "failed");
+      // Auto-retry reaped (process lost) runs
+      if (updatedRun) {
+        await maybeEnqueueRetry(updatedRun, "failed");
+      }
       await startNextQueuedRunForAgent(run.agentId);
       runningProcesses.delete(run.id);
       reaped.push(run.id);
@@ -1617,6 +1707,10 @@ export function heartbeatService(db: Db) {
         }
       }
       await finalizeAgentStatus(agent.id, outcome);
+      // Auto-retry failed/timed_out runs
+      if (finalizedRun && (outcome === "failed" || outcome === "timed_out")) {
+        await maybeEnqueueRetry(finalizedRun, outcome);
+      }
     } catch (err) {
       const message = redactCurrentUserText(err instanceof Error ? err.message : "Unknown adapter failure");
       logger.error({ err, runId }, "heartbeat execution failed");
@@ -1678,6 +1772,11 @@ export function heartbeatService(db: Db) {
       }
 
       await finalizeAgentStatus(agent.id, "failed");
+      // Auto-retry on adapter failure
+      const latestFailedRun = await getRun(runId);
+      if (latestFailedRun) {
+        await maybeEnqueueRetry(latestFailedRun, "failed");
+      }
     } finally {
       await releaseRuntimeServicesForRun(run.id);
       await startNextQueuedRunForAgent(agent.id);
@@ -1885,26 +1984,224 @@ export function heartbeatService(db: Db) {
    * so the next pipeline step can proceed.
    */
   async function promoteApprovalHeldWakeups(issueId: string, companyId: string) {
-    const held = await db
-      .select()
-      .from(agentWakeupRequests)
-      .where(
-        and(
-          eq(agentWakeupRequests.companyId, companyId),
-          eq(agentWakeupRequests.status, "awaiting_approval"),
-          sql`${agentWakeupRequests.payload} ->> 'issueId' = ${issueId}`,
-        ),
-      )
-      .orderBy(asc(agentWakeupRequests.requestedAt));
+    const promotedRun = await db.transaction(async (tx) => {
+      // Lock the issue row to prevent concurrent promotions
+      await tx.execute(
+        sql`select id from issues where id = ${issueId} and company_id = ${companyId} for update`,
+      );
 
-    if (held.length === 0) return;
+      const held = await tx
+        .select()
+        .from(agentWakeupRequests)
+        .where(
+          and(
+            eq(agentWakeupRequests.companyId, companyId),
+            eq(agentWakeupRequests.status, "awaiting_approval"),
+            sql`${agentWakeupRequests.payload} ->> 'issueId' = ${issueId}`,
+          ),
+        )
+        .orderBy(asc(agentWakeupRequests.requestedAt));
 
-    // Transition held wakeups back to deferred_issue_execution,
-    // then trigger normal promotion via a lightweight issue release cycle.
-    await db
+      if (held.length === 0) return null;
+
+      // Re-check if there are still other pending step_execution approvals for this issue.
+      // If so, the wakeups must remain held.
+      const remainingPendingApprovals = await tx
+        .select({ id: approvals.id })
+        .from(issueApprovals)
+        .innerJoin(approvals, eq(issueApprovals.approvalId, approvals.id))
+        .where(
+          and(
+            eq(issueApprovals.issueId, issueId),
+            eq(approvals.type, "step_execution"),
+            eq(approvals.status, "pending"),
+          ),
+        )
+        .limit(1)
+        .then((rows) => rows[0] ?? null);
+
+      if (remainingPendingApprovals) {
+        // Other pending approvals still exist — keep wakeups held as awaiting_approval
+        logger.info(
+          {
+            issueId,
+            companyId,
+            remainingApprovalId: remainingPendingApprovals.id,
+            heldCount: held.length,
+          },
+          "other pending step_execution approvals remain; wakeups stay held",
+        );
+        return null;
+      }
+
+      // Transition held wakeups back to deferred_issue_execution,
+      // then try to promote inline.
+      await tx
+        .update(agentWakeupRequests)
+        .set({
+          status: "deferred_issue_execution",
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(agentWakeupRequests.companyId, companyId),
+            eq(agentWakeupRequests.status, "awaiting_approval"),
+            sql`${agentWakeupRequests.payload} ->> 'issueId' = ${issueId}`,
+          ),
+        );
+
+      // Check if issue execution lock is free; if not, leave as deferred for later promotion.
+      const issue = await tx
+        .select({ id: issues.id, executionRunId: issues.executionRunId })
+        .from(issues)
+        .where(eq(issues.id, issueId))
+        .then((rows) => rows[0] ?? null);
+
+      if (!issue || issue.executionRunId) return null;
+
+      // Promote deferred wakeups in a loop, skipping bad-state agents (matching releaseIssueExecutionAndPromote)
+      while (true) {
+        const deferred = await tx
+          .select()
+          .from(agentWakeupRequests)
+          .where(
+            and(
+              eq(agentWakeupRequests.companyId, companyId),
+              eq(agentWakeupRequests.status, "deferred_issue_execution"),
+              sql`${agentWakeupRequests.payload} ->> 'issueId' = ${issueId}`,
+            ),
+          )
+          .orderBy(asc(agentWakeupRequests.requestedAt))
+          .limit(1)
+          .then((rows) => rows[0] ?? null);
+
+        if (!deferred) return null;
+
+        const deferredAgent = await tx
+          .select()
+          .from(agents)
+          .where(eq(agents.id, deferred.agentId))
+          .then((rows) => rows[0] ?? null);
+
+        if (
+          !deferredAgent ||
+          deferredAgent.companyId !== companyId ||
+          deferredAgent.status === "paused" ||
+          deferredAgent.status === "terminated" ||
+          deferredAgent.status === "pending_approval"
+        ) {
+          // Agent is not invokable — fail the wakeup instead of silently skipping
+          await tx
+            .update(agentWakeupRequests)
+            .set({
+              status: "failed",
+              finishedAt: new Date(),
+              error: "Deferred wake could not be promoted: agent is not invokable",
+              updatedAt: new Date(),
+            })
+            .where(eq(agentWakeupRequests.id, deferred.id));
+          continue;
+        }
+
+        const deferredPayload = parseObject(deferred.payload);
+        const deferredContextSeed = parseObject(deferredPayload[DEFERRED_WAKE_CONTEXT_KEY]);
+        const promotedReason = readNonEmptyString(deferred.reason) ?? "approval_promoted";
+        const promotedSource =
+          (readNonEmptyString(deferred.source) as WakeupOptions["source"]) ?? "automation";
+        const promotedTriggerDetail =
+          (readNonEmptyString(deferred.triggerDetail) as WakeupOptions["triggerDetail"]) ?? null;
+        const promotedPayload = deferredPayload;
+        delete promotedPayload[DEFERRED_WAKE_CONTEXT_KEY];
+
+        const {
+          contextSnapshot: promotedContextSnapshot,
+          taskKey: promotedTaskKey,
+        } = enrichWakeContextSnapshot({
+          contextSnapshot: deferredContextSeed,
+          reason: promotedReason,
+          source: promotedSource,
+          triggerDetail: promotedTriggerDetail,
+          payload: promotedPayload,
+        });
+
+        const sessionBefore = await resolveSessionBeforeForWakeup(deferredAgent, promotedTaskKey);
+        const now = new Date();
+        const newRun = await tx
+          .insert(heartbeatRuns)
+          .values({
+            companyId: deferredAgent.companyId,
+            agentId: deferredAgent.id,
+            invocationSource: promotedSource,
+            triggerDetail: promotedTriggerDetail,
+            status: "queued",
+            wakeupRequestId: deferred.id,
+            contextSnapshot: promotedContextSnapshot,
+            sessionIdBefore: sessionBefore,
+          })
+          .returning()
+          .then((rows) => rows[0]);
+
+        await tx
+          .update(agentWakeupRequests)
+          .set({
+            status: "queued",
+            reason: "approval_promoted",
+            runId: newRun.id,
+            claimedAt: null,
+            finishedAt: null,
+            error: null,
+            updatedAt: now,
+          })
+          .where(eq(agentWakeupRequests.id, deferred.id));
+
+        await tx
+          .update(issues)
+          .set({
+            executionRunId: newRun.id,
+            executionAgentNameKey: normalizeAgentNameKey(deferredAgent.name),
+            executionLockedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(issues.id, issueId));
+
+        return newRun;
+      }
+    });
+
+    if (!promotedRun) return;
+
+    publishLiveEvent({
+      companyId: promotedRun.companyId,
+      type: "heartbeat.run.queued",
+      payload: {
+        runId: promotedRun.id,
+        agentId: promotedRun.agentId,
+        invocationSource: promotedRun.invocationSource,
+        triggerDetail: promotedRun.triggerDetail,
+        wakeupRequestId: promotedRun.wakeupRequestId,
+      },
+    });
+
+    await startNextQueuedRunForAgent(promotedRun.agentId);
+
+    logger.info(
+      { issueId, companyId, runId: promotedRun.id },
+      "promoted approval-held wakeups after step_execution approval",
+    );
+  }
+
+  /**
+   * Fail wakeup requests held in "awaiting_approval" status for a given issue.
+   * Called when a step_execution approval is rejected — marks held wakeups as
+   * failed so they are not left orphaned indefinitely.
+   */
+  async function failApprovalHeldWakeups(issueId: string, companyId: string) {
+    const result = await db
       .update(agentWakeupRequests)
       .set({
-        status: "deferred_issue_execution",
+        status: "failed",
+        finishedAt: new Date(),
+        error: "step_execution approval was rejected",
         updatedAt: new Date(),
       })
       .where(
@@ -1915,119 +2212,9 @@ export function heartbeatService(db: Db) {
         ),
       );
 
-    // Check if issue execution lock is free; if so, promote the first deferred wakeup.
-    const issue = await db
-      .select({ id: issues.id, executionRunId: issues.executionRunId })
-      .from(issues)
-      .where(eq(issues.id, issueId))
-      .then((rows) => rows[0] ?? null);
-
-    if (issue && !issue.executionRunId) {
-      // Find the first deferred wakeup and promote it inline
-      const firstDeferred = await db
-        .select()
-        .from(agentWakeupRequests)
-        .where(
-          and(
-            eq(agentWakeupRequests.companyId, companyId),
-            eq(agentWakeupRequests.status, "deferred_issue_execution"),
-            sql`${agentWakeupRequests.payload} ->> 'issueId' = ${issueId}`,
-          ),
-        )
-        .orderBy(asc(agentWakeupRequests.requestedAt))
-        .limit(1)
-        .then((rows) => rows[0] ?? null);
-
-      if (firstDeferred) {
-        const agent = await getAgent(firstDeferred.agentId);
-        if (
-          agent &&
-          agent.companyId === companyId &&
-          agent.status !== "paused" &&
-          agent.status !== "terminated" &&
-          agent.status !== "pending_approval"
-        ) {
-          const deferredPayload = parseObject(firstDeferred.payload);
-          const deferredContextSeed = parseObject(deferredPayload[DEFERRED_WAKE_CONTEXT_KEY]);
-          const promotedReason = readNonEmptyString(firstDeferred.reason) ?? "approval_promoted";
-          const promotedSource =
-            (readNonEmptyString(firstDeferred.source) as WakeupOptions["source"]) ?? "automation";
-          const promotedTriggerDetail =
-            (readNonEmptyString(firstDeferred.triggerDetail) as WakeupOptions["triggerDetail"]) ?? null;
-          const promotedPayload = deferredPayload;
-          delete promotedPayload[DEFERRED_WAKE_CONTEXT_KEY];
-
-          const {
-            contextSnapshot: promotedContextSnapshot,
-            taskKey: promotedTaskKey,
-          } = enrichWakeContextSnapshot({
-            contextSnapshot: deferredContextSeed,
-            reason: promotedReason,
-            source: promotedSource,
-            triggerDetail: promotedTriggerDetail,
-            payload: promotedPayload,
-          });
-
-          const sessionBefore = await resolveSessionBeforeForWakeup(agent, promotedTaskKey);
-          const now = new Date();
-          const newRun = await db
-            .insert(heartbeatRuns)
-            .values({
-              companyId: agent.companyId,
-              agentId: agent.id,
-              invocationSource: promotedSource,
-              triggerDetail: promotedTriggerDetail,
-              status: "queued",
-              wakeupRequestId: firstDeferred.id,
-              contextSnapshot: promotedContextSnapshot,
-              sessionIdBefore: sessionBefore,
-            })
-            .returning()
-            .then((rows) => rows[0]);
-
-          await db
-            .update(agentWakeupRequests)
-            .set({
-              status: "queued",
-              reason: "approval_promoted",
-              runId: newRun.id,
-              claimedAt: null,
-              finishedAt: null,
-              error: null,
-              updatedAt: now,
-            })
-            .where(eq(agentWakeupRequests.id, firstDeferred.id));
-
-          await db
-            .update(issues)
-            .set({
-              executionRunId: newRun.id,
-              executionAgentNameKey: normalizeAgentNameKey(agent.name),
-              executionLockedAt: now,
-              updatedAt: now,
-            })
-            .where(eq(issues.id, issueId));
-
-          publishLiveEvent({
-            companyId: newRun.companyId,
-            type: "heartbeat.run.queued",
-            payload: {
-              runId: newRun.id,
-              agentId: newRun.agentId,
-              invocationSource: newRun.invocationSource,
-              triggerDetail: newRun.triggerDetail,
-              wakeupRequestId: newRun.wakeupRequestId,
-            },
-          });
-
-          await startNextQueuedRunForAgent(newRun.agentId);
-        }
-      }
-    }
-
     logger.info(
-      { issueId, companyId, heldCount: held.length },
-      "promoted approval-held wakeups after step_execution approval",
+      { issueId, companyId, result },
+      "failed approval-held wakeups after step_execution rejection",
     );
   }
 
@@ -2621,6 +2808,8 @@ export function heartbeatService(db: Db) {
     wakeup: enqueueWakeup,
 
     promoteApprovalHeldWakeups,
+
+    failApprovalHeldWakeups,
 
     reapOrphanedRuns,
 
