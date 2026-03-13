@@ -51,11 +51,18 @@ jobs:
           git remote add upstream "${{ steps.config.outputs.url }}" || git remote set-url upstream "${{ steps.config.outputs.url }}"
 
       - name: Fetch upstream
+        id: fetch
         if: steps.config.outputs.skip == 'false'
-        run: git fetch upstream --no-tags
+        run: |
+          if git fetch upstream --no-tags; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "Unable to fetch upstream. Skipping sync."
+          fi
 
       - name: Check for new commits
-        if: steps.config.outputs.skip == 'false'
+        if: steps.config.outputs.skip == 'false' && steps.fetch.outputs.ok == 'true'
         id: check
         run: |
           UPSTREAM_BRANCH="${{ steps.config.outputs.branch }}"
@@ -64,7 +71,7 @@ jobs:
           echo "upstream_branch=$UPSTREAM_BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: Create sync PR if upstream has new commits
-        if: steps.config.outputs.skip == 'false' && steps.check.outputs.behind != '0'
+        if: steps.config.outputs.skip == 'false' && steps.fetch.outputs.ok == 'true' && steps.check.outputs.behind != '0'
         run: |
           UPSTREAM_BRANCH="${{ steps.check.outputs.upstream_branch }}"
           SYNC_BRANCH="chore/sync-upstream-${GITHUB_RUN_ID}"
@@ -89,5 +96,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: No sync needed
-        if: steps.config.outputs.skip == 'false' && steps.check.outputs.behind == '0'
+        if: steps.config.outputs.skip == 'false' && steps.fetch.outputs.ok == 'true' && steps.check.outputs.behind == '0'
         run: echo "Already up to date with upstream."
+
+      - name: Upstream unreachable
+        if: steps.config.outputs.skip == 'false' && steps.fetch.outputs.ok != 'true'
+        run: echo "Upstream fetch failed. Workflow exits without syncing."
