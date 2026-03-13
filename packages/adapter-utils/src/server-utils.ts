@@ -115,18 +115,27 @@ export function renderTemplate(template: string, data: Record<string, unknown>) 
 
 export function normalizeWakeCommentBody(value: unknown, maxChars = MAX_WAKE_COMMENT_BODY_CHARS): string | null {
   if (typeof value !== "string" || value.trim().length === 0) return null;
-  return value.length > maxChars ? value.slice(0, maxChars) : value;
+  const sliced = value.length > maxChars ? value.slice(0, maxChars) : value;
+  return /[\uD800-\uDBFF]$/.test(sliced) ? sliced.slice(0, -1) : sliced;
+}
+
+function escapeWakeCommentBodyForPrompt(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 export function appendWakeCommentToPrompt(prompt: string, context: Record<string, unknown>) {
   const wakeCommentBody = normalizeWakeCommentBody(context.wakeCommentBody);
   if (!wakeCommentBody) return prompt;
+  const escapedWakeCommentBody = escapeWakeCommentBodyForPrompt(wakeCommentBody);
 
   const promptBase = prompt.replace(/\s+$/, "");
   const wakeCommentBlock = [
     "The following <user_comment> block is the latest user comment that triggered this wake. Respond to or act on it in this run.",
     "<user_comment>",
-    wakeCommentBody,
+    escapedWakeCommentBody,
     "</user_comment>",
   ].join("\n");
 
