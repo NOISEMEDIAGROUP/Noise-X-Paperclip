@@ -11,6 +11,85 @@ const TOAST_COOLDOWN_WINDOW_MS = 10_000;
 const TOAST_COOLDOWN_MAX = 3;
 const RECONNECT_SUPPRESS_MS = 2000;
 
+// Browser notification support
+const BROWSER_NOTIFICATION_ICON = "/favicon-32x32.png";
+
+/**
+ * Check if browser notifications are supported and permission is granted
+ */
+function checkBrowserNotificationSupport(): boolean {
+  return typeof window !== "undefined" && "Notification" in window;
+}
+
+/**
+ * Request permission for browser notifications
+ */
+async function requestBrowserNotificationPermission(): Promise<NotificationPermission> {
+  if (!checkBrowserNotificationSupport()) {
+    return "denied";
+  }
+  
+  // Already granted or denied
+  if (Notification.permission === "granted" || Notification.permission === "denied") {
+    return Notification.permission;
+  }
+  
+  // Request permission
+  return await Notification.requestPermission();
+}
+
+/**
+ * Show browser notification when tab is hidden
+ */
+function showBrowserNotification(toast: ToastInput): void {
+  // Check if browser notifications are supported
+  if (!checkBrowserNotificationSupport()) {
+    return;
+  }
+  
+  // Check if tab is hidden
+  if (!document.hidden) {
+    return; // Only show browser notifications when tab is in background
+  }
+  
+  // Check permission
+  if (Notification.permission !== "granted") {
+    // Could request permission here, but for now just return
+    return;
+  }
+  
+  // Create notification options
+  const options: NotificationOptions = {
+    body: toast.body || "",
+    icon: BROWSER_NOTIFICATION_ICON,
+    tag: toast.dedupeKey || toast.id || undefined,
+    requireInteraction: false,
+  };
+  
+  // Add click handler if there's an action href
+  const notification = new Notification(toast.title, options);
+  
+  if (toast.action?.href) {
+    notification.onclick = () => {
+      // Focus the tab and navigate to the href
+      window.focus();
+      window.location.href = toast.action!.href;
+      notification.close();
+    };
+  } else {
+    // Default click handler - just focus the tab
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+  }
+  
+  // Auto-close after 10 seconds if not clicked
+  setTimeout(() => {
+    notification.close();
+  }, toast.ttlMs || 10000);
+}
+
 function readString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
@@ -450,7 +529,11 @@ function gatedPushToast(
 ) {
   if (shouldSuppressToast(gate, category)) return;
   const id = pushToast(toast);
-  if (id !== null) recordToastHit(gate, category);
+  if (id !== null) {
+    recordToastHit(gate, category);
+    // Show browser notification if tab is hidden
+    showBrowserNotification(toast);
+  }
 }
 
 function handleLiveEvent(
