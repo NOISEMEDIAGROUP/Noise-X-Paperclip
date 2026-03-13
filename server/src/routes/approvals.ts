@@ -208,6 +208,20 @@ export function approvalRoutes(db: Db) {
           });
         }
       }
+
+      // For step_execution approvals, promote any held wakeups on linked issues
+      if (approval.type === "step_execution") {
+        for (const issueId of linkedIssueIds) {
+          try {
+            await heartbeat.promoteApprovalHeldWakeups(issueId, approval.companyId);
+          } catch (err) {
+            logger.warn(
+              { err, approvalId: approval.id, issueId },
+              "failed to promote approval-held wakeups after step_execution approval",
+            );
+          }
+        }
+      }
     }
 
     res.json(redactApprovalPayload(approval));
