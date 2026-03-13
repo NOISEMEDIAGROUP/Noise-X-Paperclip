@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AGENT_ADAPTER_TYPES } from "@paperclipai/shared";
+import { AGENT_ADAPTER_TYPES, analyzePromptCacheability } from "@paperclipai/shared";
 import type {
   Agent,
   AdapterEnvironmentTestResult,
@@ -109,6 +109,20 @@ function isOverlayDirty(o: Overlay): boolean {
 /* ---- Shared input class ---- */
 const inputClass =
   "w-full rounded-md border border-border px-2.5 py-1.5 bg-transparent outline-none text-sm font-mono placeholder:text-muted-foreground/40";
+
+function PromptCacheWarnings({ template }: { template: string }) {
+  const warnings = useMemo(() => analyzePromptCacheability(template), [template]);
+  if (warnings.length === 0) return null;
+  return (
+    <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+      {warnings.map((warning) => (
+        <p key={warning.variable}>
+          <code>{`{{ ${warning.variable} }}`}</code> {warning.message}
+        </p>
+      ))}
+    </div>
+  );
+}
 
 function parseCommaArgs(value: string): string[] {
   return value
@@ -325,6 +339,9 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
   const set = isCreate
     ? (patch: Partial<CreateConfigValues>) => props.onChange(patch)
     : null;
+  const currentPromptTemplate = isCreate
+    ? val?.promptTemplate ?? ""
+    : String(eff("adapterConfig", "promptTemplate", String(config.promptTemplate ?? "")));
 
   function buildAdapterConfigForTest(): Record<string, unknown> {
     if (isCreate) {
@@ -444,23 +461,26 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
               />
             </Field>
             {isLocal && (
-              <Field label="Prompt Template" hint={help.promptTemplate}>
-                <MarkdownEditor
-                  value={eff(
-                    "adapterConfig",
-                    "promptTemplate",
-                    String(config.promptTemplate ?? ""),
-                  )}
-                  onChange={(v) => mark("adapterConfig", "promptTemplate", v ?? "")}
-                  placeholder="You are agent {{ agent.name }}. Your role is {{ agent.role }}..."
-                  contentClassName="min-h-[88px] text-sm font-mono"
-                  imageUploadHandler={async (file) => {
-                    const namespace = `agents/${props.agent.id}/prompt-template`;
-                    const asset = await uploadMarkdownImage.mutateAsync({ file, namespace });
-                    return asset.contentPath;
-                  }}
-                />
-              </Field>
+              <>
+                <Field label="Prompt Template" hint={help.promptTemplate}>
+                  <MarkdownEditor
+                    value={eff(
+                      "adapterConfig",
+                      "promptTemplate",
+                      String(config.promptTemplate ?? ""),
+                    )}
+                    onChange={(v) => mark("adapterConfig", "promptTemplate", v ?? "")}
+                    placeholder="You are agent {{ agent.name }}. Your role is {{ agent.role }}..."
+                    contentClassName="min-h-[88px] text-sm font-mono"
+                    imageUploadHandler={async (file) => {
+                      const namespace = `agents/${props.agent.id}/prompt-template`;
+                      const asset = await uploadMarkdownImage.mutateAsync({ file, namespace });
+                      return asset.contentPath;
+                    }}
+                  />
+                </Field>
+                <PromptCacheWarnings template={currentPromptTemplate} />
+              </>
             )}
           </div>
         </div>
@@ -576,19 +596,22 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
 
           {/* Prompt template (create mode only — edit mode shows this in Identity) */}
           {isLocal && isCreate && (
-            <Field label="Prompt Template" hint={help.promptTemplate}>
-              <MarkdownEditor
-                value={val!.promptTemplate}
-                onChange={(v) => set!({ promptTemplate: v })}
-                placeholder="You are agent {{ agent.name }}. Your role is {{ agent.role }}..."
-                contentClassName="min-h-[88px] text-sm font-mono"
-                imageUploadHandler={async (file) => {
-                  const namespace = "agents/drafts/prompt-template";
-                  const asset = await uploadMarkdownImage.mutateAsync({ file, namespace });
-                  return asset.contentPath;
-                }}
-              />
-            </Field>
+            <>
+              <Field label="Prompt Template" hint={help.promptTemplate}>
+                <MarkdownEditor
+                  value={val!.promptTemplate}
+                  onChange={(v) => set!({ promptTemplate: v })}
+                  placeholder="You are agent {{ agent.name }}. Your role is {{ agent.role }}..."
+                  contentClassName="min-h-[88px] text-sm font-mono"
+                  imageUploadHandler={async (file) => {
+                    const namespace = "agents/drafts/prompt-template";
+                    const asset = await uploadMarkdownImage.mutateAsync({ file, namespace });
+                    return asset.contentPath;
+                  }}
+                />
+              </Field>
+              <PromptCacheWarnings template={currentPromptTemplate} />
+            </>
           )}
 
           {/* Adapter-specific fields */}

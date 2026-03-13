@@ -132,6 +132,11 @@ export type {
 } from "./types/index.js";
 
 export {
+  analyzePromptCacheability,
+  type PromptCacheWarning,
+} from "./prompt-cache.js";
+
+export {
   createCompanySchema,
   updateCompanySchema,
   type CreateCompany,

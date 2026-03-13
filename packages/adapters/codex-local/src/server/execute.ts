@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AdapterExecutionContext, AdapterExecutionResult } from "@paperclipai/adapter-utils";
+import { analyzePromptCacheability } from "@paperclipai/shared";
 import {
   asString,
   asNumber,
@@ -122,6 +123,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     config.dangerouslyBypassApprovalsAndSandbox,
     asBoolean(config.dangerouslyBypassSandbox, false),
   );
+  const promptCacheWarnings = analyzePromptCacheability(promptTemplate);
 
   const workspaceContext = parseObject(context.paperclipWorkspace);
   const workspaceCwd = asString(workspaceContext.cwd, "");
@@ -266,6 +268,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       "stderr",
       `[paperclip] Codex session "${runtimeSessionId}" was saved for cwd "${runtimeSessionCwd}" and will not be resumed in "${cwd}".\n`,
     );
+  }
+  if (promptCacheWarnings.length > 0) {
+    const summary = promptCacheWarnings
+      .map((warning) => `{{ ${warning.variable} }} ${warning.message}`)
+      .join(" | ");
+    await onLog("stderr", `[paperclip] Prompt cache warning: ${summary}\n`);
   }
   const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
   const instructionsDir = instructionsFilePath ? `${path.dirname(instructionsFilePath)}/` : "";
