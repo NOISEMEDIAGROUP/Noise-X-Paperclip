@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import multer from "multer";
+import { eq, inArray } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
+import { authUsers } from "@paperclipai/db";
 import {
   addIssueCommentSchema,
   createIssueAttachmentMetadataSchema,
@@ -23,6 +25,7 @@ import {
   projectService,
 } from "../services/index.js";
 import { logger } from "../middleware/logger.js";
+import type { EmailService } from "../services/email.js";
 import { forbidden, HttpError, unauthorized } from "../errors.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 import { shouldWakeAssigneeOnCheckout } from "./issues-checkout-wakeup.js";
@@ -41,6 +44,27 @@ export function issueRoutes(db: Db, storage: StorageService) {
     storage: multer.memoryStorage(),
     limits: { fileSize: MAX_ATTACHMENT_BYTES, files: 1 },
   });
+
+  async function resolveUserNames(userIds: (string | null | undefined)[]): Promise<Map<string, string>> {
+    const unique = [...new Set(userIds.filter((id): id is string => typeof id === "string" && id.length > 0))];
+    if (unique.length === 0) return new Map();
+    const rows = await db
+      .select({ id: authUsers.id, name: authUsers.name })
+      .from(authUsers)
+      .where(inArray(authUsers.id, unique));
+    return new Map(rows.map((r) => [r.id, r.name]));
+  }
+
+  function enrichIssueWithUserNames<T extends { createdByUserId?: string | null; assigneeUserId?: string | null }>(
+    issue: T,
+    userMap: Map<string, string>,
+  ) {
+    return {
+      ...issue,
+      createdByUserName: issue.createdByUserId ? userMap.get(issue.createdByUserId) ?? null : null,
+      assigneeUserName: issue.assigneeUserId ? userMap.get(issue.assigneeUserId) ?? null : null,
+    };
+  }
 
   function withContentPath<T extends { id: string }>(attachment: T) {
     return {
@@ -256,7 +280,10 @@ export function issueRoutes(db: Db, storage: StorageService) {
       labelId: req.query.labelId as string | undefined,
       q: req.query.q as string | undefined,
     });
-    res.json(result);
+    const userMap = await resolveUserNames(
+      result.flatMap((i) => [i.createdByUserId, i.assigneeUserId]),
+    );
+    res.json(result.map((i) => enrichIssueWithUserNames(i, userMap)));
   });
 
   router.get("/companies/:companyId/labels", async (req, res) => {
@@ -330,7 +357,8 @@ export function issueRoutes(db: Db, storage: StorageService) {
     const mentionedProjects = mentionedProjectIds.length > 0
       ? await projectsSvc.listByIds(issue.companyId, mentionedProjectIds)
       : [];
-    res.json({ ...issue, ancestors, project: project ?? null, goal: goal ?? null, mentionedProjects });
+    const userMap = await resolveUserNames([issue.createdByUserId, issue.assigneeUserId]);
+    res.json({ ...enrichIssueWithUserNames(issue, userMap), ancestors, project: project ?? null, goal: goal ?? null, mentionedProjects });
   });
 
   router.post("/issues/:id/read", async (req, res) => {
@@ -632,33 +660,18 @@ export function issueRoutes(db: Db, storage: StorageService) {
       }
 
       if (commentBody && comment) {
-        let mentionedIds: string[] = [];
-        try {
-          mentionedIds = await svc.findMentionedAgents(issue.companyId, commentBody);
-        } catch (err) {
-          logger.warn({ err, issueId: id }, "failed to resolve @-mentions");
-        }
-
-        for (const mentionedId of mentionedIds) {
-          if (wakeups.has(mentionedId)) continue;
-          if (actor.actorType === "agent" && actor.actorId === mentionedId) continue;
-          wakeups.set(mentionedId, {
-            source: "automation",
-            triggerDetail: "system",
-            reason: "issue_comment_mentioned",
-            payload: { issueId: id, commentId: comment.id },
-            requestedByActorType: actor.actorType,
-            requestedByActorId: actor.actorId,
-            contextSnapshot: {
-              issueId: id,
-              taskId: id,
-              commentId: comment.id,
-              wakeCommentId: comment.id,
-              wakeReason: "issue_comment_mentioned",
-              source: "comment.mention",
-            },
-          });
-        }
+        await svc.processMentionNotifications({
+          companyId: issue.companyId,
+          issueId: issue.id,
+          issueTitle: issue.title,
+          issueIdentifier: issue.identifier,
+          commentId: comment.id,
+          body: commentBody,
+          baseUrl: `${req.protocol}://${req.get("host")}`,
+          actor,
+          emailService: req.app.locals.emailService as EmailService | undefined,
+          wakeups,
+        });
       }
 
       for (const [agentId, wakeup] of wakeups.entries()) {
@@ -667,6 +680,31 @@ export function issueRoutes(db: Db, storage: StorageService) {
           .catch((err) => logger.warn({ err, issueId: issue.id, agentId }, "failed to wake agent on issue update"));
       }
     })();
+
+    // Send assignment email when assigned to a human user
+    if (assigneeChanged && issue.assigneeUserId) {
+      const emailSvc = req.app.locals.emailService as EmailService | undefined;
+      if (emailSvc?.isConfigured()) {
+        void (async () => {
+          try {
+            const userRows = await db
+              .select({ email: authUsers.email })
+              .from(authUsers)
+              .where(eq(authUsers.id, issue.assigneeUserId!));
+            const user = userRows[0];
+            if (!user?.email) return;
+            const baseUrl = `${req.protocol}://${req.get("host")}`;
+            const issueUrl = `${baseUrl}/issues/${issue.identifier ?? issue.id}`;
+            await emailSvc.sendAssignmentEmail(user.email, {
+              issueTitle: issue.title,
+              issueUrl,
+            });
+          } catch (err) {
+            logger.warn({ err, issueId: issue.id }, "failed to send assignment email");
+          }
+        })();
+      }
+    }
 
     res.json({ ...issue, comment });
   });
@@ -811,7 +849,13 @@ export function issueRoutes(db: Db, storage: StorageService) {
     }
     assertCompanyAccess(req, issue.companyId);
     const comments = await svc.listComments(id);
-    res.json(comments);
+    const commentUserMap = await resolveUserNames(comments.map((c) => c.authorUserId));
+    res.json(
+      comments.map((c) => ({
+        ...c,
+        authorUserName: c.authorUserId ? commentUserMap.get(c.authorUserId) ?? null : null,
+      })),
+    );
   });
 
   router.get("/issues/:id/comments/:commentId", async (req, res) => {
@@ -828,7 +872,11 @@ export function issueRoutes(db: Db, storage: StorageService) {
       res.status(404).json({ error: "Comment not found" });
       return;
     }
-    res.json(comment);
+    const commentUserMap = await resolveUserNames([comment.authorUserId]);
+    res.json({
+      ...comment,
+      authorUserName: comment.authorUserId ? commentUserMap.get(comment.authorUserId) ?? null : null,
+    });
   });
 
   router.post("/issues/:id/comments", validate(addIssueCommentSchema), async (req, res) => {
@@ -1006,33 +1054,18 @@ export function issueRoutes(db: Db, storage: StorageService) {
         }
       }
 
-      let mentionedIds: string[] = [];
-      try {
-        mentionedIds = await svc.findMentionedAgents(issue.companyId, req.body.body);
-      } catch (err) {
-        logger.warn({ err, issueId: id }, "failed to resolve @-mentions");
-      }
-
-      for (const mentionedId of mentionedIds) {
-        if (wakeups.has(mentionedId)) continue;
-        if (actorIsAgent && actor.actorId === mentionedId) continue;
-        wakeups.set(mentionedId, {
-          source: "automation",
-          triggerDetail: "system",
-          reason: "issue_comment_mentioned",
-          payload: { issueId: id, commentId: comment.id },
-          requestedByActorType: actor.actorType,
-          requestedByActorId: actor.actorId,
-          contextSnapshot: {
-            issueId: id,
-            taskId: id,
-            commentId: comment.id,
-            wakeCommentId: comment.id,
-            wakeReason: "issue_comment_mentioned",
-            source: "comment.mention",
-          },
-        });
-      }
+      await svc.processMentionNotifications({
+        companyId: currentIssue.companyId,
+        issueId: currentIssue.id,
+        issueTitle: currentIssue.title,
+        issueIdentifier: currentIssue.identifier,
+        commentId: comment.id,
+        body: req.body.body,
+        baseUrl: `${req.protocol}://${req.get("host")}`,
+        actor,
+        emailService: req.app.locals.emailService as EmailService | undefined,
+        wakeups,
+      });
 
       for (const [agentId, wakeup] of wakeups.entries()) {
         heartbeat

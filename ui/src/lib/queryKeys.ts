@@ -52,6 +52,8 @@ export const queryKeys = {
     joinRequests: (companyId: string, status: string = "pending_approval") =>
       ["access", "join-requests", companyId, status] as const,
     invite: (token: string) => ["access", "invite", token] as const,
+    people: (companyId: string) => ["people", companyId] as const,
+    myPermissions: (companyId: string) => ["my-permissions", companyId] as const,
   },
   auth: {
     session: ["auth", "session"] as const,
@@ -64,6 +66,7 @@ export const queryKeys = {
   dashboard: (companyId: string) => ["dashboard", companyId] as const,
   sidebarBadges: (companyId: string) => ["sidebar-badges", companyId] as const,
   activity: (companyId: string) => ["activity", companyId] as const,
+  mentions: (companyId: string) => ["mentions", companyId] as const,
   costs: (companyId: string, from?: string, to?: string) =>
     ["costs", companyId, from, to] as const,
   heartbeats: (companyId: string, agentId?: string) =>

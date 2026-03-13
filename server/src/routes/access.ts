@@ -36,6 +36,9 @@ import {
   unauthorized,
   badRequest
 } from "../errors.js";
+import { readRawConfigFile, writeConfigFile } from "../config-file.js";
+import { createEmailService } from "../services/email.js";
+import type { EmailService } from "../services/email.js";
 import { logger } from "../middleware/logger.js";
 import { validate } from "../middleware/validate.js";
 import {
@@ -1663,10 +1666,12 @@ export function accessRoutes(
       });
 
       const inviteSummary = toInviteSummaryResponse(req, token, created);
+      const baseUrl = requestBaseUrl(req);
+      const inviteUrl = baseUrl ? `${baseUrl}/invite/${token}` : `/invite/${token}`;
       res.status(201).json({
         ...created,
         token,
-        inviteUrl: `/invite/${token}`,
+        inviteUrl,
         onboardingTextPath: inviteSummary.onboardingTextPath,
         onboardingTextUrl: inviteSummary.onboardingTextUrl,
         inviteMessage: inviteSummary.inviteMessage
@@ -1708,14 +1713,79 @@ export function accessRoutes(
       });
 
       const inviteSummary = toInviteSummaryResponse(req, token, created);
+      const baseUrl = requestBaseUrl(req);
+      const inviteUrl = baseUrl ? `${baseUrl}/invite/${token}` : `/invite/${token}`;
       res.status(201).json({
         ...created,
         token,
-        inviteUrl: `/invite/${token}`,
+        inviteUrl,
         onboardingTextPath: inviteSummary.onboardingTextPath,
         onboardingTextUrl: inviteSummary.onboardingTextUrl,
         inviteMessage: inviteSummary.inviteMessage
       });
+    }
+  );
+
+  router.post(
+    "/companies/:companyId/invites/:inviteId/send-email",
+    async (req, res) => {
+      const companyId = req.params.companyId as string;
+      await assertCompanyPermission(req, companyId, "users:invite");
+
+      const inviteId = req.params.inviteId as string;
+      const toEmail = typeof req.body.email === "string" ? req.body.email.trim() : "";
+      if (!toEmail) throw badRequest("Email address is required");
+
+      const token = typeof req.body.token === "string" ? req.body.token.trim() : "";
+      if (!token) throw badRequest("Invite token is required");
+
+      const invite = await db
+        .select()
+        .from(invites)
+        .where(and(eq(invites.id, inviteId), eq(invites.companyId, companyId)))
+        .then((rows) => rows[0] ?? null);
+
+      if (!invite || invite.revokedAt || invite.acceptedAt || inviteExpired(invite)) {
+        throw notFound("Invite not found or expired");
+      }
+
+      if (!tokenHashesMatch(hashToken(token), invite.tokenHash)) {
+        throw badRequest("Token does not match invite");
+      }
+
+      const emailService = req.app.locals.emailService as EmailService | undefined;
+      if (!emailService?.isConfigured()) {
+        throw badRequest("Email service is not configured");
+      }
+
+      const baseUrl = requestBaseUrl(req);
+      const inviteUrl = baseUrl ? `${baseUrl}/invite/${token}` : `/invite/${token}`;
+
+      const { companies } = await import("@paperclipai/db");
+      const company = await db
+        .select({ name: companies.name })
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .then((rows) => rows[0] ?? null);
+      const companyName = company?.name ?? "Paperclip";
+
+      let inviterName: string | undefined;
+      if (req.actor.userId) {
+        const inviter = await db
+          .select({ name: authUsers.name })
+          .from(authUsers)
+          .where(eq(authUsers.id, req.actor.userId))
+          .then((rows) => rows[0] ?? null);
+        inviterName = inviter?.name ?? undefined;
+      }
+
+      await emailService.sendInviteEmail(toEmail, {
+        inviteUrl,
+        companyName,
+        inviterName,
+      });
+
+      res.json({ sent: true, to: toEmail });
     }
   );
 
@@ -2592,6 +2662,43 @@ export function accessRoutes(
     }
   );
 
+  router.get("/companies/:companyId/my-permissions", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+
+    if (req.actor.type === "agent" && req.actor.agentId) {
+      const result = await access.getMyPermissions(companyId, "agent", req.actor.agentId);
+      res.json(result);
+      return;
+    }
+
+    if (req.actor.type === "board") {
+      if (isLocalImplicit(req)) {
+        res.json({ membershipRole: "owner", permissions: [...PERMISSION_KEYS] });
+        return;
+      }
+      if (req.actor.userId) {
+        const isAdmin = await access.isInstanceAdmin(req.actor.userId);
+        if (isAdmin) {
+          res.json({ membershipRole: "owner", permissions: [...PERMISSION_KEYS] });
+          return;
+        }
+        const result = await access.getMyPermissions(companyId, "user", req.actor.userId);
+        res.json(result);
+        return;
+      }
+    }
+
+    res.json({ membershipRole: null, permissions: [] });
+  });
+
+  router.get("/companies/:companyId/people", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+    const people = await access.listPeople(companyId);
+    res.json(people);
+  });
+
   router.get("/companies/:companyId/members", async (req, res) => {
     const companyId = req.params.companyId as string;
     await assertCompanyPermission(req, companyId, "users:manage_permissions");
@@ -2746,6 +2853,50 @@ export function accessRoutes(
       res.json(memberships);
     }
   );
+
+  router.patch("/admin/config/email", async (req, res) => {
+    await assertInstanceAdmin(req);
+    const { provider, resendApiKey, fromAddress } = req.body as {
+      provider?: "resend" | "none";
+      resendApiKey?: string;
+      fromAddress?: string;
+    };
+
+    const rawConfig = readRawConfigFile() ?? {};
+    const existingEmail =
+      typeof rawConfig.email === "object" && rawConfig.email !== null
+        ? { ...(rawConfig.email as Record<string, unknown>) }
+        : {};
+
+    if (provider !== undefined) existingEmail.provider = provider;
+    if (resendApiKey !== undefined) existingEmail.resendApiKey = resendApiKey;
+    if (fromAddress !== undefined) existingEmail.fromAddress = fromAddress;
+
+    rawConfig.email = existingEmail;
+    writeConfigFile(rawConfig);
+
+    // Reinitialize the email service on the running app
+    const newEmailService = createEmailService({
+      provider: (existingEmail.provider as "resend" | "none") ?? "none",
+      resendApiKey: existingEmail.resendApiKey as string | undefined,
+      fromAddress: (existingEmail.fromAddress as string) ?? "Paperclip <noreply@paperclip.dev>",
+    });
+    req.app.locals.emailService = newEmailService;
+
+    res.json({
+      provider: existingEmail.provider ?? "none",
+      fromAddress: existingEmail.fromAddress ?? "Paperclip <noreply@paperclip.dev>",
+      configured: newEmailService.isConfigured(),
+    });
+  });
+
+  router.get("/admin/config/email", async (req, res) => {
+    await assertInstanceAdmin(req);
+    const emailService = req.app.locals.emailService as EmailService | undefined;
+    res.json({
+      configured: emailService?.isConfigured() ?? false,
+    });
+  });
 
   return router;
 }
