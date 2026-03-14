@@ -6,6 +6,7 @@ import { issuesApi } from "../api/issues";
 import { projectsApi } from "../api/projects";
 import { agentsApi } from "../api/agents";
 import { authApi } from "../api/auth";
+import { accessApi } from "../api/access";
 import { assetsApi } from "../api/assets";
 import { queryKeys } from "../lib/queryKeys";
 import { useProjectOrder } from "../hooks/useProjectOrder";
@@ -204,6 +205,12 @@ export function NewIssueDialog() {
     enabled: !!effectiveCompanyId && newIssueOpen,
   });
 
+  const { data: people } = useQuery({
+    queryKey: queryKeys.access.people(effectiveCompanyId!),
+    queryFn: () => accessApi.listPeople(effectiveCompanyId!),
+    enabled: !!effectiveCompanyId && newIssueOpen,
+  });
+
   const { data: projects } = useQuery({
     queryKey: queryKeys.projects.list(effectiveCompanyId!),
     queryFn: () => projectsApi.list(effectiveCompanyId!),
@@ -220,7 +227,10 @@ export function NewIssueDialog() {
     userId: currentUserId,
   });
 
-  const assigneeAdapterType = (agents ?? []).find((agent) => agent.id === assigneeId)?.adapterType ?? null;
+  // assigneeId is stored as "agent:<agentId>" or "user:<userId>" or "" (unassigned)
+  const assigneeAgentId = assigneeId.startsWith("agent:") ? assigneeId.slice("agent:".length) : assigneeId && !assigneeId.startsWith("user:") ? assigneeId : null;
+  const assigneeUserId = assigneeId.startsWith("user:") ? assigneeId.slice("user:".length) : null;
+  const assigneeAdapterType = (agents ?? []).find((agent) => agent.id === assigneeAgentId)?.adapterType ?? null;
   const supportsAssigneeOverrides = Boolean(
     assigneeAdapterType && ISSUE_OVERRIDE_ADAPTER_TYPES.has(assigneeAdapterType),
   );
@@ -443,7 +453,8 @@ export function NewIssueDialog() {
       description: description.trim() || undefined,
       status,
       priority: priority || "medium",
-      ...(assigneeId ? { assigneeAgentId: assigneeId } : {}),
+      ...(assigneeAgentId ? { assigneeAgentId } : {}),
+      ...(assigneeUserId ? { assigneeUserId } : {}),
       ...(projectId ? { projectId } : {}),
       ...(assigneeAdapterOverrides ? { assigneeAdapterOverrides } : {}),
       ...(executionWorkspaceSettings ? { executionWorkspaceSettings } : {}),
@@ -475,7 +486,8 @@ export function NewIssueDialog() {
   const hasDraft = title.trim().length > 0 || description.trim().length > 0;
   const currentStatus = statuses.find((s) => s.value === status) ?? statuses[1]!;
   const currentPriority = priorities.find((p) => p.value === priority);
-  const currentAssignee = (agents ?? []).find((a) => a.id === assigneeId);
+  const currentAssignee = (agents ?? []).find((a) => a.id === assigneeAgentId);
+  const currentHumanAssignee = assigneeUserId ? (people ?? []).find((p) => p.id === assigneeUserId) : null;
   const currentProject = orderedProjects.find((project) => project.id === projectId);
   const currentProjectExecutionWorkspacePolicy = SHOW_EXPERIMENTAL_ISSUE_WORKTREE_UI
     ? currentProject?.executionWorkspacePolicy ?? null
@@ -496,18 +508,26 @@ export function NewIssueDialog() {
         ? ISSUE_THINKING_EFFORT_OPTIONS.opencode_local
       : ISSUE_THINKING_EFFORT_OPTIONS.claude_local;
   const recentAssigneeIds = useMemo(() => getRecentAssigneeIds(), [newIssueOpen]);
-  const assigneeOptions = useMemo<InlineEntityOption[]>(
-    () =>
-      sortAgentsByRecency(
-        (agents ?? []).filter((agent) => agent.status !== "terminated"),
-        recentAssigneeIds,
-      ).map((agent) => ({
-        id: agent.id,
-        label: agent.name,
-        searchText: `${agent.name} ${agent.role} ${agent.title ?? ""}`,
-      })),
-    [agents, recentAssigneeIds],
-  );
+  const assigneeOptions = useMemo<InlineEntityOption[]>(() => {
+    const agentOptions = sortAgentsByRecency(
+      (agents ?? []).filter((agent) => agent.status !== "terminated"),
+      recentAssigneeIds,
+    ).map((agent) => ({
+      id: `agent:${agent.id}`,
+      label: agent.name,
+      searchText: `${agent.name} ${agent.role} ${agent.title ?? ""} agent`,
+    }));
+
+    const humanOptions = (people ?? [])
+      .filter((p) => p.status === "active")
+      .map((p) => ({
+        id: `user:${p.id}`,
+        label: p.name || p.email || p.id.slice(0, 8),
+        searchText: `${p.name ?? ""} ${p.email ?? ""} human user`.trim(),
+      }));
+
+    return [...agentOptions, ...humanOptions];
+  }, [agents, people, recentAssigneeIds]);
   const projectOptions = useMemo<InlineEntityOption[]>(
     () =>
       orderedProjects.map((project) => ({
@@ -734,22 +754,46 @@ export function NewIssueDialog() {
                 onConfirm={() => {
                   projectSelectorRef.current?.focus();
                 }}
-                renderTriggerValue={(option) =>
-                  option && currentAssignee ? (
-                    <>
-                      <AgentIcon icon={currentAssignee.icon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <span className="truncate">{option.label}</span>
-                    </>
-                  ) : (
-                    <span className="text-muted-foreground">Assignee</span>
-                  )
-                }
+                renderTriggerValue={(option) => {
+                  if (!option) return <span className="text-muted-foreground">Assignee</span>;
+                  if (currentAssignee) {
+                    return (
+                      <>
+                        <AgentIcon icon={currentAssignee.icon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <span className="truncate">{option.label}</span>
+                      </>
+                    );
+                  }
+                  if (currentHumanAssignee) {
+                    return (
+                      <>
+                        <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-muted-foreground/30 inline-flex items-center justify-center text-[8px] font-semibold">
+                          {(currentHumanAssignee.name || currentHumanAssignee.email || "?").slice(0, 1).toUpperCase()}
+                        </span>
+                        <span className="truncate">{option.label}</span>
+                      </>
+                    );
+                  }
+                  return <span className="text-muted-foreground">Assignee</span>;
+                }}
                 renderOption={(option) => {
                   if (!option.id) return <span className="truncate">{option.label}</span>;
-                  const assignee = (agents ?? []).find((agent) => agent.id === option.id);
+                  if (option.id.startsWith("agent:")) {
+                    const agentId = option.id.slice("agent:".length);
+                    const assignee = (agents ?? []).find((agent) => agent.id === agentId);
+                    return (
+                      <>
+                        <AgentIcon icon={assignee?.icon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <span className="truncate">{option.label}</span>
+                      </>
+                    );
+                  }
+                  // Human user
                   return (
                     <>
-                      <AgentIcon icon={assignee?.icon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-muted-foreground/30 inline-flex items-center justify-center text-[8px] font-semibold">
+                        {option.label.slice(0, 1).toUpperCase()}
+                      </span>
                       <span className="truncate">{option.label}</span>
                     </>
                   );
