@@ -18,6 +18,8 @@ export {
   renderTemplate,
   redactEnvForLogs,
   buildPaperclipEnv,
+  buildExecutionEnv,
+  resolveConfiguredEnvFilePath,
   defaultPathForPlatform,
   ensurePathInEnv,
   ensureAbsoluteDirectory,

@@ -1,6 +1,7 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { deriveAgentUrlKey, deriveProjectUrlKey } from "@paperclipai/shared";
+import { toCompanyRelativePath } from "./company-routes";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -61,6 +62,43 @@ export function agentRouteRef(agent: { id: string; urlKey?: string | null; name?
 /** Build an agent URL using the short URL key when available. */
 export function agentUrl(agent: { id: string; urlKey?: string | null; name?: string | null }): string {
   return `/agents/${agentRouteRef(agent)}`;
+}
+
+/** Switch agents while preserving the current supported agent-detail tab. */
+export function agentSwitchUrl(
+  currentPath: string,
+  agent: { id: string; urlKey?: string | null; name?: string | null },
+): string {
+  const relativePath = toCompanyRelativePath(currentPath);
+  const match = relativePath.match(/^\/agents\/([^/]+)(?:\/([^/]+)(?:\/([^/]+))?)?$/);
+  const nextAgentRef = agentRouteRef(agent);
+
+  if (!match) {
+    return `/agents/${nextAgentRef}/dashboard`;
+  }
+
+  const [, currentAgentRef, tab, detail] = match;
+  if (!currentAgentRef || currentAgentRef === "all" || currentAgentRef === "active" || currentAgentRef === "paused" || currentAgentRef === "error" || currentAgentRef === "new") {
+    return `/agents/${nextAgentRef}/dashboard`;
+  }
+
+  if (tab === "dashboard" || tab === "configuration") {
+    return `/agents/${nextAgentRef}/${tab}`;
+  }
+
+  if (tab === "runs") {
+    return `/agents/${nextAgentRef}/runs`;
+  }
+
+  if (!tab) {
+    return `/agents/${nextAgentRef}/dashboard`;
+  }
+
+  if (detail && tab === "runs") {
+    return `/agents/${nextAgentRef}/runs`;
+  }
+
+  return `/agents/${nextAgentRef}/dashboard`;
 }
 
 /** Build a project route reference using the short URL key when available. */

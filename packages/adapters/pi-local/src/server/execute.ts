@@ -9,6 +9,7 @@ import {
   asStringArray,
   parseObject,
   buildPaperclipEnv,
+  buildExecutionEnv,
   redactEnvForLogs,
   ensureAbsoluteDirectory,
   ensureCommandResolvable,
@@ -143,13 +144,10 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const skillsDir = await buildSkillsDir(ctx.skills);
 
   // Build environment
-  const envConfig = parseObject(config.env);
-  const hasExplicitApiKey =
-    typeof envConfig.PAPERCLIP_API_KEY === "string" && envConfig.PAPERCLIP_API_KEY.trim().length > 0;
-  const env: Record<string, string> = { ...buildPaperclipEnv(agent) };
-  env.PAPERCLIP_RUN_ID = runId;
-  env.AGENT_HOME = cwd;
-  env.PI_CODING_AGENT_DIR = skillsDir;
+  const injectedEnv: Record<string, string> = { ...buildPaperclipEnv(agent) };
+  injectedEnv.PAPERCLIP_RUN_ID = runId;
+  injectedEnv.AGENT_HOME = cwd;
+  injectedEnv.PI_CODING_AGENT_DIR = skillsDir;
   
   const wakeTaskId =
     (typeof context.taskId === "string" && context.taskId.trim().length > 0 && context.taskId.trim()) ||
@@ -163,6 +161,10 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     (typeof context.wakeCommentId === "string" && context.wakeCommentId.trim().length > 0 && context.wakeCommentId.trim()) ||
     (typeof context.commentId === "string" && context.commentId.trim().length > 0 && context.commentId.trim()) ||
     null;
+  const chatMessageId =
+    typeof context.chatMessageId === "string" && context.chatMessageId.trim().length > 0
+      ? context.chatMessageId.trim()
+      : null;
   const approvalId =
     typeof context.approvalId === "string" && context.approvalId.trim().length > 0
       ? context.approvalId.trim()
@@ -175,25 +177,27 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     ? context.issueIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     : [];
     
-  if (wakeTaskId) env.PAPERCLIP_TASK_ID = wakeTaskId;
-  if (wakeReason) env.PAPERCLIP_WAKE_REASON = wakeReason;
-  if (wakeCommentId) env.PAPERCLIP_WAKE_COMMENT_ID = wakeCommentId;
-  if (approvalId) env.PAPERCLIP_APPROVAL_ID = approvalId;
-  if (approvalStatus) env.PAPERCLIP_APPROVAL_STATUS = approvalStatus;
-  if (linkedIssueIds.length > 0) env.PAPERCLIP_LINKED_ISSUE_IDS = linkedIssueIds.join(",");
-  if (workspaceCwd) env.PAPERCLIP_WORKSPACE_CWD = workspaceCwd;
-  if (workspaceSource) env.PAPERCLIP_WORKSPACE_SOURCE = workspaceSource;
-  if (workspaceId) env.PAPERCLIP_WORKSPACE_ID = workspaceId;
-  if (workspaceRepoUrl) env.PAPERCLIP_WORKSPACE_REPO_URL = workspaceRepoUrl;
-  if (workspaceRepoRef) env.PAPERCLIP_WORKSPACE_REPO_REF = workspaceRepoRef;
-  if (workspaceHints.length > 0) env.PAPERCLIP_WORKSPACES_JSON = JSON.stringify(workspaceHints);
-
-  for (const [key, value] of Object.entries(envConfig)) {
-    if (typeof value === "string") env[key] = value;
+  if (wakeTaskId) injectedEnv.PAPERCLIP_TASK_ID = wakeTaskId;
+  if (wakeReason) injectedEnv.PAPERCLIP_WAKE_REASON = wakeReason;
+  if (wakeCommentId) injectedEnv.PAPERCLIP_WAKE_COMMENT_ID = wakeCommentId;
+  if (chatMessageId) injectedEnv.PAPERCLIP_CHAT_MESSAGE_ID = chatMessageId;
+  if (approvalId) injectedEnv.PAPERCLIP_APPROVAL_ID = approvalId;
+  if (approvalStatus) injectedEnv.PAPERCLIP_APPROVAL_STATUS = approvalStatus;
+  if (linkedIssueIds.length > 0) injectedEnv.PAPERCLIP_LINKED_ISSUE_IDS = linkedIssueIds.join(",");
+  if (workspaceCwd) injectedEnv.PAPERCLIP_WORKSPACE_CWD = workspaceCwd;
+  if (workspaceSource) injectedEnv.PAPERCLIP_WORKSPACE_SOURCE = workspaceSource;
+  if (workspaceId) injectedEnv.PAPERCLIP_WORKSPACE_ID = workspaceId;
+  if (workspaceRepoUrl) injectedEnv.PAPERCLIP_WORKSPACE_REPO_URL = workspaceRepoUrl;
+  if (workspaceRepoRef) injectedEnv.PAPERCLIP_WORKSPACE_REPO_REF = workspaceRepoRef;
+  if (workspaceHints.length > 0) {
+    injectedEnv.PAPERCLIP_WORKSPACES_JSON = JSON.stringify(workspaceHints);
   }
-  if (!hasExplicitApiKey && authToken) {
-    env.PAPERCLIP_API_KEY = authToken;
-  }
+  const env = await buildExecutionEnv({
+    globalEnvFile: asString(context.paperclipGlobalEnvFile, ""),
+    configEnv: config.env,
+    injectedEnv,
+    authToken,
+  });
   
   const runtimeEnv = Object.fromEntries(
     Object.entries(ensurePathInEnv({ ...process.env, ...env })).filter(

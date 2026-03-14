@@ -17,7 +17,7 @@ import {
 } from "../config/home.js";
 import { printPaperclipCliBanner } from "../utils/banner.js";
 
-type Section = "llm" | "database" | "logging" | "server" | "storage" | "secrets";
+type Section = "llm" | "database" | "logging" | "server" | "storage" | "secrets" | "env";
 
 const SECTION_LABELS: Record<Section, string> = {
   llm: "LLM Provider",
@@ -26,6 +26,7 @@ const SECTION_LABELS: Record<Section, string> = {
   server: "Server",
   storage: "Storage",
   secrets: "Secrets",
+  env: "Environment",
 };
 
 function defaultConfig(): PaperclipConfig {
@@ -168,6 +169,24 @@ export async function configure(opts: {
           }
         }
         break;
+      case "env": {
+        const nextGlobalEnvFile = await p.text({
+          message: "Global env file for all local agent runs (leave blank to disable)",
+          initialValue: config.globalEnvFile ?? "",
+          placeholder: ".env.agents",
+        });
+        if (p.isCancel(nextGlobalEnvFile)) {
+          p.cancel("Configuration cancelled.");
+          return;
+        }
+        const trimmed = nextGlobalEnvFile.trim();
+        if (trimmed) {
+          config.globalEnvFile = trimmed;
+        } else {
+          delete config.globalEnvFile;
+        }
+        break;
+      }
     }
 
     config.$meta.updatedAt = new Date().toISOString();

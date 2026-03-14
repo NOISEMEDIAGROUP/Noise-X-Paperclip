@@ -8,7 +8,7 @@ import { useSidebar } from "../context/SidebarContext";
 import { agentsApi } from "../api/agents";
 import { heartbeatsApi } from "../api/heartbeats";
 import { queryKeys } from "../lib/queryKeys";
-import { cn, agentRouteRef, agentUrl } from "../lib/utils";
+import { cn, agentRouteRef, agentSwitchUrl } from "../lib/utils";
 import { AgentIcon } from "./AgentIconPicker";
 import {
   Collapsible,
@@ -111,7 +111,7 @@ export function SidebarAgents() {
             return (
               <NavLink
                 key={agent.id}
-                to={agentUrl(agent)}
+                to={agentSwitchUrl(location.pathname, agent)}
                 onClick={() => {
                   if (isMobile) setSidebarOpen(false);
                 }}

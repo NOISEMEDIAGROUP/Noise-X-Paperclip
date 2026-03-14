@@ -99,6 +99,7 @@ export const paperclipConfigSchema = z
   .object({
     $meta: configMetaSchema,
     llm: llmConfigSchema.optional(),
+    globalEnvFile: z.string().optional(),
     database: databaseConfigSchema,
     logging: loggingConfigSchema,
     server: serverConfigSchema,

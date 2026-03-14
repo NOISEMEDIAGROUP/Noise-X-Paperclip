@@ -13,7 +13,7 @@ import { agentStatusDot, agentStatusDotDefault } from "../lib/status-colors";
 import { EntityRow } from "../components/EntityRow";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
-import { relativeTime, cn, agentRouteRef, agentUrl } from "../lib/utils";
+import { relativeTime, cn, agentRouteRef, agentSwitchUrl } from "../lib/utils";
 import { PageTabBar } from "../components/PageTabBar";
 import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -71,6 +71,7 @@ export function Agents() {
   const effectiveView: "list" | "org" = forceListView ? "list" : view;
   const [showTerminated, setShowTerminated] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const switchAgentUrl = (agent: Agent) => agentSwitchUrl(location.pathname, agent);
 
   const { data: agents, isLoading, error } = useQuery({
     queryKey: queryKeys.agents.list(selectedCompanyId!),
@@ -227,7 +228,7 @@ export function Agents() {
                 key={agent.id}
                 title={agent.name}
                 subtitle={`${roleLabels[agent.role] ?? agent.role}${agent.title ? ` - ${agent.title}` : ""}`}
-                to={agentUrl(agent)}
+                to={switchAgentUrl(agent)}
                 leading={
                   <span className="relative flex h-2.5 w-2.5">
                     <span
@@ -284,7 +285,14 @@ export function Agents() {
       {effectiveView === "org" && filteredOrg.length > 0 && (
         <div className="border border-border py-1">
           {filteredOrg.map((node) => (
-            <OrgTreeNode key={node.id} node={node} depth={0} agentMap={agentMap} liveRunByAgent={liveRunByAgent} />
+            <OrgTreeNode
+              key={node.id}
+              node={node}
+              depth={0}
+              agentMap={agentMap}
+              liveRunByAgent={liveRunByAgent}
+              currentPath={location.pathname}
+            />
           ))}
         </div>
       )}
@@ -309,11 +317,13 @@ function OrgTreeNode({
   depth,
   agentMap,
   liveRunByAgent,
+  currentPath,
 }: {
   node: OrgNode;
   depth: number;
   agentMap: Map<string, Agent>;
   liveRunByAgent: Map<string, { runId: string; liveCount: number }>;
+  currentPath: string;
 }) {
   const agent = agentMap.get(node.id);
 
@@ -322,7 +332,7 @@ function OrgTreeNode({
   return (
     <div style={{ paddingLeft: depth * 24 }}>
       <Link
-        to={agent ? agentUrl(agent) : `/agents/${node.id}`}
+        to={agent ? agentSwitchUrl(currentPath, agent) : `/agents/${node.id}/dashboard`}
         className="flex items-center gap-3 px-3 py-2 hover:bg-accent/30 transition-colors w-full text-left no-underline text-inherit"
       >
         <span className="relative flex h-2.5 w-2.5 shrink-0">
@@ -374,7 +384,14 @@ function OrgTreeNode({
       {node.reports && node.reports.length > 0 && (
         <div className="border-l border-border/50 ml-4">
           {node.reports.map((child) => (
-            <OrgTreeNode key={child.id} node={child} depth={depth + 1} agentMap={agentMap} liveRunByAgent={liveRunByAgent} />
+            <OrgTreeNode
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              agentMap={agentMap}
+              liveRunByAgent={liveRunByAgent}
+              currentPath={currentPath}
+            />
           ))}
         </div>
       )}

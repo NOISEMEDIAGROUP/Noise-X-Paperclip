@@ -3,24 +3,25 @@ import {
   asString,
   asNumber,
   asStringArray,
-  parseObject,
   buildPaperclipEnv,
+  buildExecutionEnv,
   redactEnvForLogs,
   runChildProcess,
 } from "../utils.js";
 
 export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
-  const { runId, agent, config, onLog, onMeta } = ctx;
+  const { runId, agent, config, context, onLog, onMeta, authToken } = ctx;
   const command = asString(config.command, "");
   if (!command) throw new Error("Process adapter missing command");
 
   const args = asStringArray(config.args);
   const cwd = asString(config.cwd, process.cwd());
-  const envConfig = parseObject(config.env);
-  const env: Record<string, string> = { ...buildPaperclipEnv(agent) };
-  for (const [k, v] of Object.entries(envConfig)) {
-    if (typeof v === "string") env[k] = v;
-  }
+  const env = await buildExecutionEnv({
+    globalEnvFile: asString(context.paperclipGlobalEnvFile, ""),
+    configEnv: config.env,
+    injectedEnv: { ...buildPaperclipEnv(agent) },
+    authToken,
+  });
 
   const timeoutSec = asNumber(config.timeoutSec, 0);
   const graceSec = asNumber(config.graceSec, 15);

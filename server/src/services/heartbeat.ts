@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { resolveConfiguredEnvFilePath } from "@paperclipai/adapter-utils/server-utils";
 import type { Db } from "@paperclipai/db";
 import {
   agents,
@@ -39,6 +40,8 @@ import {
   parseProjectExecutionWorkspacePolicy,
   resolveExecutionWorkspaceMode,
 } from "./execution-workspace-policy.js";
+import { readConfigFile } from "../config-file.js";
+import { resolvePaperclipConfigPath } from "../paths.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
@@ -279,6 +282,7 @@ export function shouldResetTaskSessionForWake(
 ) {
   const wakeReason = readNonEmptyString(contextSnapshot?.wakeReason);
   if (wakeReason === "issue_assigned") return true;
+  if (wakeReason === "chat_message") return false;
 
   const wakeSource = readNonEmptyString(contextSnapshot?.wakeSource);
   if (wakeSource === "timer") return true;
@@ -292,6 +296,7 @@ function describeSessionResetReason(
 ) {
   const wakeReason = readNonEmptyString(contextSnapshot?.wakeReason);
   if (wakeReason === "issue_assigned") return "wake reason is issue_assigned";
+  if (wakeReason === "chat_message") return null;
 
   const wakeSource = readNonEmptyString(contextSnapshot?.wakeSource);
   if (wakeSource === "timer") return "wake source is timer";
@@ -1478,12 +1483,23 @@ export function heartbeatService(db: Db) {
       }
       const skillsSvc = skillService(db);
       const resolvedSkills = await skillsSvc.resolveForExecution(agent.id);
+      const instanceConfig = readConfigFile();
+      const configuredGlobalEnvFile = instanceConfig?.globalEnvFile?.trim();
+      const executionContext = configuredGlobalEnvFile
+        ? {
+            ...context,
+            paperclipGlobalEnvFile: resolveConfiguredEnvFilePath(
+              configuredGlobalEnvFile,
+              resolvePaperclipConfigPath(),
+            ),
+          }
+        : context;
       const adapterResult = await adapter.execute({
         runId: run.id,
         agent,
         runtime: runtimeForAdapter,
         config: resolvedConfig,
-        context,
+        context: executionContext,
         onLog,
         onMeta: onAdapterMeta,
         authToken: authToken ?? undefined,

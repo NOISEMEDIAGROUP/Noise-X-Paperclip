@@ -1,6 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { constants as fsConstants, promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { parse as parseDotenv } from "dotenv";
 
 export interface RunProcessResult {
   exitCode: number | null;
@@ -101,6 +103,72 @@ export function redactEnvForLogs(env: Record<string, string>): Record<string, st
     redacted[key] = SENSITIVE_ENV_KEY.test(key) ? "***REDACTED***" : value;
   }
   return redacted;
+}
+
+export function extractStringEnv(value: unknown): Record<string, string> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return {};
+  }
+
+  const env: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry === "string") env[key] = entry;
+  }
+  return env;
+}
+
+export function resolveConfiguredEnvFilePath(filePath: string, configPath: string): string {
+  const trimmed = filePath.trim();
+  if (!trimmed) return "";
+  const expanded =
+    trimmed === "~"
+      ? os.homedir()
+      : trimmed.startsWith("~/")
+        ? path.resolve(os.homedir(), trimmed.slice(2))
+        : trimmed;
+  return path.isAbsolute(expanded)
+    ? path.resolve(expanded)
+    : path.resolve(path.dirname(configPath), expanded);
+}
+
+export async function readConfiguredEnvFile(filePath?: string | null): Promise<Record<string, string>> {
+  if (!filePath) return {};
+
+  try {
+    const contents = await fs.readFile(filePath, "utf-8");
+    return parseDotenv(contents);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return {};
+    }
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to read global env file "${filePath}": ${reason}`);
+  }
+}
+
+export async function buildExecutionEnv(input: {
+  globalEnvFile?: string | null;
+  configEnv?: unknown;
+  injectedEnv?: Record<string, string>;
+  authToken?: string;
+  authTokenEnvKey?: string;
+}): Promise<Record<string, string>> {
+  const globalEnv = await readConfiguredEnvFile(input.globalEnvFile);
+  const configEnv = extractStringEnv(input.configEnv);
+  const env = {
+    ...globalEnv,
+    ...configEnv,
+    ...(input.injectedEnv ?? {}),
+  };
+  const authTokenEnvKey = input.authTokenEnvKey ?? "PAPERCLIP_API_KEY";
+  const authTokenValue = env[authTokenEnvKey];
+  if (
+    input.authToken &&
+    !(typeof authTokenValue === "string" && authTokenValue.trim().length > 0)
+  ) {
+    env[authTokenEnvKey] = input.authToken;
+  }
+  return env;
 }
 
 export function buildPaperclipEnv(agent: { id: string; companyId: string }): Record<string, string> {
