@@ -75,3 +75,12 @@ jobs:
             scan-only) FLAG="--scan-only --dry-run" ;;
           esac
           node scripts/upstream-sync.mjs $FLAG
+
+      - name: Upload agent event log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-events-log
+          path: agent-events.log
+          if-no-files-found: ignore
+          retention-days: 14

@@ -32,13 +32,24 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, appendFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 const CWD = process.cwd();
 const DRY_RUN = process.argv.includes("--dry-run");
 const AUTO_PUSH = process.argv.includes("--push");
 const CREATE_PR = process.argv.includes("--pr");
 const SCAN_ONLY = process.argv.includes("--scan-only");
+
+// Agent event log — saved as CI artifact
+const AGENT_LOG_PATH = join(CWD, "agent-events.log");
+writeFileSync(AGENT_LOG_PATH, `=== upstream-sync agent log — ${new Date().toISOString()} ===\n`);
+
+function logEvent(phase, event) {
+  const ts = new Date().toISOString();
+  const line = `[${ts}] [${phase}] ${JSON.stringify(event)}\n`;
+  appendFileSync(AGENT_LOG_PATH, line);
+}
 
 // ---------------------------------------------------------------------------
 // Shell helpers
@@ -100,8 +111,13 @@ async function loadSdk() {
 
 async function runAgent(prompt, opts = {}) {
   await loadSdk();
+  const phase = opts.phase ?? "unknown";
   const tools = opts.tools ?? ["Read", "Edit", "Write", "Bash", "Glob", "Grep"];
   let result = "";
+  let turnCount = 0;
+
+  log(`Agent [${phase}] starting (model: ${opts.model ?? "claude-sonnet-4-6"}, maxTurns: ${opts.maxTurns ?? 60})`);
+  logEvent(phase, { type: "agent_start", model: opts.model, maxTurns: opts.maxTurns ?? 60 });
 
   for await (const message of _query({
     prompt,
@@ -114,10 +130,23 @@ async function runAgent(prompt, opts = {}) {
       model: opts.model ?? "claude-sonnet-4-6",
     },
   })) {
-    if ("result" in message) {
+    // Log every event type from the SDK
+    if (message.type === "tool_use") {
+      turnCount++;
+      logEvent(phase, { type: "tool_use", turn: turnCount, tool: message.tool, input_preview: JSON.stringify(message.input).slice(0, 200) });
+    } else if (message.type === "text") {
+      logEvent(phase, { type: "text", preview: (message.text || "").slice(0, 300) });
+    } else if ("result" in message) {
       result = message.result;
+      logEvent(phase, { type: "result", preview: result.slice(0, 500) });
+    } else {
+      // Log any other event types we haven't explicitly handled
+      logEvent(phase, { type: message.type || "unknown", keys: Object.keys(message) });
     }
   }
+
+  log(`Agent [${phase}] finished after ${turnCount} tool calls`);
+  logEvent(phase, { type: "agent_done", turnCount });
 
   return result;
 }
@@ -250,7 +279,7 @@ ${conflictFiles}
 6. Continue until the rebase completes
 
 IMPORTANT: Do NOT use git rebase --abort. Resolve all conflicts.`,
-    { model: "claude-sonnet-4-6", maxTurns: 80 },
+    { model: "claude-sonnet-4-6", maxTurns: 80, phase: "rebase-conflicts" },
   );
 
   // Verify rebase completed
@@ -362,7 +391,7 @@ For each file:
 
 After fixing all files, verify no TypeScript imports are missing.
 Do NOT modify files that don't need changes.`,
-    { model: "claude-sonnet-4-6" },
+    { model: "claude-sonnet-4-6", phase: "hostedmode-fix" },
   );
 }
 
@@ -375,6 +404,16 @@ async function buildCheck() {
 
   // Check if there's a tsconfig in ui/
   const hasTsconfig = existsSync(`${CWD}/ui/tsconfig.json`);
+
+  // Ensure dependencies are installed (CI has no node_modules after rebase)
+  if (hasTsconfig) {
+    log("Installing UI dependencies...");
+    const install = tryRun("cd ui && npm install --ignore-scripts 2>&1");
+    if (!install.ok) {
+      log(`Warning: npm install failed: ${install.output.slice(0, 500)}`);
+    }
+  }
+
   const buildCmd = hasTsconfig
     ? "cd ui && npx tsc --noEmit 2>&1"
     : "npx tsc --noEmit 2>&1";
@@ -403,7 +442,7 @@ Common issues:
 - JSX conditional rendering syntax errors
 
 Fix each error. Do NOT remove hostedMode guards to fix errors — fix the guard implementation instead.`,
-    { model: "claude-sonnet-4-6" },
+    { model: "claude-sonnet-4-6", phase: "build-fix" },
   );
 
   // Re-check
