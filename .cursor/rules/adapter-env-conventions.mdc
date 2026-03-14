@@ -1,0 +1,37 @@
+---
+description: Adapter environment variable conventions for agent execution
+globs: packages/adapters/*/src/server/execute.ts
+alwaysApply: false
+---
+
+# Adapter Env Conventions
+
+## Auto-injected variables
+
+Every adapter sets these before spawning the agent process:
+
+- `AGENT_HOME` — resolved `cwd` of the agent. Used by AGENTS.md and skills for portable path references.
+- `PAPERCLIP_AGENT_ID`, `PAPERCLIP_COMPANY_ID`, `PAPERCLIP_API_URL` — from `buildPaperclipEnv()`.
+- `PAPERCLIP_RUN_ID` — unique run identifier for audit trail.
+- `PAPERCLIP_TASK_ID`, `PAPERCLIP_WAKE_REASON`, `PAPERCLIP_WAKE_COMMENT_ID` — set when context triggers are present.
+
+## Override order
+
+1. `buildPaperclipEnv(agent)` sets base vars
+2. `AGENT_HOME = cwd` is set
+3. User `env` config from adapter settings is merged last (can override anything)
+
+```typescript
+// Pattern in every adapter's execute.ts:
+const env: Record<string, string> = { ...buildPaperclipEnv(agent) };
+env.PAPERCLIP_RUN_ID = runId;
+env.AGENT_HOME = cwd;
+// ... wake context vars ...
+for (const [key, value] of Object.entries(envConfig)) {
+  if (typeof value === "string") env[key] = value; // user overrides last
+}
+```
+
+## Skills injection
+
+Skills are symlinked into a per-run temp directory and passed via `--add-dir <tmpdir>`. The temp directory is cleaned up in a `finally` block after the run completes.

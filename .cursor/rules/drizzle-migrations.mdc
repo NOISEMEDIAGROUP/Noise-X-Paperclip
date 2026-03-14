@@ -1,0 +1,40 @@
+---
+description: Drizzle migration discipline to avoid numbering collisions across branches
+globs: packages/db/src/migrations/**, packages/db/src/schema/**
+alwaysApply: false
+---
+
+# Drizzle Migration Discipline
+
+## Numbering collisions
+
+When multiple branches add migrations, they will both pick the next number (e.g. two branches both create `0028_*.sql`). This causes failures on merge.
+
+**Prevention:**
+1. Before merging, check if any other branch has added a migration at the same number.
+2. Merge the simpler/smaller branch first.
+3. Rebase the other branch onto the new base and renumber its migrations.
+
+**Renumbering checklist:**
+- Rename the `.sql` files (`0028_foo.sql` → `0029_foo.sql`)
+- Rename the `meta/*_snapshot.json` files to match
+- Update `meta/_journal.json` entries: change `idx` and `tag` to the new numbers
+- Remove any `0031_red_venus.sql`-style duplicates that drizzle-kit generated with stale schema state
+
+## Duplicate table creation
+
+When drizzle-kit generates a migration while another branch's schema file is in the working tree, it may include `CREATE TABLE` for tables it doesn't own. Always review generated SQL before committing — remove any statements that create tables belonging to another feature branch.
+
+## Journal format
+
+```json
+{
+  "idx": 29,
+  "version": "7",
+  "when": 1773410904003,
+  "tag": "0029_low_angel",
+  "breakpoints": true
+}
+```
+
+The `tag` must match the filename (without `.sql`). The `idx` must match the numeric prefix.
