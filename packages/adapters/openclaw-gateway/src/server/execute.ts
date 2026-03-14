@@ -824,7 +824,32 @@ function parseUsage(value: unknown): AdapterExecutionResult["usage"] | undefined
     0,
   );
 
-  if (inputTokens <= 0 && outputTokens <= 0 && cachedInputTokens <= 0) {
+  // Context window usage — populated by OpenClaw gateway when session status is available
+  const contextUsagePercent = asNumber(
+    record.contextUsagePercent ??
+    record.context_usage_percent ??
+    record.usagePercent ??
+    record.usage_percent,
+    -1,
+  );
+  const contextTokensUsed = asNumber(
+    record.contextTokensUsed ?? record.context_tokens_used ?? record.inputTokens,
+    0,
+  );
+  const contextTokensMax = asNumber(
+    record.contextTokensMax ?? record.context_tokens_max ?? record.contextWindow ?? record.context_window,
+    0,
+  );
+
+  // Derive contextUsagePercent from tokens if not explicitly provided
+  const derivedContextPercent =
+    contextUsagePercent >= 0
+      ? contextUsagePercent
+      : contextTokensUsed > 0 && contextTokensMax > 0
+        ? Math.round((contextTokensUsed / contextTokensMax) * 100)
+        : -1;
+
+  if (inputTokens <= 0 && outputTokens <= 0 && cachedInputTokens <= 0 && derivedContextPercent < 0) {
     return undefined;
   }
 
@@ -832,6 +857,9 @@ function parseUsage(value: unknown): AdapterExecutionResult["usage"] | undefined
     inputTokens,
     outputTokens,
     ...(cachedInputTokens > 0 ? { cachedInputTokens } : {}),
+    ...(derivedContextPercent >= 0 ? { contextUsagePercent: derivedContextPercent } : {}),
+    ...(contextTokensUsed > 0 ? { contextTokensUsed } : {}),
+    ...(contextTokensMax > 0 ? { contextTokensMax } : {}),
   };
 }
 
@@ -1188,9 +1216,44 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         null;
       const summary = summaryFromEvents || summaryFromPayload || null;
 
-      const meta = asRecord(asRecord(acceptedPayload?.result)?.meta) ?? asRecord(acceptedPayload?.meta);
+      // Result metadata may live in different places depending on the gateway protocol path:
+      // - acceptedPayload.result.meta (when agent returns status=ok immediately)
+      // - acceptedPayload.meta (legacy / direct)
+      // - latestResultPayload.result.meta (agent.wait terminal snapshot — most common for long runs)
+      // - latestResultPayload.meta (legacy agent.wait format)
+      const latestPayloadRecord = asRecord(latestResultPayload);
+      const meta =
+        asRecord(asRecord(acceptedPayload?.result)?.meta) ??
+        asRecord(acceptedPayload?.meta) ??
+        asRecord(asRecord(latestPayloadRecord?.result)?.meta) ??
+        asRecord(latestPayloadRecord?.meta);
       const agentMeta = asRecord(meta?.agentMeta);
-      const usage = parseUsage(agentMeta?.usage ?? meta?.usage);
+      // lastCallUsage reflects only the final API call's token counts — the most accurate
+      // snapshot of actual context window consumption. Unlike the accumulated usage.input
+      // (which sums input tokens across all tool-use loops), lastCallUsage.input represents
+      // the real context size at the end of the run and is used as contextTokensUsed.
+      const lastCallUsage = asRecord(agentMeta?.lastCallUsage);
+      // Merge usage fields: explicit usage object + top-level agentMeta context fields
+      // so contextUsagePercent / contextTokensUsed / contextTokensMax are captured
+      // even when sent at the agentMeta level rather than nested under usage.
+      const rawUsage = {
+        ...(asRecord(agentMeta?.usage ?? meta?.usage) ?? {}),
+        ...(agentMeta?.contextUsagePercent != null ? { contextUsagePercent: agentMeta.contextUsagePercent } : {}),
+        ...(agentMeta?.contextTokensUsed != null ? { contextTokensUsed: agentMeta.contextTokensUsed } : {}),
+        ...(agentMeta?.contextTokensMax != null ? { contextTokensMax: agentMeta.contextTokensMax } : {}),
+        ...(meta?.contextUsagePercent != null ? { contextUsagePercent: meta.contextUsagePercent } : {}),
+        ...(meta?.contextTokensUsed != null ? { contextTokensUsed: meta.contextTokensUsed } : {}),
+        ...(meta?.contextTokensMax != null ? { contextTokensMax: meta.contextTokensMax } : {}),
+        // When the gateway provides lastCallUsage but no explicit contextTokensUsed, use
+        // lastCallUsage.input as contextTokensUsed. This overrides the accumulated
+        // usage.input (which overstates context by summing across all tool-use loops).
+        ...(lastCallUsage?.input != null &&
+        agentMeta?.contextTokensUsed == null &&
+        meta?.contextTokensUsed == null
+          ? { contextTokensUsed: lastCallUsage.input }
+          : {}),
+      };
+      const usage = parseUsage(Object.keys(rawUsage).length > 0 ? rawUsage : undefined);
       const provider = nonEmpty(agentMeta?.provider) ?? nonEmpty(meta?.provider) ?? "openclaw";
       const model = nonEmpty(agentMeta?.model) ?? nonEmpty(meta?.model) ?? null;
       const costUsd = asNumber(agentMeta?.costUsd ?? meta?.costUsd, 0);

@@ -435,6 +435,107 @@ describe("openclaw gateway adapter execute", () => {
     }
   });
 
+  it("extracts contextTokensUsed from agentMeta.lastCallUsage when no explicit contextTokensUsed", async () => {
+    const server = createServer();
+    const wss = new WebSocketServer({ server });
+
+    wss.on("connection", (socket) => {
+      socket.send(
+        JSON.stringify({ type: "event", event: "connect.challenge", payload: { nonce: "nonce-ctx" } }),
+      );
+
+      socket.on("message", (raw) => {
+        const text = Buffer.isBuffer(raw) ? raw.toString("utf8") : String(raw);
+        const frame = JSON.parse(text) as { type: string; id: string; method: string; params?: Record<string, unknown> };
+        if (frame.type !== "req") return;
+
+        if (frame.method === "connect") {
+          socket.send(JSON.stringify({
+            type: "res", id: frame.id, ok: true,
+            payload: {
+              type: "hello-ok", protocol: 3,
+              server: { version: "test", connId: "conn-ctx" },
+              features: { methods: ["connect", "agent", "agent.wait"], events: ["agent"] },
+              snapshot: { version: 1, ts: Date.now() },
+              policy: { maxPayload: 1_000_000, maxBufferedBytes: 1_000_000, tickIntervalMs: 30_000 },
+            },
+          }));
+          return;
+        }
+
+        if (frame.method === "agent") {
+          socket.send(JSON.stringify({
+            type: "res", id: frame.id, ok: true,
+            payload: { runId: "run-ctx", status: "accepted", acceptedAt: Date.now() },
+          }));
+          return;
+        }
+
+        if (frame.method === "agent.wait") {
+          socket.send(JSON.stringify({
+            type: "res", id: frame.id, ok: true,
+            payload: {
+              runId: "run-ctx",
+              status: "ok",
+              startedAt: 1,
+              endedAt: 2,
+              // Simulate OpenClaw gateway result with agentMeta including lastCallUsage
+              result: {
+                meta: {
+                  agentMeta: {
+                    provider: "anthropic",
+                    model: "claude-3-5-sonnet",
+                    usage: {
+                      // Accumulated across all tool-use loops (overstates context)
+                      input: 50000,
+                      output: 800,
+                      cacheRead: 10000,
+                      cacheWrite: 0,
+                      total: 60800,
+                    },
+                    lastCallUsage: {
+                      // Only the last API call — true context snapshot
+                      input: 35000,
+                      output: 800,
+                      cacheRead: 10000,
+                      cacheWrite: 0,
+                      total: 45800,
+                    },
+                    promptTokens: 45000,
+                  },
+                },
+                payloads: [{ text: "done" }],
+              },
+            },
+          }));
+        }
+      });
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("failed to get address");
+    const url = `ws://127.0.0.1:${(address as { port: number }).port}`;
+
+    try {
+      const result = await execute(buildContext({
+        url,
+        headers: { "x-openclaw-token": "token" },
+        waitTimeoutMs: 2000,
+      }));
+
+      expect(result.exitCode).toBe(0);
+      expect(result.usage).toBeDefined();
+      // contextTokensUsed should be lastCallUsage.input (35000), NOT accumulated usage.input (50000)
+      expect(result.usage?.contextTokensUsed).toBe(35000);
+      // inputTokens should still be the accumulated usage.input
+      expect(result.usage?.inputTokens).toBe(50000);
+    } finally {
+      await new Promise<void>((resolve) => wss.close(() => resolve()));
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it("fails fast when url is missing", async () => {
     const result = await execute(buildContext({}));
     expect(result.exitCode).toBe(1);
