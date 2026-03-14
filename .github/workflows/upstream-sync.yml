@@ -48,7 +48,12 @@ jobs:
       - name: Install Agent SDK
         run: |
           npm install -g @anthropic-ai/claude-code
-          npm install @anthropic-ai/claude-agent-sdk
+          npm install -g @anthropic-ai/claude-agent-sdk
+
+      - name: Write Claude credentials
+        run: |
+          mkdir -p ~/.claude
+          echo '${{ secrets.CLAUDE_CREDENTIALS_JSON }}' > ~/.claude/.credentials.json
 
       - name: Check for upstream changes
         id: check
@@ -64,7 +69,6 @@ jobs:
       - name: Run upstream sync
         if: steps.check.outputs.behind != '0' || contains(fromJSON('["scan-only", "dry-run"]'), github.event.inputs.mode)
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           NODE_PATH: ${{ github.workspace }}/node_modules
         run: |
           MODE="${{ github.event.inputs.mode || 'pr' }}"
