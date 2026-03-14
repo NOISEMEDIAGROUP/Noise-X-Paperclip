@@ -6,11 +6,13 @@ import {
   authUsers,
   companies,
   companyMemberships,
+  documents,
   goals,
   heartbeatRuns,
   issueAttachments,
   issueLabels,
   issueComments,
+  issueDocuments,
   issueReadStates,
   issues,
   labels,
@@ -820,6 +822,10 @@ export function issueService(db: Db) {
           .select({ assetId: issueAttachments.assetId })
           .from(issueAttachments)
           .where(eq(issueAttachments.issueId, id));
+        const issueDocumentIds = await tx
+          .select({ documentId: issueDocuments.documentId })
+          .from(issueDocuments)
+          .where(eq(issueDocuments.issueId, id));
 
         const removedIssue = await tx
           .delete(issues)
@@ -831,6 +837,12 @@ export function issueService(db: Db) {
           await tx
             .delete(assets)
             .where(inArray(assets.id, attachmentAssetIds.map((row) => row.assetId)));
+        }
+
+        if (removedIssue && issueDocumentIds.length > 0) {
+          await tx
+            .delete(documents)
+            .where(inArray(documents.id, issueDocumentIds.map((row) => row.documentId)));
         }
 
         if (!removedIssue) return null;
