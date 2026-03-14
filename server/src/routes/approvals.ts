@@ -1,5 +1,7 @@
 import { Router } from "express";
 import type { Db } from "@paperclipai/db";
+import { agents, issues } from "@paperclipai/db";
+import { eq, inArray } from "drizzle-orm";
 import {
   addApprovalCommentSchema,
   createApprovalSchema,
@@ -104,10 +106,34 @@ export function approvalRoutes(db: Db) {
       details: { type: approval.type, issueIds: uniqueIssueIds },
     });
 
+    // Enrich event payload with agent name and issue titles (best-effort)
+    let requestedByAgentName: string | undefined;
+    let issueTitles: Array<{ id: string; title: string }> = [];
+    try {
+      if (approval.requestedByAgentId) {
+        const [agent] = await db
+          .select({ name: agents.name })
+          .from(agents)
+          .where(eq(agents.id, approval.requestedByAgentId))
+          .limit(1);
+        if (agent) requestedByAgentName = agent.name;
+      }
+      if (uniqueIssueIds.length > 0) {
+        issueTitles = await db
+          .select({ id: issues.id, title: issues.title })
+          .from(issues)
+          .where(inArray(issues.id, uniqueIssueIds));
+      }
+    } catch { /* best-effort enrichment */ }
+
     getEventBus().emit("approval.created", {
       approvalId: approval.id,
       companyId,
+      type: approval.type,
+      requestedByAgentId: approval.requestedByAgentId,
+      requestedByAgentName,
       issueIds: uniqueIssueIds,
+      issueTitles,
     }).catch(() => {}); // fire-and-forget
 
     res.status(201).json(redactApprovalPayload(approval));
@@ -153,11 +179,34 @@ export function approvalRoutes(db: Db) {
         },
       });
 
+      // Enrich with agent name and issue titles (best-effort)
+      let requestedByAgentName: string | undefined;
+      let issueTitles: Array<{ id: string; title: string }> = [];
+      try {
+        if (approval.requestedByAgentId) {
+          const [agent] = await db
+            .select({ name: agents.name })
+            .from(agents)
+            .where(eq(agents.id, approval.requestedByAgentId))
+            .limit(1);
+          if (agent) requestedByAgentName = agent.name;
+        }
+        if (linkedIssueIds.length > 0) {
+          issueTitles = await db
+            .select({ id: issues.id, title: issues.title })
+            .from(issues)
+            .where(inArray(issues.id, linkedIssueIds));
+        }
+      } catch { /* best-effort */ }
+
       getEventBus().emit("approval.decided", {
         approvalId: approval.id,
         companyId: approval.companyId,
         decision: "approved",
         decisionNote: req.body.decisionNote ?? undefined,
+        type: approval.type,
+        requestedByAgentName,
+        issueTitles,
       }).catch(() => {}); // fire-and-forget
 
       if (approval.requestedByAgentId) {
@@ -237,6 +286,9 @@ export function approvalRoutes(db: Db) {
     );
 
     if (applied) {
+      const linkedIssues = await issueApprovalsSvc.listIssuesForApproval(approval.id);
+      const linkedIssueIds = linkedIssues.map((issue) => issue.id);
+
       await logActivity(db, {
         companyId: approval.companyId,
         actorType: "user",
@@ -247,11 +299,34 @@ export function approvalRoutes(db: Db) {
         details: { type: approval.type },
       });
 
+      // Enrich with agent name and issue titles (best-effort)
+      let requestedByAgentName: string | undefined;
+      let issueTitles: Array<{ id: string; title: string }> = [];
+      try {
+        if (approval.requestedByAgentId) {
+          const [agent] = await db
+            .select({ name: agents.name })
+            .from(agents)
+            .where(eq(agents.id, approval.requestedByAgentId))
+            .limit(1);
+          if (agent) requestedByAgentName = agent.name;
+        }
+        if (linkedIssueIds.length > 0) {
+          issueTitles = await db
+            .select({ id: issues.id, title: issues.title })
+            .from(issues)
+            .where(inArray(issues.id, linkedIssueIds));
+        }
+      } catch { /* best-effort */ }
+
       getEventBus().emit("approval.decided", {
         approvalId: approval.id,
         companyId: approval.companyId,
         decision: "rejected",
         decisionNote: req.body.decisionNote ?? undefined,
+        type: approval.type,
+        requestedByAgentName,
+        issueTitles,
       }).catch(() => {}); // fire-and-forget
     }
 
