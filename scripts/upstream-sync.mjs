@@ -73,19 +73,29 @@ let _query;
 
 async function loadSdk() {
   if (_query) return;
-  try {
-    const sdk = await import("@anthropic-ai/claude-agent-sdk");
-    _query = sdk.query;
-  } catch {
-    die(
-      "@anthropic-ai/claude-agent-sdk not installed.\n" +
-        "  npm install @anthropic-ai/claude-agent-sdk\n" +
-        "  npm install -g @anthropic-ai/claude-code",
-    );
+
+  // Try local, then global (with explicit ESM entry point)
+  const globalRoot = execSync("npm root -g", { encoding: "utf-8" }).trim();
+  const candidates = [
+    "@anthropic-ai/claude-agent-sdk",
+    `${globalRoot}/@anthropic-ai/claude-agent-sdk/sdk.mjs`,
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      const sdk = await import(candidate);
+      _query = sdk.query;
+      return;
+    } catch {
+      // try next
+    }
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    die("ANTHROPIC_API_KEY env var is required.");
-  }
+
+  die(
+    "@anthropic-ai/claude-agent-sdk not installed.\n" +
+      "  npm install -g @anthropic-ai/claude-agent-sdk\n" +
+      "  npm install -g @anthropic-ai/claude-code",
+  );
 }
 
 async function runAgent(prompt, opts = {}) {
@@ -307,6 +317,7 @@ function scanForHostedModeGaps() {
 
       // Skip components whose parent already guards them
       if (file.includes("OnboardingWizard")) continue; // suppressed by App.tsx
+      if (file.includes("LiveRunWidget")) continue;    // passes adapterType as data, doesn't render it
 
       // Check if file has hostedMode guard
       const hasGuard = tryRun(`grep -l 'hostedMode\\|isHosted' ${file}`);

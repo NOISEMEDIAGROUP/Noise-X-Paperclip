@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { companiesApi } from "../api/companies";
 import { accessApi } from "../api/access";
+import { healthApi } from "../api/health";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
 import { Settings, Check } from "lucide-react";
@@ -29,6 +30,13 @@ export function CompanySettings() {
   } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
+
+  const healthQuery = useQuery({
+    queryKey: queryKeys.health,
+    queryFn: () => healthApi.get(),
+    retry: false,
+  });
+  const isHosted = healthQuery.data?.hostedMode === true;
 
   // General settings local state
   const [companyName, setCompanyName] = useState("");
@@ -307,77 +315,79 @@ export function CompanySettings() {
         </div>
       </div>
 
-      {/* Invites */}
-      <div className="space-y-4">
-        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Invites
-        </div>
-        <div className="space-y-3 rounded-md border border-border px-4 py-4">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">
-              Generate an OpenClaw agent invite snippet.
-            </span>
-            <HintIcon text="Creates a short-lived OpenClaw agent invite and renders a copy-ready prompt." />
+      {/* Invites — hidden in hosted mode: exposes OpenClaw Gateway CLI config */}
+      {!isHosted && (
+        <div className="space-y-4">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Invites
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              onClick={() => inviteMutation.mutate()}
-              disabled={inviteMutation.isPending}
-            >
-              {inviteMutation.isPending
-                ? "Generating..."
-                : "Generate OpenClaw Invite Prompt"}
-            </Button>
-          </div>
-          {inviteError && (
-            <p className="text-sm text-destructive">{inviteError}</p>
-          )}
-          {inviteSnippet && (
-            <div className="rounded-md border border-border bg-muted/30 p-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-xs text-muted-foreground">
-                  OpenClaw Invite Prompt
-                </div>
-                {snippetCopied && (
-                  <span
-                    key={snippetCopyDelightId}
-                    className="flex items-center gap-1 text-xs text-green-600 animate-pulse"
-                  >
-                    <Check className="h-3 w-3" />
-                    Copied
-                  </span>
-                )}
-              </div>
-              <div className="mt-1 space-y-1.5">
-                <textarea
-                  className="h-[28rem] w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none"
-                  value={inviteSnippet}
-                  readOnly
-                />
-                <div className="flex justify-end">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(inviteSnippet);
-                        setSnippetCopied(true);
-                        setSnippetCopyDelightId((prev) => prev + 1);
-                        setTimeout(() => setSnippetCopied(false), 2000);
-                      } catch {
-                        /* clipboard may not be available */
-                      }
-                    }}
-                  >
-                    {snippetCopied ? "Copied snippet" : "Copy snippet"}
-                  </Button>
-                </div>
-              </div>
+          <div className="space-y-3 rounded-md border border-border px-4 py-4">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">
+                Generate an OpenClaw agent invite snippet.
+              </span>
+              <HintIcon text="Creates a short-lived OpenClaw agent invite and renders a copy-ready prompt." />
             </div>
-          )}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                onClick={() => inviteMutation.mutate()}
+                disabled={inviteMutation.isPending}
+              >
+                {inviteMutation.isPending
+                  ? "Generating..."
+                  : "Generate OpenClaw Invite Prompt"}
+              </Button>
+            </div>
+            {inviteError && (
+              <p className="text-sm text-destructive">{inviteError}</p>
+            )}
+            {inviteSnippet && (
+              <div className="rounded-md border border-border bg-muted/30 p-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs text-muted-foreground">
+                    OpenClaw Invite Prompt
+                  </div>
+                  {snippetCopied && (
+                    <span
+                      key={snippetCopyDelightId}
+                      className="flex items-center gap-1 text-xs text-green-600 animate-pulse"
+                    >
+                      <Check className="h-3 w-3" />
+                      Copied
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1 space-y-1.5">
+                  <textarea
+                    className="h-[28rem] w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none"
+                    value={inviteSnippet}
+                    readOnly
+                  />
+                  <div className="flex justify-end">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(inviteSnippet);
+                          setSnippetCopied(true);
+                          setSnippetCopyDelightId((prev) => prev + 1);
+                          setTimeout(() => setSnippetCopied(false), 2000);
+                        } catch {
+                          /* clipboard may not be available */
+                        }
+                      }}
+                    >
+                      {snippetCopied ? "Copied snippet" : "Copy snippet"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Danger Zone */}
       <div className="space-y-4">

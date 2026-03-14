@@ -8,6 +8,7 @@ import { dashboardApi } from "../api/dashboard";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
 import { heartbeatsApi } from "../api/heartbeats";
+import { healthApi } from "../api/health";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
@@ -243,6 +244,13 @@ export function Inbox() {
   const [allCategoryFilter, setAllCategoryFilter] = useState<InboxCategoryFilter>("everything");
   const [allApprovalFilter, setAllApprovalFilter] = useState<InboxApprovalFilter>("all");
   const { dismissed, dismiss } = useDismissedInboxItems();
+
+  const healthQuery = useQuery({
+    queryKey: queryKeys.health,
+    queryFn: () => healthApi.get(),
+    retry: false,
+  });
+  const isHosted = healthQuery.data?.hostedMode === true;
 
   const pathSegment = location.pathname.split("/").pop() ?? "recent";
   const tab: InboxTab =
@@ -696,7 +704,7 @@ export function Inbox() {
                           email: {joinRequest.requestEmailSnapshot}
                         </p>
                       )}
-                      {joinRequest.adapterType && (
+                      {!isHosted && joinRequest.adapterType && (
                         <p className="text-xs text-muted-foreground">adapter: {joinRequest.adapterType}</p>
                       )}
                     </div>

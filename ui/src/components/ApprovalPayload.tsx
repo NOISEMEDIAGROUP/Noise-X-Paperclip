@@ -1,4 +1,7 @@
+import { useQuery } from "@tanstack/react-query";
 import { UserPlus, Lightbulb, ShieldCheck } from "lucide-react";
+import { healthApi } from "../api/health";
+import { queryKeys } from "../lib/queryKeys";
 
 export const typeLabel: Record<string, string> = {
   hire_agent: "Hire Agent",
@@ -23,6 +26,13 @@ function PayloadField({ label, value }: { label: string; value: unknown }) {
 }
 
 export function HireAgentPayload({ payload }: { payload: Record<string, unknown> }) {
+  const healthQuery = useQuery({
+    queryKey: queryKeys.health,
+    queryFn: () => healthApi.get(),
+    retry: false,
+  });
+  const isHosted = healthQuery.data?.hostedMode === true;
+
   return (
     <div className="mt-3 space-y-1.5 text-sm">
       <div className="flex items-center gap-2">
@@ -38,7 +48,7 @@ export function HireAgentPayload({ payload }: { payload: Record<string, unknown>
           <span className="text-muted-foreground">{String(payload.capabilities)}</span>
         </div>
       )}
-      {!!payload.adapterType && (
+      {!isHosted && !!payload.adapterType && (
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs">Adapter</span>
           <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">

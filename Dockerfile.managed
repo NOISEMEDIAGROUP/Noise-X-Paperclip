@@ -39,7 +39,7 @@ RUN test -f server/dist/index.js || (echo "ERROR: server build output missing" &
 FROM base AS production
 WORKDIR /app
 COPY --chown=node:node --from=build /app /app
-RUN mkdir -p /paperclip && chown node:node /paperclip
+RUN mkdir -p /paperclip /data && chown -R node:node /paperclip /data
 
 # Install opencode globally — the opencode_local adapter spawns `opencode run`
 # to execute agents, routing inference through the metered gateway.
