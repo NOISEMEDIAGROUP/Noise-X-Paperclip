@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { agentsApi, type AgentKey, type ClaudeLoginResult } from "../api/agents";
 import { heartbeatsApi } from "../api/heartbeats";
 import { ApiError } from "../api/client";
+import { useToast } from "../context/ToastContext";
 import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
 import { activityApi } from "../api/activity";
 import { issuesApi } from "../api/issues";
@@ -1044,6 +1045,7 @@ function ConfigurationTab({
   updatePermissions: { mutate: (canCreate: boolean) => void; isPending: boolean };
 }) {
   const queryClient = useQueryClient();
+  const { pushToast } = useToast();
   const [awaitingRefreshAfterSave, setAwaitingRefreshAfterSave] = useState(false);
   const lastAgentRef = useRef(agent);
 
@@ -1066,8 +1068,26 @@ function ConfigurationTab({
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.urlKey) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.configRevisions(agent.id) });
     },
-    onError: () => {
+    onError: (error: Error) => {
       setAwaitingRefreshAfterSave(false);
+      
+      // Display error toast for validation errors
+      let errorMessage = "Failed to save agent configuration";
+      if (error instanceof ApiError) {
+        if (error.status === 422) {
+          // Unprocessable entity - validation error
+          errorMessage = "Validation error: " + error.message;
+        } else if (error.status >= 400 && error.status < 500) {
+          errorMessage = `Error: ${error.message}`;
+        }
+      }
+      
+      pushToast({
+        title: "Configuration Error",
+        body: errorMessage,
+        tone: "error" as const,
+        ttlMs: 10000,
+      });
     },
   });
 
