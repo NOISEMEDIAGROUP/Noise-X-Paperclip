@@ -5,7 +5,7 @@ interface NewIssueDefaults {
   priority?: string;
   projectId?: string;
   assigneeAgentId?: string;
-  parentId?: string;
+  assigneeUserId?: string;
   title?: string;
   description?: string;
 }
