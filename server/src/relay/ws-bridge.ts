@@ -8,6 +8,7 @@
 
 import { createRequire } from "node:module";
 import type { WsOpen, WsMessage, WsClose, TunnelMessage } from "./protocol.js";
+import { logger } from "../middleware/logger.js";
 
 const require = createRequire(import.meta.url);
 const WS = require("ws") as { new (url: string, opts?: object): WsInstance; OPEN: number };
@@ -51,15 +52,17 @@ export function handleWsOpen(msg: WsOpen, localPort: number, send: SendFn): void
     entry.queue.length = 0;
   });
 
-  localWs.on("message", (data: Buffer | string) => {
-    if (Buffer.isBuffer(data)) {
+  localWs.on("message", (data: Buffer | string, isBinary: boolean) => {
+    if (isBinary) {
       send({ type: "ws-error", id: msg.id, message: "Binary WebSocket frames are not supported through the relay tunnel" });
       return;
     }
+    const text = typeof data === "string" ? data : data.toString();
+    logger.info({ wsId: msg.id, len: text.length }, "ws-bridge: local → tunnel message");
     send({
       type: "ws-message",
       id: msg.id,
-      data: data.toString(),
+      data: text,
     });
   });
 

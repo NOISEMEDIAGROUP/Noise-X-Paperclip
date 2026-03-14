@@ -104,7 +104,8 @@ export function startRelayClient(opts: RelayClientOptions): { close: () => void 
       }
     });
 
-    ws.on("close", () => {
+    ws.on("close", (code: number, reason: Buffer) => {
+      logger.warn({ code, reason: reason?.toString() }, "Relay tunnel WebSocket CLOSED");
       closeAllBridges();
       scheduleReconnect();
     });
