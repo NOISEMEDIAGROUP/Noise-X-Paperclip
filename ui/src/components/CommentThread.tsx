@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
 import type { IssueComment, Agent } from "@paperclipai/shared";
+import { useToast } from "../context/ToastContext";
 import { Button } from "@/components/ui/button";
 import { Check, Copy, Paperclip } from "lucide-react";
 import { Identity } from "./Identity";
@@ -228,6 +229,7 @@ export function CommentThread({
   currentAssigneeValue = "",
   mentions: providedMentions,
 }: CommentThreadProps) {
+  const { pushToast } = useToast();
   const [body, setBody] = useState("");
   const [reopen, setReopen] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -334,11 +336,19 @@ export function CommentThread({
   }
 
   async function handleAttachFile(evt: ChangeEvent<HTMLInputElement>) {
-    const file = evt.target.files?.[0];
-    if (!file || !onAttachImage) return;
+    const files = evt.target.files;
+    if (!files || files.length === 0 || !onAttachImage) return;
     setAttaching(true);
     try {
-      await onAttachImage(file);
+      for (const file of Array.from(files)) {
+        await onAttachImage(file);
+      }
+    } catch (err) {
+      pushToast({
+        title: "Upload failed",
+        body: err instanceof Error ? err.message : "Could not upload file",
+        tone: "error",
+      });
     } finally {
       setAttaching(false);
       if (attachInputRef.current) attachInputRef.current.value = "";
@@ -372,7 +382,7 @@ export function CommentThread({
               <input
                 ref={attachInputRef}
                 type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
+                multiple
                 className="hidden"
                 onChange={handleAttachFile}
               />
@@ -381,7 +391,7 @@ export function CommentThread({
                 size="icon-sm"
                 onClick={() => attachInputRef.current?.click()}
                 disabled={attaching}
-                title="Attach image"
+                title="Attach file"
               >
                 <Paperclip className="h-4 w-4" />
               </Button>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type ChangeEvent } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useDialog } from "../context/DialogContext";
+import { useToast } from "../context/ToastContext";
 import { useCompany } from "../context/CompanyContext";
 import { issuesApi } from "../api/issues";
 import { projectsApi } from "../api/projects";
@@ -173,6 +174,7 @@ const priorities = [
 
 export function NewIssueDialog() {
   const { newIssueOpen, newIssueDefaults, closeNewIssue } = useDialog();
+  const { pushToast } = useToast();
   const { companies, selectedCompanyId, selectedCompany } = useCompany();
   const queryClient = useQueryClient();
   const [title, setTitle] = useState("");
@@ -473,14 +475,25 @@ export function NewIssueDialog() {
   }
 
   async function handleAttachImage(evt: ChangeEvent<HTMLInputElement>) {
-    const file = evt.target.files?.[0];
-    if (!file) return;
+    const files = evt.target.files;
+    if (!files || files.length === 0) return;
     try {
-      const asset = await uploadDescriptionImage.mutateAsync(file);
-      const name = file.name || "image";
-      setDescription((prev) => {
-        const suffix = `![${name}](${asset.contentPath})`;
-        return prev ? `${prev}\n\n${suffix}` : suffix;
+      for (const file of Array.from(files)) {
+        const asset = await uploadDescriptionImage.mutateAsync(file);
+        const name = file.name || "file";
+        const isImage = file.type.startsWith("image/");
+        setDescription((prev) => {
+          const suffix = isImage
+            ? `![${name}](${asset.contentPath})`
+            : `[${name}](${asset.contentPath})`;
+          return prev ? `${prev}\n\n${suffix}` : suffix;
+        });
+      }
+    } catch (err) {
+      pushToast({
+        title: "Upload failed",
+        body: err instanceof Error ? err.message : "Could not upload file",
+        tone: "error",
       });
     } finally {
       if (attachInputRef.current) attachInputRef.current.value = "";
@@ -1021,11 +1034,11 @@ export function NewIssueDialog() {
             Labels
           </button>
 
-          {/* Attach image chip */}
+          {/* Attach file chip */}
           <input
             ref={attachInputRef}
             type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
             className="hidden"
             onChange={handleAttachImage}
           />
@@ -1035,7 +1048,7 @@ export function NewIssueDialog() {
             disabled={uploadDescriptionImage.isPending}
           >
             <Paperclip className="h-3 w-3" />
-            {uploadDescriptionImage.isPending ? "Uploading..." : "Image"}
+            {uploadDescriptionImage.isPending ? "Uploading..." : "Attach"}
           </button>
 
           {/* More (dates) */}

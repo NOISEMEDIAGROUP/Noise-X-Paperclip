@@ -1,14 +1,13 @@
 /**
  * Shared attachment content-type configuration.
  *
- * By default only image types are allowed.  Set the
+ * By default a broad set of common file types are allowed.  Set the
  * `PAPERCLIP_ALLOWED_ATTACHMENT_TYPES` environment variable to a
- * comma-separated list of MIME types or wildcard patterns to expand the
- * allowed set.
+ * comma-separated list of MIME types or wildcard patterns to override.
  *
  * Examples:
  *   PAPERCLIP_ALLOWED_ATTACHMENT_TYPES=image/*,application/pdf
- *   PAPERCLIP_ALLOWED_ATTACHMENT_TYPES=image/*,application/pdf,text/*
+ *   PAPERCLIP_ALLOWED_ATTACHMENT_TYPES=*
  *
  * Supported pattern syntax:
  *   - Exact types:   "application/pdf"
@@ -16,11 +15,21 @@
  */
 
 export const DEFAULT_ALLOWED_TYPES: readonly string[] = [
-  "image/png",
-  "image/jpeg",
-  "image/jpg",
-  "image/webp",
-  "image/gif",
+  // Images
+  "image/*",
+  // Documents
+  "application/pdf",
+  "text/*",
+  // Office (docx, xlsx, pptx)
+  "application/vnd.openxmlformats-officedocument.*",
+  "application/msword",
+  "application/vnd.ms-excel",
+  "application/vnd.ms-powerpoint",
+  // Data & config
+  "application/json",
+  "application/xml",
+  "application/zip",
+  "application/gzip",
 ];
 
 /**
