@@ -66,6 +66,7 @@ export type {
   JoinRequest,
   InstanceUserRoleGrant,
 } from "./access.js";
+export type { WorkflowStepDefinition, Workflow, WorkflowRun } from "./workflow.js";
 export type {
   CompanyPortabilityInclude,
   CompanyPortabilitySecretRequirement,

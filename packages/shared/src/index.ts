@@ -134,6 +134,9 @@ export type {
   AgentEnvConfig,
   CompanySecret,
   SecretProviderDescriptor,
+  WorkflowStepDefinition,
+  Workflow,
+  WorkflowRun,
 } from "./types/index.js";
 
 export {
@@ -248,6 +251,14 @@ export {
   type CompanyPortabilityExport,
   type CompanyPortabilityPreview,
   type CompanyPortabilityImport,
+  createWorkflowSchema,
+  updateWorkflowSchema,
+  startWorkflowRunSchema,
+  advanceWorkflowRunSchema,
+  type CreateWorkflow,
+  type UpdateWorkflow,
+  type StartWorkflowRun,
+  type AdvanceWorkflowRun,
 } from "./validators/index.js";
 
 export { API_PREFIX, API } from "./api.js";
