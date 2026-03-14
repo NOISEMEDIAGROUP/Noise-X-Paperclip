@@ -345,6 +345,16 @@ export async function startServer(): Promise<StartedServer> {
           await embeddedPostgres.initialise();
         } catch (err) {
           logEmbeddedPostgresFailure("initialise", err);
+          
+          // Check for locale-related errors in the log buffer
+          const logContent = embeddedPostgresLogBuffer.join("\n");
+          if (/locale|LC_|invalid locale|could not create/i.test(logContent)) {
+            throw new Error(
+              "PostgreSQL initialization failed due to a missing system locale.\n\n" +
+              "Fix: sudo locale-gen en_US.UTF-8 && sudo update-locale LANG=en_US.UTF-8\n\n" +
+              "Then restart Paperclip.",
+            );
+          }
           throw err;
         }
       } else {
