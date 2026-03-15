@@ -2689,8 +2689,8 @@ export function heartbeatService(db: Db) {
       const now = new Date();
       const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
       const dateBucket = sql<string>`DATE(${heartbeatRuns.createdAt} AT TIME ZONE 'UTC')`;
-      
-      const condition = agentId 
+
+      const condition = agentId
         ? and(eq(heartbeatRuns.companyId, companyId), eq(heartbeatRuns.agentId, agentId), gt(heartbeatRuns.createdAt, fourteenDaysAgo))
         : and(eq(heartbeatRuns.companyId, companyId), gt(heartbeatRuns.createdAt, fourteenDaysAgo));
 
@@ -2703,7 +2703,7 @@ export function heartbeatService(db: Db) {
         .from(heartbeatRuns)
         .where(condition)
         .groupBy(dateBucket, heartbeatRuns.status);
-      
+
       return rows.map(r => ({ ...r, count: Number(r.count) }));
     },
 
@@ -2716,10 +2716,10 @@ export function heartbeatService(db: Db) {
         WHERE company_id = ${companyId}
         ORDER BY agent_id, created_at DESC
       `);
-      
+
       // Filter to only those whose most recent run was a failure
       const failedRows = rows.filter((r: any) => r.status === 'failed' || r.status === 'timed_out');
-      
+
       // We need to map snake_case to camelCase since execute() returns raw sql rows
       return failedRows.map((row: any) => ({
         id: row.id,

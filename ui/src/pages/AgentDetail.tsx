@@ -1237,7 +1237,7 @@ function RunsTab({
 
     const currentTarget = observerTarget.current;
     observer.observe(currentTarget);
-    
+
     return () => {
       if (currentTarget) {
         observer.unobserve(currentTarget);
