@@ -767,9 +767,9 @@ export function CommentFileLinks({ context }: PluginCommentAnnotationProps) {
 // ---------------------------------------------------------------------------
 
 /**
- * Per-comment context menu item that appears in the comment "more" (⋮) menu.
- * Extracts file paths from the comment body and, if any are found, renders
- * a button to open the first file in the project Files tab.
+ * Per-comment context menu item that appears in the comment header area.
+ * Renders a "Files" trigger button that opens a dropdown listing all
+ * file paths extracted from the comment body.
  *
  * Respects the `commentAnnotationMode` instance config — hidden when mode
  * is `"annotation"` or `"none"`.
@@ -784,6 +784,20 @@ export function CommentOpenFiles({ context }: PluginCommentContextMenuItemProps)
     companyId: context.companyId,
   });
 
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e: globalThis.MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
   if (mode === "annotation" || mode === "none") return null;
   if (!data?.links?.length) return null;
 
@@ -791,25 +805,99 @@ export function CommentOpenFiles({ context }: PluginCommentContextMenuItemProps)
   const projectId = context.projectId;
 
   return (
-    <div>
-      <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-        Files
-      </div>
-      {data.links.map((link) => {
-        const href = buildFileBrowserHref(prefix, projectId, link);
-        const fileName = link.split("/").pop() ?? link;
-        return (
-          <a
-            key={link}
-            href={href}
-            onClick={(e) => navigateToFileBrowser(href, e)}
-            className="flex w-full items-center gap-2 rounded px-2 py-1 text-xs text-foreground hover:bg-accent transition-colors"
-            title={`Open ${link} in file browser`}
-          >
-            <span className="truncate font-mono">{fileName}</span>
-          </a>
-        );
-      })}
+    <div ref={containerRef} style={{ position: "relative", display: "inline-block" }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.25rem",
+          padding: "0.125rem 0.5rem",
+          fontSize: "0.75rem",
+          lineHeight: "1rem",
+          borderRadius: "0.375rem",
+          border: "1px solid var(--border, #e2e8f0)",
+          background: open ? "var(--accent, #f1f5f9)" : "transparent",
+          color: "var(--muted-foreground, #64748b)",
+          cursor: "pointer",
+          transition: "background 0.15s, color 0.15s",
+        }}
+        title={`${data.links.length} file${data.links.length === 1 ? "" : "s"} referenced`}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+        </svg>
+        Files ({data.links.length})
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginLeft: "0.1rem", transition: "transform 0.15s", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{
+          position: "absolute",
+          top: "calc(100% + 4px)",
+          right: 0,
+          zIndex: 50,
+          minWidth: "12rem",
+          maxWidth: "22rem",
+          background: "var(--popover, #fff)",
+          border: "1px solid var(--border, #e2e8f0)",
+          borderRadius: "0.5rem",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+          padding: "0.25rem",
+          overflow: "hidden",
+        }}>
+          <div style={{
+            padding: "0.25rem 0.5rem 0.375rem",
+            fontSize: "0.625rem",
+            fontWeight: 600,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: "var(--muted-foreground, #64748b)",
+          }}>
+            Referenced files
+          </div>
+          {data.links.map((link) => {
+            const href = buildFileBrowserHref(prefix, projectId, link);
+            const fileName = link.split("/").pop() ?? link;
+            return (
+              <a
+                key={link}
+                href={href}
+                onClick={(e) => { navigateToFileBrowser(href, e); setOpen(false); }}
+                title={link}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  padding: "0.375rem 0.5rem",
+                  borderRadius: "0.375rem",
+                  fontSize: "0.75rem",
+                  color: "var(--foreground, #0f172a)",
+                  textDecoration: "none",
+                  transition: "background 0.1s",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--accent, #f1f5f9)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, color: "var(--muted-foreground, #64748b)" }} aria-hidden="true">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "ui-monospace, monospace" }}>{fileName}</span>
+                {fileName !== link && (
+                  <span style={{ marginLeft: "auto", fontSize: "0.625rem", color: "var(--muted-foreground, #64748b)", flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "8rem" }}>
+                    {link}
+                  </span>
+                )}
+              </a>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
