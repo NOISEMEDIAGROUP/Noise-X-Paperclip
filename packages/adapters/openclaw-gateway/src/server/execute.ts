@@ -605,6 +605,8 @@ class GatewayWsClient {
       this.resolveChallenge = resolve;
       this.rejectChallenge = reject;
     });
+    // Prevent unhandled rejection if WS closes (1006) before challengePromise is awaited
+    this.challengePromise.catch(() => {});
   }
 
   async connect(
