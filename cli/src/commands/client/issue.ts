@@ -3,6 +3,7 @@ import {
   addIssueCommentSchema,
   checkoutIssueSchema,
   createIssueSchema,
+  ISSUE_TYPES,
   updateIssueSchema,
   type Issue,
   type IssueComment,
@@ -24,6 +25,7 @@ interface IssueBaseOptions extends BaseClientOptions {
 }
 
 interface IssueCreateOptions extends BaseClientOptions {
+  type?: string;
   title: string;
   description?: string;
   status?: string;
@@ -37,6 +39,7 @@ interface IssueCreateOptions extends BaseClientOptions {
 }
 
 interface IssueUpdateOptions extends BaseClientOptions {
+  type?: string;
   title?: string;
   description?: string;
   status?: string;
@@ -138,6 +141,7 @@ export function registerIssueCommands(program: Command): void {
       .description("Create an issue")
       .requiredOption("-C, --company-id <id>", "Company ID")
       .requiredOption("--title <title>", "Issue title")
+      .option("--type <type>", `Issue type (${ISSUE_TYPES.join("|")})`, "task")
       .option("--description <text>", "Issue description")
       .option("--status <status>", "Issue status")
       .option("--priority <priority>", "Issue priority")
@@ -151,6 +155,7 @@ export function registerIssueCommands(program: Command): void {
         try {
           const ctx = resolveCommandContext(opts, { requireCompany: true });
           const payload = createIssueSchema.parse({
+            type: opts.type ?? "task",
             title: opts.title,
             description: opts.description,
             status: opts.status,
@@ -178,6 +183,7 @@ export function registerIssueCommands(program: Command): void {
       .description("Update an issue")
       .argument("<issueId>", "Issue ID")
       .option("--title <title>", "Issue title")
+      .option("--type <type>", `Issue type (${ISSUE_TYPES.join("|")})`)
       .option("--description <text>", "Issue description")
       .option("--status <status>", "Issue status")
       .option("--priority <priority>", "Issue priority")
@@ -194,6 +200,7 @@ export function registerIssueCommands(program: Command): void {
           const ctx = resolveCommandContext(opts);
           const payload = updateIssueSchema.parse({
             title: opts.title,
+            type: opts.type,
             description: opts.description,
             status: opts.status,
             priority: opts.priority,
@@ -221,7 +228,7 @@ export function registerIssueCommands(program: Command): void {
       .description("Add comment to issue")
       .argument("<issueId>", "Issue ID")
       .requiredOption("--body <text>", "Comment body")
-      .option("--reopen", "Reopen if issue is done/cancelled")
+      .option("--reopen", "Reopen if issue is closed/cancelled")
       .action(async (issueId: string, opts: IssueCommentOptions) => {
         try {
           const ctx = resolveCommandContext(opts);
@@ -246,7 +253,7 @@ export function registerIssueCommands(program: Command): void {
       .option(
         "--expected-statuses <csv>",
         "Expected current statuses",
-        "todo,backlog,blocked",
+        "draft,retrieval_pending,blocked",
       )
       .action(async (issueId: string, opts: IssueCheckoutOptions) => {
         try {
@@ -266,7 +273,7 @@ export function registerIssueCommands(program: Command): void {
   addCommonClientOptions(
     issue
       .command("release")
-      .description("Release issue back to todo and clear assignee")
+      .description("Release issue back to draft and clear assignee")
       .argument("<issueId>", "Issue ID")
       .action(async (issueId: string, opts: BaseClientOptions) => {
         try {

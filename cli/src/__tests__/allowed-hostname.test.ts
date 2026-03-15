@@ -39,10 +39,11 @@ function writeBaseConfig(configPath: string) {
       port: 3100,
       allowedHostnames: [],
       serveUi: true,
+      promotionCandidateReportingEnabled: false,
+      promotionCandidateReportingIntervalMs: 300000,
     },
     auth: {
       baseUrlMode: "auto",
-      disableSignUp: false,
     },
     storage: {
       provider: "local_disk",

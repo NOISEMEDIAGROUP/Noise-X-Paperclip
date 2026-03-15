@@ -58,10 +58,11 @@ function defaultConfig(): PaperclipConfig {
       port: 3100,
       allowedHostnames: [],
       serveUi: true,
+      promotionCandidateReportingEnabled: false,
+      promotionCandidateReportingIntervalMs: 5 * 60 * 1000,
     },
     auth: {
       baseUrlMode: "auto",
-      disableSignUp: false,
     },
     storage: defaultStorageConfig(),
     secrets: defaultSecretsConfig(),
