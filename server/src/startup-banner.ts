@@ -29,6 +29,8 @@ type StartupBannerOptions = {
   migrationSummary: string;
   heartbeatSchedulerEnabled: boolean;
   heartbeatSchedulerIntervalMs: number;
+  promotionCandidateReportingEnabled: boolean;
+  promotionCandidateReportingIntervalMs: number;
   databaseBackupEnabled: boolean;
   databaseBackupIntervalMinutes: number;
   databaseBackupRetentionDays: number;
@@ -76,6 +78,13 @@ function resolveAgentJwtSecretStatus(
     return {
       status: "pass",
       message: "set",
+    };
+  }
+
+  if (process.env.BETTER_AUTH_SECRET?.trim()) {
+    return {
+      status: "pass",
+      message: "using BETTER_AUTH_SECRET",
     };
   }
 
@@ -129,6 +138,9 @@ export function printStartupBanner(opts: StartupBannerOptions): void {
   const heartbeat = opts.heartbeatSchedulerEnabled
     ? `enabled ${color(`(${opts.heartbeatSchedulerIntervalMs}ms)`, "dim")}`
     : color("disabled", "yellow");
+  const promotionReporting = opts.promotionCandidateReportingEnabled
+    ? `enabled ${color(`(${opts.promotionCandidateReportingIntervalMs}ms)`, "dim")}`
+    : color("disabled", "yellow");
   const dbBackup = opts.databaseBackupEnabled
     ? `enabled ${color(`(every ${opts.databaseBackupIntervalMinutes}m, keep ${opts.databaseBackupRetentionDays}d)`, "dim")}`
     : color("disabled", "yellow");
@@ -161,6 +173,7 @@ export function printStartupBanner(opts: StartupBannerOptions): void {
         : color(agentJwtSecret.message, "yellow"),
     ),
     row("Heartbeat", heartbeat),
+    row("Promotions", promotionReporting),
     row("DB Backup", dbBackup),
     row("Backup Dir", opts.databaseBackupDir),
     row("Config", configPath),
