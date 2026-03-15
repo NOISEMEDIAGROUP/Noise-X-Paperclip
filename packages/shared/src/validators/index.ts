@@ -127,6 +127,15 @@ export {
 } from "./asset.js";
 
 export {
+  createKnowledgeDocumentSchema,
+  updateKnowledgeDocumentSchema,
+  listKnowledgeDocumentsQuerySchema,
+  type CreateKnowledgeDocument,
+  type UpdateKnowledgeDocument,
+  type ListKnowledgeDocumentsQuery,
+} from "./knowledge.js";
+
+export {
   createCompanyInviteSchema,
   createOpenClawInvitePromptSchema,
   acceptInviteSchema,

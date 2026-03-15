@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Inbox,
   CircleDot,
   Target,
@@ -98,6 +99,7 @@ export function Sidebar() {
         <SidebarSection label="Work">
           <SidebarNavItem to="/issues" label="Issues" icon={CircleDot} />
           <SidebarNavItem to="/goals" label="Goals" icon={Target} />
+          <SidebarNavItem to="/knowledge" label="Knowledge" icon={BookOpen} />
         </SidebarSection>
 
         <SidebarProjects />
