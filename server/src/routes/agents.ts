@@ -476,8 +476,14 @@ export function agentRoutes(db: Db) {
     assertCompanyAccess(req, companyId);
     const result = await svc.list(companyId);
     const canReadConfigs = await actorCanReadConfigurationsForCompany(req, companyId);
-    if (canReadConfigs || req.actor.type === "board") {
+    if (req.actor.type === "board") {
       res.json(result);
+      return;
+    }
+    // Agents can read peer configs (type, role, capabilities) but credentials
+    // in adapterConfig/runtimeConfig are always redacted for non-board actors.
+    if (canReadConfigs) {
+      res.json(result.map((agent) => redactAgentConfiguration(agent)));
       return;
     }
     res.json(result.map((agent) => redactForRestrictedAgentView(agent)));
@@ -625,11 +631,14 @@ export function agentRoutes(db: Db) {
     assertCompanyAccess(req, agent.companyId);
     if (req.actor.type === "agent" && req.actor.agentId !== id) {
       const canRead = await actorCanReadConfigurationsForCompany(req, agent.companyId);
+      const chainOfCommand = await svc.getChainOfCommand(agent.id);
       if (!canRead) {
-        const chainOfCommand = await svc.getChainOfCommand(agent.id);
         res.json({ ...redactForRestrictedAgentView(agent), chainOfCommand });
         return;
       }
+      // Agents can see peer config structure but not raw credentials
+      res.json({ ...redactAgentConfiguration(agent), chainOfCommand });
+      return;
     }
     const chainOfCommand = await svc.getChainOfCommand(agent.id);
     res.json({ ...agent, chainOfCommand });
