@@ -1,0 +1,80 @@
+{
+  "skill": "git-workflow-automation",
+  "date": "2026-03-16",
+  "version": "1.0.0",
+  "scores": {
+    "trigger": {
+      "pass": 7,
+      "fail": 1,
+      "total": 8,
+      "pct": 88
+    },
+    "noFire": {
+      "pass": 4,
+      "fail": 1,
+      "total": 5,
+      "pct": 80
+    },
+    "output": {
+      "pass": 18,
+      "fail": 5,
+      "total": 23,
+      "pct": 78
+    }
+  },
+  "overall": 81,
+  "failures": [
+    {
+      "id": "T6",
+      "prompt": "Set up a Stop hook to save WIP commits before session ends",
+      "expected": "TRIGGER",
+      "pass": false,
+      "score": 20,
+      "reason": "Keyword overlap 0% (confidence 20)"
+    },
+    {
+      "id": "N3",
+      "prompt": "Set up a GitLab workflow",
+      "expected": "NO_TRIGGER",
+      "pass": false,
+      "score": 65,
+      "reason": "Keyword overlap 100% (confidence 65)"
+    },
+    {
+      "id": "O4",
+      "scenario": "T2 — PR creation",
+      "pass": false,
+      "score": 4,
+      "reason": "Low coverage: assertion overlap 33%, score 4.0/10"
+    },
+    {
+      "id": "O5",
+      "scenario": "T2 — PR creation",
+      "pass": false,
+      "score": 3.7,
+      "reason": "Low coverage: assertion overlap 25%, score 3.7/10"
+    },
+    {
+      "id": "O6",
+      "scenario": "T2 — PR creation",
+      "pass": false,
+      "score": 2.3,
+      "reason": "Low coverage: assertion overlap 0%, score 2.3/10"
+    },
+    {
+      "id": "O22",
+      "scenario": "T8 — Combined",
+      "pass": false,
+      "score": 6.7,
+      "reason": "Low coverage: assertion overlap 80%, score 6.7/10"
+    },
+    {
+      "id": "O23",
+      "scenario": "T8 — Combined",
+      "pass": false,
+      "score": 4,
+      "reason": "Low coverage: assertion overlap 33%, score 4.0/10"
+    }
+  ],
+  "duration_ms": 5
+}

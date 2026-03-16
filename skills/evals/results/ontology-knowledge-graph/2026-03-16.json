@@ -1,0 +1,241 @@
+{
+  "skill": "ontology-knowledge-graph",
+  "date": "2026-03-16",
+  "version": "1.0.0",
+  "scores": {
+    "trigger": {
+      "pass": 4,
+      "fail": 8,
+      "total": 12,
+      "pct": 33
+    },
+    "noFire": {
+      "pass": 4,
+      "fail": 1,
+      "total": 5,
+      "pct": 80
+    },
+    "output": {
+      "pass": 3,
+      "fail": 20,
+      "total": 23,
+      "pct": 13
+    }
+  },
+  "overall": 28,
+  "failures": [
+    {
+      "id": "T01",
+      "prompt": "set up an entity graph in my project",
+      "expected": "NO_TRIGGER",
+      "pass": false,
+      "score": 92,
+      "reason": "Exact trigger phrase match (confidence 92)"
+    },
+    {
+      "id": "T03",
+      "prompt": "I've outgrown MEMORY.md, I need structured memory",
+      "expected": "NO_TRIGGER",
+      "pass": false,
+      "score": 92,
+      "reason": "Exact trigger phrase match (confidence 92)"
+    },
+    {
+      "id": "T04",
+      "prompt": "help me set up the knowledge graph skill",
+      "expected": "NO_TRIGGER",
+      "pass": false,
+      "score": 92,
+      "reason": "Exact trigger phrase match (confidence 92)"
+    },
+    {
+      "id": "T05",
+      "prompt": "how do I share entity state between skills",
+      "expected": "NO_TRIGGER",
+      "pass": false,
+      "score": 65,
+      "reason": "Keyword overlap 80% (confidence 65)"
+    },
+    {
+      "id": "T06",
+      "prompt": "set up a knowledge graph for tracking my project",
+      "expected": "NO_TRIGGER",
+      "pass": false,
+      "score": 92,
+      "reason": "Exact trigger phrase match (confidence 92)"
+    },
+    {
+      "id": "T07",
+      "prompt": "I need typed queryable memory for Claude Code",
+      "expected": "NO_TRIGGER",
+      "pass": false,
+      "score": 92,
+      "reason": "Exact trigger phrase match (confidence 92)"
+    },
+    {
+      "id": "T08",
+      "prompt": "how does the cross-skill composability protocol work",
+      "expected": "NO_TRIGGER",
+      "pass": false,
+      "score": 92,
+      "reason": "Exact trigger phrase match (confidence 92)"
+    },
+    {
+      "id": "T12",
+      "prompt": "how do I track entities and relations in Claude Code",
+      "expected": "NO_TRIGGER",
+      "pass": false,
+      "score": 92,
+      "reason": "Exact trigger phrase match (confidence 92)"
+    },
+    {
+      "id": "N04",
+      "prompt": "explain knowledge graphs to me",
+      "expected": "NO_TRIGGER",
+      "pass": false,
+      "score": 92,
+      "reason": "Exact trigger phrase match (confidence 92)"
+    },
+    {
+      "id": "O1",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 6.7,
+      "reason": "Low coverage: assertion overlap 80%, score 6.7/10"
+    },
+    {
+      "id": "O2",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 6.7,
+      "reason": "Low coverage: assertion overlap 80%, score 6.7/10"
+    },
+    {
+      "id": "O3",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 4,
+      "reason": "Low coverage: assertion overlap 33%, score 4.0/10"
+    },
+    {
+      "id": "O4",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 6,
+      "reason": "Low coverage: assertion overlap 75%, score 6.0/10"
+    },
+    {
+      "id": "O6",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 4.7,
+      "reason": "Low coverage: assertion overlap 44%, score 4.7/10"
+    },
+    {
+      "id": "O7",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 3.7,
+      "reason": "Low coverage: assertion overlap 29%, score 3.7/10"
+    },
+    {
+      "id": "O8",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 6,
+      "reason": "Low coverage: assertion overlap 67%, score 6.0/10"
+    },
+    {
+      "id": "O9",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 3.7,
+      "reason": "Low coverage: assertion overlap 25%, score 3.7/10"
+    },
+    {
+      "id": "O11",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 6.7,
+      "reason": "Low coverage: assertion overlap 80%, score 6.7/10"
+    },
+    {
+      "id": "O12",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 5.7,
+      "reason": "Low coverage: assertion overlap 60%, score 5.7/10"
+    },
+    {
+      "id": "O14",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 2.3,
+      "reason": "Low coverage: assertion overlap 0%, score 2.3/10"
+    },
+    {
+      "id": "O15",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 4,
+      "reason": "Low coverage: assertion overlap 33%, score 4.0/10"
+    },
+    {
+      "id": "O16",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 6.7,
+      "reason": "Low coverage: assertion overlap 80%, score 6.7/10"
+    },
+    {
+      "id": "O17",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 5,
+      "reason": "Low coverage: assertion overlap 50%, score 5.0/10"
+    },
+    {
+      "id": "O18",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 5,
+      "reason": "Low coverage: assertion overlap 50%, score 5.0/10"
+    },
+    {
+      "id": "O19",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 6.7,
+      "reason": "Low coverage: assertion overlap 80%, score 6.7/10"
+    },
+    {
+      "id": "O20",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 3.7,
+      "reason": "Low coverage: assertion overlap 29%, score 3.7/10"
+    },
+    {
+      "id": "O21",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 2.3,
+      "reason": "Low coverage: assertion overlap 0%, score 2.3/10"
+    },
+    {
+      "id": "O22",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 5.7,
+      "reason": "Low coverage: assertion overlap 63%, score 5.7/10"
+    },
+    {
+      "id": "O23",
+      "scenario": "Assert",
+      "pass": false,
+      "score": 4.7,
+      "reason": "Low coverage: assertion overlap 43%, score 4.7/10"
+    }
+  ],
+  "duration_ms": 4
+}

@@ -1,0 +1,61 @@
+{
+  "skill": "highimpact-skill-builder",
+  "date": "2026-03-16",
+  "version": "1.0.0",
+  "scores": {
+    "trigger": {
+      "pass": 9,
+      "fail": 3,
+      "total": 12,
+      "pct": 75
+    },
+    "noFire": {
+      "pass": 4,
+      "fail": 1,
+      "total": 5,
+      "pct": 80
+    },
+    "output": {
+      "pass": 0,
+      "fail": 0,
+      "total": 0,
+      "pct": 100
+    }
+  },
+  "overall": 76,
+  "failures": [
+    {
+      "id": "T02",
+      "prompt": "Make a skill that helps with writing commit messages from staged changes",
+      "expected": "TRIGGER",
+      "pass": false,
+      "score": 20,
+      "reason": "Keyword overlap 13% (confidence 20)"
+    },
+    {
+      "id": "T03",
+      "prompt": "Can you turn this conversation into a skill? We just figured out a solid deployment checklist process",
+      "expected": "TRIGGER",
+      "pass": false,
+      "score": 40,
+      "reason": "Keyword overlap 25% (confidence 40)"
+    },
+    {
+      "id": "T07",
+      "prompt": "The skill I built is missing edge cases — help me improve it",
+      "expected": "TRIGGER",
+      "pass": false,
+      "score": 40,
+      "reason": "Keyword overlap 33% (confidence 40)"
+    },
+    {
+      "id": "N01",
+      "prompt": "What is a Claude Code skill and how does it work?",
+      "expected": "NO_TRIGGER",
+      "pass": false,
+      "score": 65,
+      "reason": "Keyword overlap 80% (confidence 65)"
+    }
+  ],
+  "duration_ms": 1
+}

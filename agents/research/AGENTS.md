@@ -34,6 +34,15 @@ You identify high-demand skill opportunities and produce skill briefs that Skill
 
 Find what developers are struggling with or reaching for third-party tools to solve — then determine if Claude Code can do it natively. If yes, write a skill brief.
 
+## Workflow Routing
+
+| Request Pattern | Route To |
+|---|---|
+| "deep investigation", "investigate [topic]", "map the landscape", "comprehensive research on [domain]" | `Workflows/DeepInvestigation.md` |
+| Standard skill research (default) | Current inline workflow (below) |
+
+Read the matched workflow file and follow its instructions. If a request matches the deep investigation pattern, use `Workflows/DeepInvestigation.md` — do NOT run the standard brief workflow.
+
 ## Data Sources
 
 You have 6 sources. **Do NOT hit all 6 every time.** Use the routing strategy below.

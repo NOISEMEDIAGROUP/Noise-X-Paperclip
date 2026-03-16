@@ -1,0 +1,53 @@
+{
+  "skill": "persistent-memory",
+  "date": "2026-03-16",
+  "version": "1.0.0",
+  "scores": {
+    "trigger": {
+      "pass": 9,
+      "fail": 2,
+      "total": 11,
+      "pct": 82
+    },
+    "noFire": {
+      "pass": 8,
+      "fail": 1,
+      "total": 9,
+      "pct": 89
+    },
+    "output": {
+      "pass": 7,
+      "fail": 0,
+      "total": 7,
+      "pct": 100
+    }
+  },
+  "overall": 89,
+  "failures": [
+    {
+      "id": "T9",
+      "prompt": "How do I make claude code remember things?",
+      "expected": "TRIGGER",
+      "pass": false,
+      "score": 55,
+      "reason": "Keyword overlap 50% (confidence 55)"
+    },
+    {
+      "id": "B-B3",
+      "prompt": "How do I save context before clearing?",
+      "expected": "TRIGGER",
+      "pass": false,
+      "score": 40,
+      "reason": "Keyword overlap 25% (confidence 40)"
+    },
+    {
+      "id": "B-B2",
+      "prompt": "How do I set up hooks in claude code?",
+      "expected": "NO_TRIGGER",
+      "pass": false,
+      "score": 65,
+      "reason": "Keyword overlap 67% (confidence 65)"
+    }
+  ],
+  "duration_ms": 3
+}

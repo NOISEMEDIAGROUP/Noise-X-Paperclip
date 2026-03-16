@@ -1,0 +1,147 @@
+{
+  "skill": "multi-agent-coordination",
+  "date": "2026-03-16",
+  "version": "1.0.0",
+  "scores": {
+    "trigger": {
+      "pass": 4,
+      "fail": 6,
+      "total": 10,
+      "pct": 40
+    },
+    "noFire": {
+      "pass": 5,
+      "fail": 0,
+      "total": 5,
+      "pct": 100
+    },
+    "output": {
+      "pass": 3,
+      "fail": 10,
+      "total": 13,
+      "pct": 23
+    }
+  },
+  "overall": 43,
+  "failures": [
+    {
+      "id": "T3",
+      "prompt": "My agents keep corrupting each other's git branches — how do I fix that?",
+      "expected": "TRIGGER",
+      "pass": false,
+      "score": 55,
+      "reason": "Keyword overlap 50% (confidence 55)"
+    },
+    {
+      "id": "T4",
+      "prompt": "I tried TeamCreate and got no output — the agent just never ran",
+      "expected": "TRIGGER",
+      "pass": false,
+      "score": 20,
+      "reason": "Keyword overlap 13% (confidence 20)"
+    },
+    {
+      "id": "T6",
+      "prompt": "How do I route some tasks to Haiku and others to Opus from an orchestrator?",
+      "expected": "TRIGGER",
+      "pass": false,
+      "score": 40,
+      "reason": "Keyword overlap 25% (confidence 40)"
+    },
+    {
+      "id": "T7",
+      "prompt": "SendMessage isn't working — my teammate is stalling",
+      "expected": "TRIGGER",
+      "pass": false,
+      "score": 55,
+      "reason": "Keyword overlap 40% (confidence 55)"
+    },
+    {
+      "id": "T8",
+      "prompt": "I'm getting subagent context bloat — 887k tokens per minute",
+      "expected": "TRIGGER",
+      "pass": false,
+      "score": 20,
+      "reason": "Keyword overlap 13% (confidence 20)"
+    },
+    {
+      "id": "T9",
+      "prompt": "My subagents don't follow my CLAUDE.md rules",
+      "expected": "TRIGGER",
+      "pass": false,
+      "score": 55,
+      "reason": "Keyword overlap 40% (confidence 55)"
+    },
+    {
+      "id": "O1",
+      "scenario": "Mentions the 95% rule or cautions against naive parallelization",
+      "pass": false,
+      "score": 4,
+      "reason": "Low coverage: assertion overlap 0%, score 4.0/10"
+    },
+    {
+      "id": "O2",
+      "scenario": "Recommends git worktrees for file isolation",
+      "pass": false,
+      "score": 5,
+      "reason": "Low coverage: assertion overlap 0%, score 5.0/10"
+    },
+    {
+      "id": "O3",
+      "scenario": "Explicitly warns against `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` / `TeamCreate`",
+      "pass": false,
+      "score": 4.7,
+      "reason": "Low coverage: assertion overlap 0%, score 4.7/10"
+    },
+    {
+      "id": "O4",
+      "scenario": "Provides concrete file-based coordination pattern (not just concept)",
+      "pass": false,
+      "score": 4.7,
+      "reason": "Low coverage: assertion overlap 0%, score 4.7/10"
+    },
+    {
+      "id": "O5",
+      "scenario": "Mentions model tiering (Haiku/Sonnet/Opus)",
+      "pass": false,
+      "score": 5,
+      "reason": "Low coverage: assertion overlap 0%, score 5.0/10"
+    },
+    {
+      "id": "O6",
+      "scenario": "Explains SendMessage async behavior and CronCreate polling alternative",
+      "pass": false,
+      "score": 4.3,
+      "reason": "Low coverage: assertion overlap 0%, score 4.3/10"
+    },
+    {
+      "id": "O7",
+      "scenario": "References the summary contract to prevent context bloat",
+      "pass": false,
+      "score": 6,
+      "reason": "Low coverage: assertion overlap 0%, score 6.0/10"
+    },
+    {
+      "id": "O9",
+      "scenario": "References `references/worktrees.md` or `references/pipeline-example.md`",
+      "pass": false,
+      "score": 6,
+      "reason": "Low coverage: assertion overlap 0%, score 6.0/10"
+    },
+    {
+      "id": "E2",
+      "scenario": "User asks about Paperclip multi-agent coordination specifically",
+      "pass": false,
+      "score": 5.7,
+      "reason": "Low coverage: assertion overlap 40%, score 5.7/10"
+    },
+    {
+      "id": "E4",
+      "scenario": "User wants TeamCreate despite the warning",
+      "pass": false,
+      "score": 5,
+      "reason": "Low coverage: assertion overlap 38%, score 5.0/10"
+    }
+  ],
+  "duration_ms": 6
+}

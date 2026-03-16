@@ -1,0 +1,51 @@
+{
+  "skill": "code-review-automation",
+  "date": "2026-03-16",
+  "version": "1.0.0",
+  "scores": {
+    "trigger": {
+      "pass": 11,
+      "fail": 1,
+      "total": 12,
+      "pct": 92
+    },
+    "noFire": {
+      "pass": 5,
+      "fail": 0,
+      "total": 5,
+      "pct": 100
+    },
+    "output": {
+      "pass": 8,
+      "fail": 2,
+      "total": 10,
+      "pct": 80
+    }
+  },
+  "overall": 89,
+  "failures": [
+    {
+      "id": "T9",
+      "prompt": "add Next.js specific checks to my code review",
+      "expected": "TRIGGER",
+      "pass": false,
+      "score": 40,
+      "reason": "Keyword overlap 33% (confidence 40)"
+    },
+    {
+      "id": "O5",
+      "scenario": "User has review-checklist.md",
+      "pass": false,
+      "score": 5.7,
+      "reason": "Low coverage: assertion overlap 40%, score 5.7/10"
+    },
+    {
+      "id": "O6",
+      "scenario": "\"post to PR\" intent",
+      "pass": false,
+      "score": 6,
+      "reason": "Low coverage: assertion overlap 33%, score 6.0/10"
+    }
+  ],
+  "duration_ms": 3
+}

@@ -1,0 +1,28 @@
+{
+  "skill": "x-post-quality",
+  "date": "2026-03-16",
+  "version": "1.0.0",
+  "scores": {
+    "trigger": {
+      "pass": 0,
+      "fail": 0,
+      "total": 0,
+      "pct": 100
+    },
+    "noFire": {
+      "pass": 0,
+      "fail": 0,
+      "total": 0,
+      "pct": 100
+    },
+    "output": {
+      "pass": 0,
+      "fail": 0,
+      "total": 0,
+      "pct": 100
+    }
+  },
+  "overall": 100,
+  "failures": [],
+  "duration_ms": 0
+}

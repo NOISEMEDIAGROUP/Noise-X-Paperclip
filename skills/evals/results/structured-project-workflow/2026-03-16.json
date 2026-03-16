@@ -1,0 +1,45 @@
+{
+  "skill": "structured-project-workflow",
+  "date": "2026-03-16",
+  "version": "1.0.0",
+  "scores": {
+    "trigger": {
+      "pass": 11,
+      "fail": 1,
+      "total": 12,
+      "pct": 92
+    },
+    "noFire": {
+      "pass": 4,
+      "fail": 1,
+      "total": 5,
+      "pct": 80
+    },
+    "output": {
+      "pass": 0,
+      "fail": 0,
+      "total": 0,
+      "pct": 100
+    }
+  },
+  "overall": 88,
+  "failures": [
+    {
+      "id": "T9",
+      "prompt": "my Claude Code project keeps drifting, how do I fix it",
+      "expected": "TRIGGER",
+      "pass": false,
+      "score": 55,
+      "reason": "Keyword overlap 50% (confidence 55)"
+    },
+    {
+      "id": "N5",
+      "prompt": "what is a PRD\" (generic, no Claude Code context)",
+      "expected": "NO_TRIGGER",
+      "pass": false,
+      "score": 65,
+      "reason": "Keyword overlap 80% (confidence 65)"
+    }
+  ],
+  "duration_ms": 1
+}

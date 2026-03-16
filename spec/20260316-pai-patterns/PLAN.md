@@ -6,7 +6,7 @@ Six patterns borrowed from danielmiessler/Personal_AI_Infrastructure (10K stars)
 ## Status
 ⬜ Not Started
 
-**Progress:** 3/6 steps
+**Progress:** 5/6 steps
 **Branch:** feat/pai-patterns
 **Depends on:** None
 
@@ -66,9 +66,9 @@ Step 5 (Evals) ── independent
 |---|------|--------|--------------|------------|
 | 1 | Workflow Sub-Routing | ✅ | None | M |
 | 2 | User Customization Layer | ✅ | None | S |
-| 3 | Deep Investigation | ⬜ | Step 1 | M |
+| 3 | Deep Investigation | ✅ | Step 1 | M |
 | 4 | Agent Composition from Traits | ✅ | None | M |
-| 5 | Evals Framework | ⬜ | None | M |
+| 5 | Evals Framework | ✅ | None | M |
 | 6 | Pack/Install Wizard | ⬜ | Steps 1, 2 | S |
 
 ## Step Details
@@ -137,3 +137,5 @@ Step 5 (Evals) ── independent
 | 1 | 2026-03-16 | Workflow Sub-Routing: convention doc, 7 workflow files for context-cost-management (202→38 lines), publish-skill.ts updated, skill-builder updated |
 | 2 | 2026-03-16 | User Customization Layer: convention doc, ~/.claude/skill-customizations/ with README + example, skill-builder + context-cost-management updated |
 | 4 | 2026-03-16 | Agent Composition from Traits: 16 trait files (6 expertise + 6 personality + 4 approach), compose-agent.ts with --list/--task, README |
+| 3 | 2026-03-16 | Deep Investigation: 3-phase workflow (first/continuation/complete), vault convention, Research agent routing updated |
+| 5 | 2026-03-16 | Evals Framework: eval-runner.ts with trigger/output scoring, judge prompt, JSON results, /eval skill, 5 skills scored 80-89% |
