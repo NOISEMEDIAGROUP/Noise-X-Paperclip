@@ -56,12 +56,3 @@ Full protocol spec, worked example, and conflict prevention rules in `references
 
 More patterns and recovery examples in `references/05-anti-patterns.md`.
 
-## Reference Files
-
-| File | Contents |
-|------|----------|
-| `references/01-schema-format.md` | Record interfaces, schema JSON structure, field types, enums, cardinality, worked example |
-| `references/02-crud-operations.md` | Create/read/update/delete patterns, compaction workflow |
-| `references/03-query-patterns.md` | Filter by type/field, traversal, reverse lookup, aggregation |
-| `references/04-composability-protocol.md` | `ontology:` header spec, ownership rules, conflict prevention, worked example |
-| `references/05-anti-patterns.md` | Extended anti-pattern catalog with real failure examples and recovery patterns |
