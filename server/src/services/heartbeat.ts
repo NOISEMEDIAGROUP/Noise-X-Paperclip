@@ -874,6 +874,55 @@ export function heartbeatService(db: Db) {
       .where(eq(workspaceCheckouts.id, checkoutId));
   }
 
+  async function createFallbackCheckoutForReviewSubmission(input: {
+    companyId: string;
+    issueId: string;
+    agentId: string;
+  }) {
+    const projectWorkspace = await db
+      .select({ workspace: projectWorkspaces })
+      .from(issues)
+      .innerJoin(
+        projectWorkspaces,
+        and(
+          eq(projectWorkspaces.companyId, input.companyId),
+          eq(projectWorkspaces.projectId, issues.projectId),
+        ),
+      )
+      .where(
+        and(
+          eq(issues.companyId, input.companyId),
+          eq(issues.id, input.issueId),
+        ),
+      )
+      .orderBy(desc(projectWorkspaces.isPrimary), asc(projectWorkspaces.createdAt))
+      .then((rows) => rows[0]?.workspace ?? null);
+
+    if (!projectWorkspace) {
+      return null;
+    }
+
+    const now = new Date();
+    return db
+      .insert(workspaceCheckouts)
+      .values({
+        companyId: input.companyId,
+        projectWorkspaceId: projectWorkspace.id,
+        issueId: input.issueId,
+        agentId: input.agentId,
+        status: "active",
+        worktreePath: readNonEmptyString(projectWorkspace.cwd),
+        metadata: {
+          checkoutMode: "review_submission_fallback",
+          repoUrl: readNonEmptyString(projectWorkspace.repoUrl),
+          sourceWorkspaceCwd: readNonEmptyString(projectWorkspace.cwd),
+        },
+        updatedAt: now,
+      })
+      .returning()
+      .then((rows) => rows[0] ?? null);
+  }
+
   async function recordCheckoutReviewSubmission(input: {
     companyId: string;
     issueId: string;
@@ -897,7 +946,13 @@ export function heartbeatService(db: Db) {
             ),
           )
           .then((rows) => rows[0] ?? null)
-      : await getActiveCheckoutForIssueAgent(input.companyId, input.issueId, input.agentId);
+      : (
+          await getActiveCheckoutForIssueAgent(input.companyId, input.issueId, input.agentId)
+        ) ?? (
+          // Some repo-backed runs execute in a shared/fallback workspace before a checkout row exists.
+          // Materialize that row lazily so review handoff metadata still lands on structured state.
+          await createFallbackCheckoutForReviewSubmission(input)
+        );
 
     if (!checkout) {
       throw notFound("Active workspace checkout not found for review submission");

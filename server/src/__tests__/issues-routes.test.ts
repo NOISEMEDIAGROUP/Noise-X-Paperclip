@@ -445,6 +445,74 @@ describe("issue routes", () => {
     );
   });
 
+  it("accepts repo review submissions even when the run has no active checkout row", async () => {
+    const existing = createIssue();
+    const updated = createIssue({
+      status: "in_review",
+      assigneeAgentId: null,
+      assigneeUserId: "board-user",
+      checkoutRunId: null,
+      updatedAt: new Date("2026-03-09T11:00:00.000Z"),
+    });
+    mockIssueService.getById.mockResolvedValue(existing);
+    mockIssueService.update.mockResolvedValue(updated);
+    mockIssueService.addComment.mockResolvedValue({
+      id: "comment-3",
+      issueId: ISSUE_ID,
+      body: "Ready for review.\n\n## Review Submission\n\n- Branch: codex/paperclip/agent-1/pap-12\n- Head commit: abc123\n- Pull request: https://github.com/paperclipai/paperclip/pull/42",
+      authorAgentId: "agent-1",
+      authorUserId: null,
+      createdAt: new Date("2026-03-09T11:00:00.000Z"),
+      updatedAt: new Date("2026-03-09T11:00:00.000Z"),
+    });
+    mockHeartbeatService.getActiveCheckoutForIssueAgent.mockResolvedValue(null);
+    mockHeartbeatService.recordReviewSubmission.mockResolvedValue({
+      id: "checkout-2",
+      issueId: ISSUE_ID,
+      agentId: "agent-1",
+      branchName: "codex/paperclip/agent-1/pap-12",
+      worktreePath: null,
+    });
+
+    const app = createApp({
+      type: "agent",
+      source: "agent_key",
+      companyId: COMPANY_ID,
+      agentId: "agent-1",
+      runId: "run-1",
+    });
+
+    const res = await request(app)
+      .patch(`/api/issues/${ISSUE_ID}`)
+      .send({
+        status: "done",
+        comment: "Ready for review.",
+        reviewSubmission: {
+          branchName: "codex/paperclip/agent-1/pap-12",
+          headCommitSha: "abc123",
+          pullRequestUrl: "https://github.com/paperclipai/paperclip/pull/42",
+        },
+      });
+
+    expect(res.status).toBe(200);
+    expect(mockHeartbeatService.recordReviewSubmission).toHaveBeenCalledWith(
+      expect.objectContaining({
+        companyId: COMPANY_ID,
+        issueId: ISSUE_ID,
+        agentId: "agent-1",
+        checkoutId: null,
+        branchName: "codex/paperclip/agent-1/pap-12",
+        headCommitSha: "abc123",
+        pullRequestUrl: "https://github.com/paperclipai/paperclip/pull/42",
+      }),
+    );
+    expect(mockIssueService.addComment).toHaveBeenCalledWith(
+      ISSUE_ID,
+      expect.stringContaining("## Review Submission"),
+      { agentId: "agent-1", userId: undefined },
+    );
+  });
+
   it("rejects top-level issue creation without approval in approval-required mode", async () => {
     mockAgentService.getById.mockResolvedValueOnce(
       createAgent({ resolvedManagerPlanningMode: "approval_required" }),
