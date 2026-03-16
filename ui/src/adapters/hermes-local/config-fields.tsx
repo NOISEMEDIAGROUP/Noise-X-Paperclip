@@ -18,7 +18,7 @@ const inputClass =
 
 // Well-known Hermes model options
 const HERMES_MODEL_OPTIONS = [
-  { value: "", label: "Use Hermes Default (from ~/.hermes/config.yaml)" },
+  { value: "", label: "Auto-detect from Hermes Agent" },
   { value: "openrouter/hunter-alpha", label: "OpenRouter - Hunter Alpha" },
   { value: "openrouter/claude-sonnet-4", label: "OpenRouter - Claude Sonnet 4" },
   { value: "openrouter/claude-opus-4", label: "OpenRouter - Claude Opus 4" },
@@ -33,7 +33,7 @@ const HERMES_MODEL_OPTIONS = [
 
 // Note: Provider is stored in `args` field (CreateConfigValues convention)
 const PROVIDER_OPTIONS = [
-  { value: "", label: "Auto-detect from model" },
+  { value: "", label: "Auto-detect from Hermes Agent" },
   { value: "openrouter", label: "OpenRouter" },
   { value: "nous", label: "Nous Research" },
   { value: "openai-codex", label: "OpenAI Codex" },
@@ -75,20 +75,20 @@ export function HermesLocalConfigFields({
 
   const selectedProviderLabel =
     PROVIDER_OPTIONS.find((o) => o.value === currentProvider)?.label ??
-    "Auto-detect from model";
+    "Auto-detect from Hermes Agent";
 
   return (
     <>
       <Field
         label="Model"
-        hint="Leave empty to use your current Hermes default (~/.hermes/config.yaml). Select a preset or choose 'Custom' to enter any model string."
+        hint="Auto-detect uses your current Hermes default (run 'hermes status' to see). Select a preset or choose 'Custom' to enter any model string."
       >
         <div className="space-y-2">
           <Popover open={modelOpen} onOpenChange={setModelOpen}>
             <PopoverTrigger asChild>
               <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent/50 transition-colors w-full justify-between">
                 <span
-                  className={cn(!currentModel && "text-muted-foreground")}
+                  className={cn(currentModel === "" && "text-muted-foreground")}
                 >
                   {selectedModelLabel}
                 </span>
@@ -107,6 +107,8 @@ export function HermesLocalConfigFields({
                     opt.value === currentModel &&
                       !isCustomModel &&
                       "bg-accent",
+                    opt.value === "" && currentModel === "" &&
+                      "text-muted-foreground",
                   )}
                   onClick={() => {
                     if (isCreate) {
