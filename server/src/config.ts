@@ -87,9 +87,20 @@ export function loadConfig(): Config {
       }
     } catch { /* ignore malformed managed config */ }
   }
-  // Write managed overrides into process.env so all code (not just config.ts) sees them
+  // Only allow managed config to set the keys the platform legitimately controls.
+  // Unrestricted process.env mutation would let a compromised config file override
+  // security-critical vars like DATABASE_URL or PAPERCLIP_MANAGEMENT_SECRET.
+  const MANAGED_CONFIG_ALLOWLIST = new Set([
+    "PAPERCLIP_MANAGED_INSTANCE_ID",
+    "PAPERCLIP_MANAGEMENT_SECRET",
+    "PAPERCLIP_LIFECYCLE_URL",
+    "PAPERCLIP_USAGE_REPORT_URL",
+    "PAPERCLIP_SECRETS_API_URL",
+    "PAPERCLIP_SECRETS_PROVIDER",
+    "PAPERCLIP_DEPLOYMENT_MODE",
+  ]);
   for (const [k, v] of Object.entries(managedOverrides)) {
-    process.env[k] = v;
+    if (MANAGED_CONFIG_ALLOWLIST.has(k)) process.env[k] = v;
   }
   const env = (key: string) => process.env[key];
 
