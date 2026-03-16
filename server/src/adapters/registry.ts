@@ -31,6 +31,7 @@ import {
 } from "@paperclipai/adapter-opencode-local/server";
 import {
   agentConfigurationDoc as openCodeAgentConfigurationDoc,
+  models as openCodeModels,
 } from "@paperclipai/adapter-opencode-local";
 import {
   execute as openclawGatewayExecute,
@@ -119,7 +120,7 @@ const openCodeLocalAdapter: ServerAdapterModule = {
   execute: openCodeExecute,
   testEnvironment: openCodeTestEnvironment,
   sessionCodec: openCodeSessionCodec,
-  models: [],
+  models: openCodeModels,
   listModels: listOpenCodeModels,
   supportsLocalAgentJwt: true,
   agentConfigurationDoc: openCodeAgentConfigurationDoc,
