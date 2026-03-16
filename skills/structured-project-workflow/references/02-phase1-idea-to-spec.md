@@ -79,8 +79,6 @@ Last session: [what was done, what's next]
 
 ## Common Mistakes
 
-**Too broad:** "Build a SaaS app" → not a spec. What specific problem? For who?
-**Too narrow:** "Add a button on line 42" → not a Phase 1 task. Skip straight to Phase 3.
 **Missing non-goals:** Every scope needs an explicit non-goals list. Without it, Claude adds features you didn't ask for.
 **No invariants:** The #1 cause of project drift. Write at least 3 invariants per project.
 
