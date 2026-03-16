@@ -51,7 +51,10 @@ export async function llmCheck(config: PaperclipConfig): Promise<CheckResult> {
         message: `Claude API returned status ${res.status}`,
       };
     } else if (config.llm.provider === "zai") {
-      const res = await fetch("https://api.z.ai/api/paas/v4/models", {
+      const endpoint = process.env.ZAI_BASE_URL
+        ? `${process.env.ZAI_BASE_URL.replace(/\/$/, "")}/models`
+        : "https://api.z.ai/api/paas/v4/models";
+      const res = await fetch(endpoint, {
         headers: { Authorization: `Bearer ${config.llm.apiKey}` },
       });
       if (res.ok) {

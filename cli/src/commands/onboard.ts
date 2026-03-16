@@ -342,7 +342,10 @@ export async function onboard(opts: OnboardOptions): Promise<void> {
             s.stop(pc.yellow("Could not validate API key — continuing anyway"));
           }
         } else if (llm.provider === "zai") {
-          const res = await fetch("https://api.z.ai/api/paas/v4/models", {
+          const endpoint = process.env.ZAI_BASE_URL
+            ? `${process.env.ZAI_BASE_URL.replace(/\/$/, "")}/models`
+            : "https://api.z.ai/api/paas/v4/models";
+          const res = await fetch(endpoint, {
             headers: { Authorization: `Bearer ${llm.apiKey}` },
           });
           if (res.ok) {
