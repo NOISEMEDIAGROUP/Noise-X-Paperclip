@@ -7,6 +7,9 @@ export const models = [
   { id: "openai/gpt-5.2", label: "openai/gpt-5.2" },
   { id: "openai/gpt-5.1-codex-max", label: "openai/gpt-5.1-codex-max" },
   { id: "openai/gpt-5.1-codex-mini", label: "openai/gpt-5.1-codex-mini" },
+  { id: "zai-coding-plan/glm-5", label: "Z.AI GLM-5" },
+  { id: "zai-coding-plan/glm-4.7", label: "Z.AI GLM-4.7" },
+  { id: "zai-coding-plan/glm-4.6", label: "Z.AI GLM-4.6" },
 ];
 
 export const agentConfigurationDoc = `# opencode_local agent configuration

@@ -67,7 +67,9 @@ export async function testEnvironment(
   const checks: AdapterEnvironmentCheck[] = [];
   const config = parseObject(ctx.config);
   const command = asString(config.command, "opencode");
-  const cwd = asString(config.cwd, process.cwd());
+  const requestedCwd = asString(config.cwd, "");
+  let cwd = requestedCwd || process.cwd();
+  let effectiveCwd = cwd;
 
   try {
     await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
@@ -77,12 +79,14 @@ export async function testEnvironment(
       message: `Working directory is valid: ${cwd}`,
     });
   } catch (err) {
+    effectiveCwd = process.cwd();
     checks.push({
-      code: "opencode_cwd_invalid",
-      level: "error",
-      message: err instanceof Error ? err.message : "Invalid working directory",
+      code: "opencode_cwd_fallback",
+      level: "warn",
+      message: `Could not create working directory "${cwd}". Using fallback: ${effectiveCwd}`,
       detail: cwd,
     });
+    cwd = effectiveCwd;
   }
 
   const envConfig = parseObject(config.env);
@@ -107,24 +111,41 @@ export async function testEnvironment(
     });
   }
 
+  const model = asString(config.model, DEFAULT_OPENCODE_LOCAL_MODEL).trim();
+  const modelProvider = (() => {
+    const slash = model.indexOf("/");
+    if (slash <= 0) return "openai";
+    return model.slice(0, slash).toLowerCase();
+  })();
+
   const configDefinesOpenAiKey = Object.prototype.hasOwnProperty.call(env, "OPENAI_API_KEY");
   const effectiveOpenAiKey = getEffectiveEnvValue(env, "OPENAI_API_KEY");
-  if (isNonEmpty(effectiveOpenAiKey)) {
-    const source = configDefinesOpenAiKey ? "adapter config env" : "server environment";
-    checks.push({
-      code: "opencode_openai_api_key_present",
-      level: "info",
-      message: "OPENAI_API_KEY is set for OpenCode authentication.",
-      detail: `Detected in ${source}.`,
-    });
+  
+  if (modelProvider === "openai") {
+    if (isNonEmpty(effectiveOpenAiKey)) {
+      const source = configDefinesOpenAiKey ? "adapter config env" : "server environment";
+      checks.push({
+        code: "opencode_openai_api_key_present",
+        level: "info",
+        message: "OPENAI_API_KEY is set for OpenCode authentication.",
+        detail: `Detected in ${source}.`,
+      });
+    } else {
+      checks.push({
+        code: "opencode_openai_api_key_missing",
+        level: "warn",
+        message: "OPENAI_API_KEY is not set. OpenCode runs may fail until authentication is configured.",
+        hint: configDefinesOpenAiKey
+          ? "adapterConfig.env defines OPENAI_API_KEY but it is empty. Set a non-empty value or remove the override."
+          : "Set OPENAI_API_KEY in adapter env/shell, or authenticate with `opencode auth login`.",
+      });
+    }
   } else {
     checks.push({
-      code: "opencode_openai_api_key_missing",
-      level: "warn",
-      message: "OPENAI_API_KEY is not set. OpenCode runs may fail until authentication is configured.",
-      hint: configDefinesOpenAiKey
-        ? "adapterConfig.env defines OPENAI_API_KEY but it is empty. Set a non-empty value or remove the override."
-        : "Set OPENAI_API_KEY in adapter env/shell, or authenticate with `opencode auth login`.",
+      code: "opencode_provider_auth_check",
+      level: "info",
+      message: `Using ${modelProvider} provider. Authentication handled by OpenCode CLI.`,
+      hint: `Run \`opencode connect ${modelProvider}\` to configure authentication if not already done.`,
     });
   }
 
@@ -140,7 +161,6 @@ export async function testEnvironment(
         hint: "Use the `opencode` CLI command to run the automatic installation and auth probe.",
       });
     } else {
-      const model = asString(config.model, DEFAULT_OPENCODE_LOCAL_MODEL).trim();
       const variant = asString(config.variant, asString(config.effort, "")).trim();
       const extraArgs = (() => {
         const fromExtraArgs = asStringArray(config.extraArgs);
@@ -170,11 +190,6 @@ export async function testEnvironment(
       const detail = summarizeProbeDetail(probe.stdout, probe.stderr, parsed.errorMessage);
       const authEvidence = `${parsed.errorMessage ?? ""}\n${probe.stdout}\n${probe.stderr}`.trim();
       const modelNotFound = OPENCODE_MODEL_NOT_FOUND_RE.test(authEvidence);
-      const modelProvider = (() => {
-        const slash = model.indexOf("/");
-        if (slash <= 0) return "openai";
-        return model.slice(0, slash).toLowerCase();
-      })();
 
       if (probe.timedOut) {
         checks.push({
@@ -213,7 +228,10 @@ export async function testEnvironment(
           level: "warn",
           message: "OpenCode CLI is installed, but authentication is not ready.",
           ...(detail ? { detail } : {}),
-          hint: "Configure OPENAI_API_KEY in adapter env/shell, then retry the probe.",
+          hint:
+            modelProvider === "openai"
+              ? "Configure OPENAI_API_KEY in adapter env/shell, or run `opencode connect openai`, then retry the probe."
+              : `Run \`opencode connect ${modelProvider}\` to configure authentication, then retry the probe.`,
         });
       } else {
         checks.push({

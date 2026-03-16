@@ -57,7 +57,9 @@ export async function testEnvironment(
   const checks: AdapterEnvironmentCheck[] = [];
   const config = parseObject(ctx.config);
   const command = asString(config.command, "codex");
-  const cwd = asString(config.cwd, process.cwd());
+  const requestedCwd = asString(config.cwd, "");
+  let cwd = requestedCwd || process.cwd();
+  let effectiveCwd = cwd;
 
   try {
     await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
@@ -67,12 +69,14 @@ export async function testEnvironment(
       message: `Working directory is valid: ${cwd}`,
     });
   } catch (err) {
+    effectiveCwd = process.cwd();
     checks.push({
-      code: "codex_cwd_invalid",
-      level: "error",
-      message: err instanceof Error ? err.message : "Invalid working directory",
+      code: "codex_cwd_fallback",
+      level: "warn",
+      message: `Could not create working directory "${cwd}". Using fallback: ${effectiveCwd}`,
       detail: cwd,
     });
+    cwd = effectiveCwd;
   }
 
   const envConfig = parseObject(config.env);

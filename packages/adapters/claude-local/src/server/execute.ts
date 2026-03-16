@@ -124,9 +124,19 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
       )
     : [];
   const configuredCwd = asString(config.cwd, "");
-  const useConfiguredInsteadOfAgentHome = workspaceSource === "agent_home" && configuredCwd.length > 0;
-  const effectiveWorkspaceCwd = useConfiguredInsteadOfAgentHome ? "" : workspaceCwd;
-  const cwd = effectiveWorkspaceCwd || configuredCwd || process.cwd();
+  let cwd: string;
+  if (workspaceCwd && (workspaceSource !== "agent_home" || !configuredCwd)) {
+    cwd = workspaceCwd;
+  } else if (configuredCwd) {
+    try {
+      await ensureAbsoluteDirectory(configuredCwd, { createIfMissing: true });
+      cwd = configuredCwd;
+    } catch {
+      cwd = workspaceCwd || process.cwd();
+    }
+  } else {
+    cwd = workspaceCwd || process.cwd();
+  }
   await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
 
   const envConfig = parseObject(config.env);

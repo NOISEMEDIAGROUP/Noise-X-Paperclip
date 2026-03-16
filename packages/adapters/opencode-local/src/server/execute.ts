@@ -177,7 +177,19 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const configuredCwd = asString(config.cwd, "");
   const useConfiguredInsteadOfAgentHome = workspaceSource === "agent_home" && configuredCwd.length > 0;
   const effectiveWorkspaceCwd = useConfiguredInsteadOfAgentHome ? "" : workspaceCwd;
-  const cwd = effectiveWorkspaceCwd || configuredCwd || process.cwd();
+  let cwd: string;
+  if (effectiveWorkspaceCwd) {
+    cwd = effectiveWorkspaceCwd;
+  } else if (configuredCwd) {
+    try {
+      await ensureAbsoluteDirectory(configuredCwd, { createIfMissing: true });
+      cwd = configuredCwd;
+    } catch {
+      cwd = workspaceCwd || process.cwd();
+    }
+  } else {
+    cwd = workspaceCwd || process.cwd();
+  }
   await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
   await ensureOpenCodeSkillsInjected(onLog);
 
