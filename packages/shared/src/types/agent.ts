@@ -6,6 +6,7 @@ import type {
 
 export interface AgentPermissions {
   canCreateAgents: boolean;
+  canManageTasks: boolean;
 }
 
 export interface Agent {
