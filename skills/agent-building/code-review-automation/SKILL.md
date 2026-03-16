@@ -28,13 +28,6 @@ Four parallel sub-reviewers: Security and Performance on Sonnet, Correctness on 
 
 ## Running a Review
 
-**Three diff sources:**
-```bash
-gh pr diff 47                  # open PR by number
-git diff main...HEAD           # all commits on this branch
-git diff HEAD~1                # last commit only
-```
-
 **Output format:**
 ```
 | File | Line | Severity | Finding | Suggestion |
@@ -83,12 +76,6 @@ A PreToolUse hook on `Bash` fires a review before any `git push` to a feature br
 | "I'll post results manually, no need to automate" | You'll forget, or post a stripped summary. One `gh pr comment` command costs nothing. Automate it. |
 | "The pre-push hook is annoying, I'll remove it" | The hook is the point. Manual review = skipped review under deadline. If it's blocking false positives, tighten the branch scope — don't remove it. |
 | "My stack is too custom for a checklist" | Add 3 lines to `review-checklist.md`. It gets read on every future review. This is the cheapest customization here. |
-
----
-
-## Full Walk-Through
-
-→ See [06-walkthrough.md](references/06-walkthrough.md) for end-to-end: `gh pr diff 47` → 4 parallel reviewers → merged findings → PR comment posted with real example output.
 
 ---
 
