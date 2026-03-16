@@ -4,6 +4,24 @@ import os from "node:os";
 import path from "node:path";
 import { testEnvironment } from "@paperclipai/adapter-opencode-local/server";
 
+async function writeFakeOpencodeModelUnavailable(binDir: string): Promise<string> {
+  const nodeScript = `process.stderr.write("ProviderModelNotFoundError: ProviderModelNotFoundError\\n");
+process.stderr.write("data: { providerID: \\\"openai\\\", modelID: \\\"gpt-5.3-codex\\\", suggestions: [] }\\n");
+process.exit(1);
+`;
+  if (process.platform === "win32") {
+    const jsPath = path.join(binDir, "opencode.js");
+    const cmdPath = path.join(binDir, "opencode.cmd");
+    await fs.writeFile(jsPath, nodeScript, "utf8");
+    await fs.writeFile(cmdPath, `@echo off\r\nnode "${jsPath}" %*\r\n`, "utf8");
+    return cmdPath;
+  }
+  const commandPath = path.join(binDir, "opencode");
+  await fs.writeFile(commandPath, `#!/usr/bin/env node\n${nodeScript}`, "utf8");
+  await fs.chmod(commandPath, 0o755);
+  return commandPath;
+}
+
 describe("opencode_local environment diagnostics", () => {
   it("reports a missing working directory as an error when cwd is absolute", async () => {
     const cwd = path.join(
@@ -62,18 +80,9 @@ describe("opencode_local environment diagnostics", () => {
   it("classifies ProviderModelNotFoundError probe output as model-unavailable warning", async () => {
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-opencode-env-probe-cwd-"));
     const binDir = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-opencode-env-probe-bin-"));
-    const fakeOpencode = path.join(binDir, "opencode");
-    const script = [
-      "#!/bin/sh",
-      "echo 'ProviderModelNotFoundError: ProviderModelNotFoundError' 1>&2",
-      "echo 'data: { providerID: \"openai\", modelID: \"gpt-5.3-codex\", suggestions: [] }' 1>&2",
-      "exit 1",
-      "",
-    ].join("\n");
 
     try {
-      await fs.writeFile(fakeOpencode, script, "utf8");
-      await fs.chmod(fakeOpencode, 0o755);
+      const fakeOpencode = await writeFakeOpencodeModelUnavailable(binDir);
 
       const result = await testEnvironment({
         companyId: "company-1",

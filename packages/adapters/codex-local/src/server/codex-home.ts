@@ -40,11 +40,21 @@ async function ensureParentDir(target: string): Promise<void> {
   await fs.mkdir(path.dirname(target), { recursive: true });
 }
 
+async function createSharedFileReference(target: string, source: string): Promise<void> {
+  if (process.platform === "win32") {
+    await fs.link(source, target).catch(async () => {
+      await fs.copyFile(source, target);
+    });
+    return;
+  }
+  await fs.symlink(source, target);
+}
+
 async function ensureSymlink(target: string, source: string): Promise<void> {
   const existing = await fs.lstat(target).catch(() => null);
   if (!existing) {
     await ensureParentDir(target);
-    await fs.symlink(source, target);
+    await createSharedFileReference(target, source);
     return;
   }
 
@@ -59,7 +69,7 @@ async function ensureSymlink(target: string, source: string): Promise<void> {
   if (resolvedLinkedPath === source) return;
 
   await fs.unlink(target);
-  await fs.symlink(source, target);
+  await createSharedFileReference(target, source);
 }
 
 async function ensureCopiedFile(target: string, source: string): Promise<void> {

@@ -103,10 +103,9 @@ export interface HostServices {
     list(params: WorkerToHostMethods["entities.list"][0]): Promise<WorkerToHostMethods["entities.list"][1]>;
   };
 
-  /** Provides `events.emit` and `events.subscribe`. */
+  /** Provides `events.emit`. */
   events: {
     emit(params: WorkerToHostMethods["events.emit"][0]): Promise<void>;
-    subscribe(params: WorkerToHostMethods["events.subscribe"][0]): Promise<void>;
   };
 
   /** Provides `http.fetch`. */
@@ -262,7 +261,6 @@ const METHOD_CAPABILITY_MAP: Record<WorkerToHostMethodName, PluginCapability | n
 
   // Events
   "events.emit": "events.emit",
-  "events.subscribe": "events.subscribe",
 
   // HTTP
   "http.fetch": "http.outbound",
@@ -408,9 +406,6 @@ export function createHostClientHandlers(
     // Events
     "events.emit": gated("events.emit", async (params) => {
       return services.events.emit(params);
-    }),
-    "events.subscribe": gated("events.subscribe", async (params) => {
-      return services.events.subscribe(params);
     }),
 
     // HTTP

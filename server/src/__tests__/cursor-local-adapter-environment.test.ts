@@ -5,9 +5,7 @@ import path from "node:path";
 import { testEnvironment } from "@paperclipai/adapter-cursor-local/server";
 
 async function writeFakeAgentCommand(binDir: string, argsCapturePath: string): Promise<string> {
-  const commandPath = path.join(binDir, "agent");
-  const script = `#!/usr/bin/env node
-const fs = require("node:fs");
+  const nodeScript = `const fs = require("node:fs");
 const outPath = process.env.PAPERCLIP_TEST_ARGS_PATH;
 if (outPath) {
   fs.writeFileSync(outPath, JSON.stringify(process.argv.slice(2)), "utf8");
@@ -22,7 +20,15 @@ console.log(JSON.stringify({
   result: "hello",
 }));
 `;
-  await fs.writeFile(commandPath, script, "utf8");
+  if (process.platform === "win32") {
+    const jsPath = path.join(binDir, "agent.js");
+    const cmdPath = path.join(binDir, "agent.cmd");
+    await fs.writeFile(jsPath, nodeScript, "utf8");
+    await fs.writeFile(cmdPath, `@echo off\r\nnode "${jsPath}" %*\r\n`, "utf8");
+    return cmdPath;
+  }
+  const commandPath = path.join(binDir, "agent");
+  await fs.writeFile(commandPath, `#!/usr/bin/env node\n${nodeScript}`, "utf8");
   await fs.chmod(commandPath, 0o755);
   return commandPath;
 }
@@ -62,13 +68,13 @@ describe("cursor environment diagnostics", () => {
     const cwd = path.join(root, "workspace");
     const argsCapturePath = path.join(root, "args.json");
     await fs.mkdir(binDir, { recursive: true });
-    await writeFakeAgentCommand(binDir, argsCapturePath);
+    const commandPath = await writeFakeAgentCommand(binDir, argsCapturePath);
 
     const result = await testEnvironment({
       companyId: "company-1",
       adapterType: "cursor",
       config: {
-        command: "agent",
+        command: commandPath,
         cwd,
         env: {
           CURSOR_API_KEY: "test-key",
@@ -93,13 +99,13 @@ describe("cursor environment diagnostics", () => {
     const cwd = path.join(root, "workspace");
     const argsCapturePath = path.join(root, "args.json");
     await fs.mkdir(binDir, { recursive: true });
-    await writeFakeAgentCommand(binDir, argsCapturePath);
+    const commandPath = await writeFakeAgentCommand(binDir, argsCapturePath);
 
     const result = await testEnvironment({
       companyId: "company-1",
       adapterType: "cursor",
       config: {
-        command: "agent",
+        command: commandPath,
         cwd,
         extraArgs: ["--yolo"],
         env: {

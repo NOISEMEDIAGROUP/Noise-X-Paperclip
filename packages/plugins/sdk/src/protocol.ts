@@ -482,10 +482,6 @@ export interface WorkerToHostMethods {
     params: { name: string; companyId: string; payload: unknown },
     result: void,
   ];
-  "events.subscribe": [
-    params: { eventPattern: string; filter?: Record<string, unknown> | null },
-    result: void,
-  ];
 
   // HTTP
   "http.fetch": [
