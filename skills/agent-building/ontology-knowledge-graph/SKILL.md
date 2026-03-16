@@ -5,18 +5,9 @@ description: Use when you need typed entity tracking across sessions, structured
 
 # Ontology & Knowledge Graph
 
-Give Claude Code a typed, queryable entity graph in plain JSON Lines files. Any skill can read and write structured state — no external databases, no Python, no MCP overhead.
+Give Claude Code a typed, queryable entity graph in plain JSON Lines files — no external databases, no Python, no MCP overhead. Three primitives: **entities** (typed nodes), **relations** (typed edges), **schema** (constraints). Two files: `memory/ontology/graph.jsonl` (data) + `memory/ontology/schema.json` (constraints).
 
-Three primitives: **entities** (typed nodes), **relations** (typed edges), **schema** (constraints).
-
-## Why Flat Files Break Down
-
-MEMORY.md fails when you need to:
-- Query "all open Tasks assigned to Alice" — can't filter flat prose
-- Maintain relational state — Person → assigned-to → Task needs both entities linked
-- Share typed state between skills — no protocol for interoperability
-
-The entity graph solves this with two files: `memory/ontology/graph.jsonl` (data) + `memory/ontology/schema.json` (constraints).
+**When MEMORY.md isn't enough:** Can't query "all open Tasks assigned to Alice" (flat prose isn't filterable), can't maintain relational state (Person → assigned-to → Task needs linked entities), can't share typed state between skills (no protocol for interoperability).
 
 ## Quick Setup (5 Minutes)
 
