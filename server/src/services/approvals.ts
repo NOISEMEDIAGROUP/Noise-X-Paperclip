@@ -1,10 +1,22 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { approvalComments, approvals } from "@paperclipai/db";
+import { normalizeAgentUrlKey } from "@paperclipai/shared";
 import { notFound, unprocessable } from "../errors.js";
+import { resolveDefaultAgentWorkspaceDir } from "../home-paths.js";
 import { redactCurrentUserText } from "../log-redaction.js";
 import { agentService } from "./agents.js";
 import { notifyHireApproved } from "./hire-hook.js";
+
+const ADAPTERS_WITH_INSTRUCTIONS_FILE = new Set([
+  "claude_local",
+  "codex_local",
+  "gemini_local",
+  "opencode_local",
+  "cursor",
+]);
 
 function redactApprovalComment<T extends { body: string }>(comment: T): T {
   return {
@@ -137,6 +149,23 @@ export function approvalService(db: Db) {
           hireApprovedAgentId = created?.id ?? null;
         }
         if (hireApprovedAgentId) {
+          // Auto-wire instructionsFilePath for adapters that support it.
+          const hired = await agentsSvc.getById(hireApprovedAgentId);
+          if (hired && ADAPTERS_WITH_INSTRUCTIONS_FILE.has(hired.adapterType)) {
+            const cfg = (typeof hired.adapterConfig === "object" && hired.adapterConfig !== null
+              ? hired.adapterConfig
+              : {}) as Record<string, unknown>;
+            if (!cfg.instructionsFilePath) {
+              const wsDir = resolveDefaultAgentWorkspaceDir(hireApprovedAgentId);
+              const slug = normalizeAgentUrlKey(hired.name) ?? hireApprovedAgentId;
+              const instrPath = path.join(wsDir, "agents", slug, "AGENTS.md");
+              await fs.mkdir(wsDir, { recursive: true });
+              await agentsSvc.update(hireApprovedAgentId, {
+                adapterConfig: { ...cfg, instructionsFilePath: instrPath },
+              });
+            }
+          }
+
           void notifyHireApproved(db, {
             companyId: updated.companyId,
             agentId: hireApprovedAgentId,
