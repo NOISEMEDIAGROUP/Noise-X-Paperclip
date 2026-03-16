@@ -219,3 +219,27 @@ sudo systemctl start paperclip
 
 This destroys all companies, agents, issues, and history. Never do
 this in a production context.
+
+## CRITICAL: Patching Agent adapterConfig
+
+The Paperclip API REPLACES the entire adapterConfig object on PATCH — it
+does NOT merge fields. If you patch with only one field, all other fields
+are wiped.
+
+WRONG (wipes promptTemplate, cwd, instructionsFilePath):
+```bash
+curl -X PATCH /api/agents/<id> -d '{"adapterConfig": {"dangerouslyBypassApprovalsAndSandbox": true}}'
+```
+
+RIGHT (preserves all fields):
+```bash
+curl -X PATCH /api/agents/<id> -d '{"adapterConfig": {
+  "cwd": "/home/transpara/transpara-ai",
+  "instructionsFilePath": "/home/transpara/transpara-ai/agent-instructions/<role>.md",
+  "dangerouslyBypassApprovalsAndSandbox": true,
+  "promptTemplate": "..."
+}}'
+```
+
+ALWAYS read the full adapterConfig before patching, and include ALL
+existing fields in the patch payload.
