@@ -44,11 +44,7 @@ Full hook scripts → `references/pre-commit-stop-hook.md` and `references/debug
 
 ## Why Debugging Eats 55% of Your Time
 
-AI-generated code is harder to debug than hand-written code: it's opaque (no mental model of why it was written that way), overengineered (fixes surface issues by adding complexity), and not written to be traced (no intermediate state, long chains).
-
-The result: "just paste the error and ask Claude to fix it" creates fix-break-fix loops. Without a pinned reproducer, Claude is guessing. Without a hypothesis, it's trying random changes. Without root cause tracing, the same bug resurfaces.
-
-Three disciplines eliminate each failure mode.
+AI-generated code is opaque and not written to be traced. "Just paste the error and ask Claude to fix it" creates fix-break-fix loops: no reproducer = guessing, no hypothesis = random changes, no root cause = same bug resurfaces. Three disciplines eliminate each failure mode.
 
 ---
 
