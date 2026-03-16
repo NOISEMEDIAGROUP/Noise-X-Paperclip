@@ -15,7 +15,6 @@ import {
   ensureCommandResolvable,
   ensurePathInEnv,
   renderTemplate,
-  joinPromptSections,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import { isOpenCodeUnknownSessionError, parseOpenCodeJsonl } from "./parse.js";
@@ -247,29 +246,8 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     agent,
     run: { id: runId, source: "on_demand" },
     context,
-  };
-  const renderedPrompt = renderTemplate(promptTemplate, templateData);
-  const renderedBootstrapPrompt =
-    !sessionId && bootstrapPromptTemplate.trim().length > 0
-      ? renderTemplate(bootstrapPromptTemplate, templateData).trim()
-      : "";
-  const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
-  const runtimeNote = renderPaperclipRuntimeNote(env);
-  const prompt = joinPromptSections([
-    instructionsPrefix,
-    renderedBootstrapPrompt,
-    sessionHandoffNote,
-    runtimeNote,
-    renderedPrompt,
-  ]);
-  const promptMetrics = {
-    promptChars: prompt.length,
-    instructionsChars: instructionsPrefix.length,
-    bootstrapPromptChars: renderedBootstrapPrompt.length,
-    sessionHandoffChars: sessionHandoffNote.length,
-    runtimeNoteChars: runtimeNote.length,
-    heartbeatPromptChars: renderedPrompt.length,
-  };
+  });
+  const prompt = `${instructionsPrefix}${renderPaperclipRuntimeNote(env)}${renderedPrompt}`;
 
   const buildArgs = (resumeSessionId: string | null) => {
     const args = ["run", "--format", "json"];

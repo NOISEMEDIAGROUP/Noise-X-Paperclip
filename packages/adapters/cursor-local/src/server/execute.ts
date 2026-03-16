@@ -319,29 +319,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     agent,
     run: { id: runId, source: "on_demand" },
     context,
-  };
-  const renderedPrompt = renderTemplate(promptTemplate, templateData);
-  const renderedBootstrapPrompt =
-    !sessionId && bootstrapPromptTemplate.trim().length > 0
-      ? renderTemplate(bootstrapPromptTemplate, templateData).trim()
-      : "";
-  const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
+  });
   const paperclipEnvNote = renderPaperclipRuntimeNote(env);
-  const prompt = joinPromptSections([
-    instructionsPrefix,
-    renderedBootstrapPrompt,
-    sessionHandoffNote,
-    paperclipEnvNote,
-    renderedPrompt,
-  ]);
-  const promptMetrics = {
-    promptChars: prompt.length,
-    instructionsChars,
-    bootstrapPromptChars: renderedBootstrapPrompt.length,
-    sessionHandoffChars: sessionHandoffNote.length,
-    runtimeNoteChars: paperclipEnvNote.length,
-    heartbeatPromptChars: renderedPrompt.length,
-  };
+  const prompt = `${instructionsPrefix}${paperclipEnvNote}${renderedPrompt}`;
 
   const buildArgs = (resumeSessionId: string | null) => {
     const args = ["-p", "--output-format", "stream-json", "--workspace", cwd];
