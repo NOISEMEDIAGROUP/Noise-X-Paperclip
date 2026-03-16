@@ -11,6 +11,11 @@ async function makeTempDir(prefix: string): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), prefix));
 }
 
+async function linkDir(source: string, target: string): Promise<void> {
+  const linkType: "junction" | "dir" = process.platform === "win32" ? "junction" : "dir";
+  await fs.symlink(source, target, linkType);
+}
+
 describe("paperclip skill utils", () => {
   const cleanupDirs = new Set<string>();
 
@@ -19,19 +24,23 @@ describe("paperclip skill utils", () => {
     cleanupDirs.clear();
   });
 
-  it("lists runtime skills from ./skills without pulling in .agents/skills", async () => {
+  it("lists runtime skills from .agents/.claude/skills roots with deterministic priority", async () => {
     const root = await makeTempDir("paperclip-skill-roots-");
     cleanupDirs.add(root);
 
     const moduleDir = path.join(root, "a", "b", "c", "d", "e");
     await fs.mkdir(moduleDir, { recursive: true });
-    await fs.mkdir(path.join(root, "skills", "paperclip"), { recursive: true });
     await fs.mkdir(path.join(root, ".agents", "skills", "release"), { recursive: true });
+    await fs.mkdir(path.join(root, ".claude", "skills", "review"), { recursive: true });
+    await fs.mkdir(path.join(root, "skills", "paperclip"), { recursive: true });
+    await fs.mkdir(path.join(root, "skills", "release"), { recursive: true });
 
     const entries = await listPaperclipSkillEntries(moduleDir);
 
-    expect(entries.map((entry) => entry.name)).toEqual(["paperclip"]);
-    expect(entries[0]?.source).toBe(path.join(root, "skills", "paperclip"));
+    expect(entries.map((entry) => entry.name)).toEqual(["release", "review", "paperclip"]);
+    expect(entries[0]?.source).toBe(path.join(root, ".agents", "skills", "release"));
+    expect(entries[1]?.source).toBe(path.join(root, ".claude", "skills", "review"));
+    expect(entries[2]?.source).toBe(path.join(root, "skills", "paperclip"));
   });
 
   it("removes stale maintainer-only symlinks from a shared skills home", async () => {
@@ -46,10 +55,12 @@ describe("paperclip skill utils", () => {
     await fs.mkdir(skillsHome, { recursive: true });
     await fs.mkdir(runtimeSkill, { recursive: true });
     await fs.mkdir(customSkill, { recursive: true });
+    await fs.mkdir(staleMaintainerSkill, { recursive: true });
 
-    await fs.symlink(runtimeSkill, path.join(skillsHome, "paperclip"));
-    await fs.symlink(customSkill, path.join(skillsHome, "release-notes"));
-    await fs.symlink(staleMaintainerSkill, path.join(skillsHome, "release"));
+    await linkDir(runtimeSkill, path.join(skillsHome, "paperclip"));
+    await linkDir(customSkill, path.join(skillsHome, "release-notes"));
+    await linkDir(staleMaintainerSkill, path.join(skillsHome, "release"));
+    await fs.rm(path.join(root, ".agents"), { recursive: true, force: true });
 
     const removed = await removeMaintainerOnlySkillSymlinks(skillsHome, ["paperclip"]);
 

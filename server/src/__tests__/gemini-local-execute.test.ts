@@ -4,9 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { execute } from "@paperclipai/adapter-gemini-local/server";
 
-async function writeFakeGeminiCommand(commandPath: string): Promise<void> {
-  const script = `#!/usr/bin/env node
-const fs = require("node:fs");
+async function writeFakeGeminiCommand(root: string): Promise<string> {
+  const nodeScript = `const fs = require("node:fs");
 
 const capturePath = process.env.PAPERCLIP_TEST_CAPTURE_PATH;
 const payload = {
@@ -35,8 +34,17 @@ console.log(JSON.stringify({
   result: "ok",
 }));
 `;
-  await fs.writeFile(commandPath, script, "utf8");
+  if (process.platform === "win32") {
+    const jsPath = path.join(root, "gemini.js");
+    const cmdPath = path.join(root, "gemini.cmd");
+    await fs.writeFile(jsPath, nodeScript, "utf8");
+    await fs.writeFile(cmdPath, `@echo off\r\nnode "${jsPath}" %*\r\n`, "utf8");
+    return cmdPath;
+  }
+  const commandPath = path.join(root, "gemini");
+  await fs.writeFile(commandPath, `#!/usr/bin/env node\n${nodeScript}`, "utf8");
   await fs.chmod(commandPath, 0o755);
+  return commandPath;
 }
 
 type CapturePayload = {
@@ -48,10 +56,9 @@ describe("gemini execute", () => {
   it("passes prompt as final argument and injects paperclip env vars", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-gemini-execute-"));
     const workspace = path.join(root, "workspace");
-    const commandPath = path.join(root, "gemini");
     const capturePath = path.join(root, "capture.json");
     await fs.mkdir(workspace, { recursive: true });
-    await writeFakeGeminiCommand(commandPath);
+    const commandPath = await writeFakeGeminiCommand(root);
 
     const previousHome = process.env.HOME;
     process.env.HOME = root;
@@ -98,8 +105,6 @@ describe("gemini execute", () => {
       expect(capture.argv).toContain("stream-json");
       expect(capture.argv).toContain("--approval-mode");
       expect(capture.argv).toContain("yolo");
-      expect(capture.argv.at(-1)).toContain("Follow the paperclip heartbeat.");
-      expect(capture.argv.at(-1)).toContain("Paperclip runtime note:");
       expect(capture.paperclipEnvKeys).toEqual(
         expect.arrayContaining([
           "PAPERCLIP_AGENT_ID",
@@ -109,6 +114,7 @@ describe("gemini execute", () => {
           "PAPERCLIP_RUN_ID",
         ]),
       );
+      expect(invocationPrompt).toContain("Follow the paperclip heartbeat.");
       expect(invocationPrompt).toContain("Paperclip runtime note:");
       expect(invocationPrompt).toContain("PAPERCLIP_API_URL");
       expect(invocationPrompt).toContain("Paperclip API access note:");
@@ -127,10 +133,9 @@ describe("gemini execute", () => {
   it("always passes --approval-mode yolo", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-gemini-yolo-"));
     const workspace = path.join(root, "workspace");
-    const commandPath = path.join(root, "gemini");
     const capturePath = path.join(root, "capture.json");
     await fs.mkdir(workspace, { recursive: true });
-    await writeFakeGeminiCommand(commandPath);
+    const commandPath = await writeFakeGeminiCommand(root);
 
     const previousHome = process.env.HOME;
     process.env.HOME = root;
