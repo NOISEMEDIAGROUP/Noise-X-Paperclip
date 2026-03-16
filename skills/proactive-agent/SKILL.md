@@ -40,12 +40,6 @@ CronCreate({
 })
 ```
 
-Manage schedules:
-- `CronList` — see all active crons
-- `CronDelete({ name: "daily-digest" })` — cancel a schedule
-
-Common expressions: `0 9 * * *` (9am daily), `0 */2 * * *` (every 2h), `0 9 * * 1` (Monday 9am).
-
 → Full reference with patterns: [01-cron-primitives.md](references/01-cron-primitives.md)
 
 ---
