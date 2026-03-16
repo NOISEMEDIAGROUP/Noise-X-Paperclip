@@ -15,6 +15,9 @@ export type { KnowledgeEntry } from "./knowledge.js";
 export type { Project, ProjectGoalRef, ProjectWorkspace, ProjectMilestone, WorkspaceCheckout } from "./project.js";
 export type {
   Issue,
+  IssuePageResult,
+  IssuePageSortDirection,
+  IssuePageSortField,
   IssueAssigneeAdapterOverrides,
   IssueReviewSubmission,
   IssueComment,
