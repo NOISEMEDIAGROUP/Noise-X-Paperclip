@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
 import { issuesApi } from "../api/issues";
+import { projectsApi } from "../api/projects";
 import { authApi } from "../api/auth";
 import { queryKeys } from "../lib/queryKeys";
 import { formatAssigneeUserLabel } from "../lib/assignees";
@@ -42,7 +43,7 @@ export type IssueViewState = {
   labels: string[];
   sortField: "status" | "priority" | "title" | "created" | "updated";
   sortDir: "asc" | "desc";
-  groupBy: "status" | "priority" | "assignee" | "none";
+  groupBy: "status" | "priority" | "assignee" | "project" | "none";
   viewMode: "list" | "board";
   collapsedGroups: string[];
 };
@@ -244,6 +245,12 @@ export function IssuesList({
     return sortIssues(filteredByControls, viewState);
   }, [issues, searchedIssues, viewState, normalizedIssueSearch, currentUserId]);
 
+  const { data: projects } = useQuery({
+    queryKey: queryKeys.projects.list(selectedCompanyId!),
+    queryFn: () => projectsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId && viewState.groupBy === "project",
+  });
+
   const { data: labels } = useQuery({
     queryKey: queryKeys.issues.labels(selectedCompanyId!),
     queryFn: () => issuesApi.listLabels(selectedCompanyId!),
@@ -268,6 +275,16 @@ export function IssuesList({
         .filter((p) => groups[p]?.length)
         .map((p) => ({ key: p, label: statusLabel(p), items: groups[p]! }));
     }
+    if (viewState.groupBy === "project") {
+      const groups = groupBy(filtered, (i) => i.projectId ?? "__no_project");
+      const projectNames: Record<string, string> = {};
+      for (const p of projects ?? []) projectNames[p.id] = p.name;
+      return Object.keys(groups).map((key) => ({
+        key,
+        label: key === "__no_project" ? "No Project" : (projectNames[key] ?? "Unknown Project"),
+        items: groups[key]!,
+      }));
+    }
     // assignee
     const groups = groupBy(
       filtered,
@@ -283,7 +300,7 @@ export function IssuesList({
             : (agentName(key) ?? key.slice(0, 8)),
       items: groups[key]!,
     }));
-  }, [filtered, viewState.groupBy, agents, agentName, currentUserId]);
+  }, [filtered, viewState.groupBy, agents, agentName, currentUserId, projects]);
 
   const newIssueDefaults = (groupKey?: string) => {
     const defaults: Record<string, string> = {};
@@ -291,6 +308,7 @@ export function IssuesList({
     if (groupKey) {
       if (viewState.groupBy === "status") defaults.status = groupKey;
       else if (viewState.groupBy === "priority") defaults.priority = groupKey;
+      else if (viewState.groupBy === "project" && groupKey !== "__no_project") defaults.projectId = groupKey;
       else if (viewState.groupBy === "assignee" && groupKey !== "__unassigned") {
         if (groupKey.startsWith("__user:")) defaults.assigneeUserId = groupKey.slice("__user:".length);
         else defaults.assigneeAgentId = groupKey;
@@ -513,10 +531,10 @@ export function IssuesList({
               <PopoverContent align="end" className="w-48 p-0">
                 <div className="p-2 space-y-0.5">
                   {([
-                    ["status", "Status"],
-                    ["priority", "Priority"],
-                    ["title", "Title"],
                     ["created", "Created"],
+                    ["priority", "Priority"],
+                    ["status", "Status"],
+                    ["title", "Title"],
                     ["updated", "Updated"],
                   ] as const).map(([field, label]) => (
                     <button
@@ -557,10 +575,11 @@ export function IssuesList({
               <PopoverContent align="end" className="w-44 p-0">
                 <div className="p-2 space-y-0.5">
                   {([
-                    ["status", "Status"],
-                    ["priority", "Priority"],
-                    ["assignee", "Assignee"],
                     ["none", "None"],
+                    ["assignee", "Assignee"],
+                    ["priority", "Priority"],
+                    ["project", "Project"],
+                    ["status", "Status"],
                   ] as const).map(([value, label]) => (
                     <button
                       key={value}
@@ -616,7 +635,7 @@ export function IssuesList({
               <div className="flex items-center py-1.5 pl-1 pr-3">
                 <CollapsibleTrigger className="flex items-center gap-1.5">
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform [[data-state=open]>&]:rotate-90" />
-                  <span className="text-sm font-semibold uppercase tracking-wide">
+                  <span className="text-sm font-semibold">
                     {group.label}
                   </span>
                 </CollapsibleTrigger>
