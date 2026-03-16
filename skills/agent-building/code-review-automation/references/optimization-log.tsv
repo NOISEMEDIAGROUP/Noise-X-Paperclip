@@ -1,2 +1,10 @@
 iteration	trigger_pct	nofire_pct	output_pct	lines	status	description
 0	100	100	100	181	baseline	Baseline — 100% all categories, 181 lines, 6 ref files
+1	100	100	100	163	kept	Remove Why Native Beats $15/PR — pure marketing, no output test coverage (-18)
+2	100	100	100	147	kept	Collapse Review Architecture — python block + severity bullets in 01-review-architecture.md (-16)
+3	100	100	100	131	kept	Collapse Auto-Triggering JSON hook config — full script in 05-auto-trigger-hook.md (-16)
+4	100	100	100	120	kept	Remove inline checklist example — full examples in 04-custom-checklists.md (-11)
+5	100	100	100	111	kept	Trim posting section — gh api line-level annotation in 03-posting-to-pr.md (-9)
+6	100	100	100	104	kept	Remove orchestrator flow steps — covered by Custom Checklists prose + refs (-7)
+7	100	100	100	97	kept	Remove three diff sources bash block — all in 02-fetching-diffs.md (-7)
+8	100	100	100	91	kept	Remove Full Walk-Through section — 06-walkthrough.md already in Reference Files table (-6)
