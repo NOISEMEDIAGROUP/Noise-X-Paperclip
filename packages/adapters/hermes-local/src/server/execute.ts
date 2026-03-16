@@ -23,6 +23,7 @@ import {
   ensureAbsoluteDirectory,
   parseObject,
 } from "@paperclipai/adapter-utils/server-utils";
+import type { AdapterExecutionContext, AdapterExecutionResult } from "@paperclipai/adapter-utils";
 import {
   HERMES_CLI,
   DEFAULT_TIMEOUT_SEC,
@@ -203,12 +204,12 @@ Title: {{taskTitle}}
 {{/noTask}}`;
 
 interface BuildPromptContext {
-  agent?: {
-    id?: string;
-    name?: string;
-    companyId?: string;
+  agent: {
+    id: string;
+    name: string;
+    companyId: string;
   };
-  runId?: string;
+  runId: string;
   config?: {
     taskId?: string;
     taskTitle?: string;
@@ -227,7 +228,7 @@ function buildPrompt(
   const taskId = cfgString(ctx.config?.taskId);
   const taskTitle = cfgString(ctx.config?.taskTitle) || "";
   const taskBody = cfgString(ctx.config?.taskBody) || "";
-  const agentName = ctx.agent?.name || "Hermes Agent";
+  const agentName = ctx.agent.name || "Hermes Agent";
   const companyName = cfgString(ctx.config?.companyName) || "";
   const projectName = cfgString(ctx.config?.projectName) || "";
 
@@ -243,11 +244,11 @@ function buildPrompt(
   }
 
   const vars: Record<string, string> = {
-    agentId: ctx.agent?.id || "",
+    agentId: ctx.agent.id,
     agentName,
-    companyId: ctx.agent?.companyId || "",
+    companyId: ctx.agent.companyId,
     companyName,
-    runId: ctx.runId || "",
+    runId: ctx.runId,
     taskId: taskId || "",
     taskTitle,
     taskBody,
@@ -343,45 +344,8 @@ function parseHermesOutput(stdout: string, stderr: string): ParsedHermesOutput {
 // Main execute
 // ---------------------------------------------------------------------------
 
-export interface ExecuteContext {
-  agent?: {
-    id?: string;
-    name?: string;
-    companyId?: string;
-    adapterConfig?: Record<string, unknown>;
-  };
-  runId?: string;
-  config?: {
-    taskId?: string;
-    taskTitle?: string;
-    taskBody?: string;
-    companyName?: string;
-    projectName?: string;
-    workspaceDir?: string;
-  };
-  context?: Record<string, unknown>;
-  runtime?: {
-    sessionParams?: { sessionId?: string };
-  };
-  onLog: (stream: "stdout" | "stderr", chunk: string) => Promise<void>;
-}
-
-export interface ExecuteResult {
-  exitCode: number | null;
-  signal: string | null;
-  timedOut: boolean;
-  provider: string | null;
-  model: string;
-  errorMessage?: string;
-  usage?: { inputTokens: number; outputTokens: number };
-  costUsd?: number;
-  summary?: string;
-  sessionParams?: { sessionId: string };
-  sessionDisplayId?: string;
-}
-
-export async function execute(ctx: ExecuteContext): Promise<ExecuteResult> {
-  const config = ctx.agent?.adapterConfig ?? {};
+export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
+  const config = parseObject(ctx.agent.adapterConfig);
 
   // ── Resolve configuration ──────────────────────────────────────────────
   const hermesCmd = cfgString(config.hermesCommand) || HERMES_CLI;
@@ -410,7 +374,20 @@ export async function execute(ctx: ExecuteContext): Promise<ExecuteResult> {
   const checkpoints = cfgBoolean(config.checkpoints) === true;
 
   // ── Build prompt ───────────────────────────────────────────────────────
-  const prompt = buildPrompt(ctx, config);
+  const prompt = buildPrompt(
+    {
+      agent: ctx.agent,
+      runId: ctx.runId,
+      config: {
+        taskId: cfgString(ctx.context.taskId) || cfgString(ctx.context.issueId),
+        taskTitle: cfgString(ctx.context.taskTitle) || cfgString(ctx.context.issueTitle),
+        taskBody: cfgString(ctx.context.taskBody) || cfgString(ctx.context.issueBody),
+        companyName: cfgString(ctx.context.companyName),
+        projectName: cfgString(ctx.context.projectName),
+      },
+    },
+    config
+  );
 
   // ── Build command args ─────────────────────────────────────────────────
   // Use -Q (quiet) to get clean output: just response + session_id line
@@ -436,7 +413,7 @@ export async function execute(ctx: ExecuteContext): Promise<ExecuteResult> {
   if (cfgBoolean(config.verbose) === true) args.push("-v");
 
   // Session resume
-  const prevSessionId = cfgString(ctx.runtime?.sessionParams?.sessionId);
+  const prevSessionId = cfgString(ctx.runtime.sessionParams?.sessionId);
   if (persistSession && prevSessionId) {
     args.push("--resume", prevSessionId);
   }
@@ -448,12 +425,12 @@ export async function execute(ctx: ExecuteContext): Promise<ExecuteResult> {
   // ── Build environment ──────────────────────────────────────────────────
   const env: Record<string, string | undefined> = {
     ...process.env,
-    ...(ctx.agent?.id && ctx.agent?.companyId ? buildPaperclipEnv({ id: ctx.agent.id, companyId: ctx.agent.companyId }) : {}),
+    ...buildPaperclipEnv({ id: ctx.agent.id, companyId: ctx.agent.companyId }),
   };
 
   if (ctx.runId) env.PAPERCLIP_RUN_ID = ctx.runId;
 
-  const taskId = cfgString(ctx.config?.taskId);
+  const taskId = cfgString(ctx.context.taskId) || cfgString(ctx.context.issueId);
   if (taskId) env.PAPERCLIP_TASK_ID = taskId;
 
   const userEnv = config.env;
@@ -463,7 +440,7 @@ export async function execute(ctx: ExecuteContext): Promise<ExecuteResult> {
 
   // ── Resolve working directory ──────────────────────────────────────────
   // Priority: config.cwd > context.paperclipWorkspace.cwd > "."
-  const workspaceContext = parseObject(ctx.context?.paperclipWorkspace);
+  const workspaceContext = parseObject(ctx.context.paperclipWorkspace);
   const workspaceCwd = cfgString(workspaceContext.cwd);
   const configuredCwd = cfgString(config.cwd);
   const cwd = configuredCwd || workspaceCwd || ".";
@@ -507,7 +484,7 @@ export async function execute(ctx: ExecuteContext): Promise<ExecuteResult> {
   }
 
   // ── Build result ───────────────────────────────────────────────────────
-  const executionResult: ExecuteResult = {
+  const executionResult: AdapterExecutionResult = {
     exitCode: result.exitCode,
     signal: result.signal,
     timedOut: result.timedOut,
