@@ -29,6 +29,7 @@ import { agentChatRoutes } from "./routes/agent_chat.js";
 import { assetRoutes } from "./routes/assets.js";
 import { accessRoutes } from "./routes/access.js";
 import { createWorkflowRoutes } from "./routes/workflows.js";
+import { createWorkflowWebhookRoutes } from "./routes/workflow-webhooks.js";
 import type { BetterAuthSessionResult } from "./auth/better-auth.js";
 
 type UiMode = "none" | "static" | "vite-dev";
@@ -92,6 +93,9 @@ export async function createApp(
     app.all("/api/auth/*authPath", opts.betterAuthHandler);
   }
   app.use(llmRoutes(db));
+
+  // Public webhook endpoint for workflow triggers
+  app.use("/webhooks", createWorkflowWebhookRoutes(db));
 
   // Mount API routes
   const api = Router();

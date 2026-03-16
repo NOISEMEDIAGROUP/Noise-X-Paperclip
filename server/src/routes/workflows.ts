@@ -6,6 +6,7 @@ import { logger } from "../middleware/logger.js";
 import { getWorkflowExecutor } from "../services/workflow-executor.js";
 import { getWorkflowScheduler } from "../services/workflow-scheduler.js";
 import { assertCompanyAccess } from "./authz.js";
+import { createWorkflowWebhookRoutes } from "./workflow-webhooks.js";
 
 interface WorkflowCreateRequest {
   name: string;
@@ -329,6 +330,9 @@ export function createWorkflowRoutes(db: Db): Router {
       return res.status(500).json({ error: error?.message || "Internal server error" });
     }
   });
+
+  // Register webhook routes as sub-router
+  router.use("/:id/webhooks", createWorkflowWebhookRoutes(db));
 
   return router;
 }
