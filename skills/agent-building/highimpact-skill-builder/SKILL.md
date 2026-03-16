@@ -5,10 +5,6 @@ description: Use when creating, testing, improving, or benchmarking Claude Code 
 
 # High-Impact Skill Builder
 
-Skills compound. A well-crafted skill pays dividends on every future invocation. A sloppy one gets ignored or misfires. This skill guides the complete lifecycle: capture intent → write the skill → test it → iterate → optimize description for reliable triggering.
-
-**Philosophy:** Opinionated defaults, escape hatches on demand. Auto-generate test cases. Auto-draft assertions. Auto-run. You intervene when the defaults miss.
-
 **Three phases:** Create → Test → Improve. Description optimization is a finishing step after the skill works.
 
 ---
