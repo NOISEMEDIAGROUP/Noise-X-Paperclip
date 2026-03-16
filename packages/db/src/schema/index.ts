@@ -37,3 +37,4 @@ export { agentConversations } from "./agent_conversations.js";
 export { workflows } from "./workflows.js";
 export { workflowRuns } from "./workflow_runs.js";
 export { workflowRunSteps } from "./workflow_run_steps.js";
+export { workflowWebhooks } from "./workflow_webhooks.js";

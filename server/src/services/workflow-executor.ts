@@ -340,6 +340,9 @@ export class WorkflowExecutor {
       case "notify":
         return this.executeNotifyAction(node, context);
 
+      case "http-request":
+        return this.executeHttpRequestAction(node, context);
+
       default:
         throw new Error(`Unknown action type: ${actionType}`);
     }
@@ -482,6 +485,53 @@ export class WorkflowExecutor {
       status: "sent",
       channel,
     };
+  }
+
+  /**
+   * Execute HTTP request action
+   */
+  private async executeHttpRequestAction(
+    node: WorkflowNode,
+    context: ExecutionContext
+  ): Promise<unknown> {
+    const { url, method = "POST", headers = {}, body } = node.data;
+
+    if (!url) {
+      throw new Error("HTTP request action requires a URL");
+    }
+
+    try {
+      const headerRecord = (headers || {}) as Record<string, string>;
+      const fetchOptions: RequestInit = {
+        method: method as string,
+        headers: {
+          "Content-Type": "application/json",
+          ...headerRecord,
+        },
+      };
+
+      if (body && method !== "GET") {
+        fetchOptions.body = JSON.stringify(body);
+      }
+
+      const response = await fetch(url as string, fetchOptions);
+      const responseText = await response.text();
+
+      let responseData: unknown;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = responseText;
+      }
+
+      return {
+        status: "completed",
+        statusCode: response.status,
+        response: responseData,
+      };
+    } catch (error: any) {
+      throw new Error(`HTTP request failed: ${error?.message}`);
+    }
   }
 
   /**
