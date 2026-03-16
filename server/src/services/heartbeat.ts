@@ -916,6 +916,7 @@ export function heartbeatService(db: Db) {
     const agentConfig = parseObject(agent.adapterConfig);
     const agentConfigCwd = readNonEmptyString(agentConfig.cwd);
     // Prefer adapterConfig.cwd if set and exists, otherwise use default agent workspace
+    const warnings: string[] = [];
     let cwd: string;
     if (agentConfigCwd) {
       const agentConfigCwdExists = await fs
@@ -927,12 +928,14 @@ export function heartbeatService(db: Db) {
       } else {
         cwd = resolveDefaultAgentWorkspaceDir(agent.id);
         await fs.mkdir(cwd, { recursive: true });
+        warnings.push(
+          `Configured adapter workspace "${agentConfigCwd}" is not available. Using fallback workspace "${cwd}" for this run.`,
+        );
       }
     } else {
       cwd = resolveDefaultAgentWorkspaceDir(agent.id);
       await fs.mkdir(cwd, { recursive: true });
     }
-    const warnings: string[] = [];
     if (sessionCwd) {
       warnings.push(
         `Saved session workspace "${sessionCwd}" is not available. Using fallback workspace "${cwd}" for this run.`,
@@ -942,7 +945,6 @@ export function heartbeatService(db: Db) {
         `No project workspace directory is currently available for this issue. Using fallback workspace "${cwd}" for this run.`,
       );
     }
-    // No warning when using adapterConfig.cwd - this is the expected behavior
     return {
       cwd,
       source: "agent_home" as const,
