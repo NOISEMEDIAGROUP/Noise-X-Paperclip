@@ -57,18 +57,9 @@ git diff HEAD~1                # last commit only
 ## Posting to the PR
 
 ```bash
-# Post review as PR comment
-gh pr comment 47 --body "$(cat /tmp/review-output.md)"
-
-# Update existing review comment
-gh pr comment 47 --edit-last
-
-# Line-level annotations via GitHub review API
-gh api repos/{owner}/{repo}/pulls/47/reviews \
-  -f body="Review findings" -f event="COMMENT"
+gh pr comment 47 --body "$(cat /tmp/review-output.md)"  # first review
+gh pr comment 47 --edit-last                             # iteration updates
 ```
-
-When to use each: new comment on first review, `--edit-last` for iteration updates.
 
 → See [03-posting-to-pr.md](references/03-posting-to-pr.md) for threading, line-level annotation, and the full comment template.
 
