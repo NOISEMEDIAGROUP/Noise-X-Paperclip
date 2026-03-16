@@ -54,7 +54,7 @@ GLOSSARY.md = **what we call things**. Ontology (#012) = **how things relate**. 
 |---|---|
 | "I'll just correct Claude when it gets the naming wrong" | You'll correct it 50 times. It won't remember. The glossary remembers. |
 | "Our domain terms aren't that different from generic ones" | Different enough that you noticed. That's why you're here. |
-| "I'll set up the PostToolUse hook later" | The hook is 8 lines. "Later" means wrong terms in git for 3 months. |
+| "I'll set up the PostToolUse hook later" | Install takes 5 minutes. "Later" means wrong terms in git for 3 months. |
 | "I need to extract all terms before I can start" | Start with 5 terms. Add more as Claude gets them wrong. The glossary grows with the codebase. |
 | "CLAUDE.md loads from git root — GLOSSARY.md will auto-load" | It won't. You need the explicit `@GLOSSARY.md` line in CLAUDE.md. |
 
