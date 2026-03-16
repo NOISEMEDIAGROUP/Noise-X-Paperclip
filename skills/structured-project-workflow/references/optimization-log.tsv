@@ -1,0 +1,2 @@
+iteration	trigger_pct	nofire_pct	output_pct	lines	status	description
+0	100	100	100	77	baseline	Initial state — 8 ref files, 25/25 test score
