@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { resolveDefaultAgentWorkspaceDir } from "../home-paths.js";
 import {
   buildHeartbeatTimerBucket,
+  isHeartbeatTimerWakePending,
   resolveRuntimeSessionParamsForWorkspace,
   shouldResetTaskSessionForWake,
   type ResolvedWorkspaceForRun,
@@ -171,5 +172,17 @@ describe("buildHeartbeatTimerBucket", () => {
     const now = new Date("2026-03-16T10:00:30.000Z");
 
     expect(buildHeartbeatTimerBucket(baseline, now, 60)).toBeNull();
+  });
+});
+
+describe("isHeartbeatTimerWakePending", () => {
+  it("treats queued and claimed wakes as in-flight duplicates", () => {
+    expect(isHeartbeatTimerWakePending("queued")).toBe(true);
+    expect(isHeartbeatTimerWakePending("claimed")).toBe(true);
+  });
+
+  it("does not treat completed or coalesced wakes as blocking recovery", () => {
+    expect(isHeartbeatTimerWakePending("completed")).toBe(false);
+    expect(isHeartbeatTimerWakePending("coalesced")).toBe(false);
   });
 });

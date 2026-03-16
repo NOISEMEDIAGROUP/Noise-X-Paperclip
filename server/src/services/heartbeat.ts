@@ -48,6 +48,7 @@ const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_MAX = 10;
 const DEFERRED_WAKE_CONTEXT_KEY = "_paperclipWakeContext";
 const HEARTBEAT_TIMER_BUCKET_KEY = "heartbeatTimerBucket";
+const HEARTBEAT_TIMER_PENDING_STATUSES = ["queued", "claimed"] as const;
 const startLocksByAgent = new Map<string, Promise<void>>();
 const REPO_ONLY_CWD_SENTINEL = "/__paperclip_repo_only__";
 const SESSIONED_LOCAL_ADAPTERS = new Set([
@@ -539,6 +540,10 @@ export function buildHeartbeatTimerBucket(
     bucketKey: `${baselineMs}:${intervalMs}:${bucketStart.toISOString()}`,
     bucketStart,
   };
+}
+
+export function isHeartbeatTimerWakePending(status: string | null | undefined) {
+  return HEARTBEAT_TIMER_PENDING_STATUSES.includes(status as (typeof HEARTBEAT_TIMER_PENDING_STATUSES)[number]);
 }
 
 function truncateDisplayId(value: string | null | undefined, max = 128) {
@@ -2424,7 +2429,7 @@ export function heartbeatService(db: Db) {
             eq(agentWakeupRequests.agentId, agentId),
             eq(agentWakeupRequests.source, "timer"),
             sql`${agentWakeupRequests.payload} ->> ${HEARTBEAT_TIMER_BUCKET_KEY} = ${timerBucketKey}`,
-            inArray(agentWakeupRequests.status, ["queued", "claimed", "completed", "coalesced"]),
+            inArray(agentWakeupRequests.status, [...HEARTBEAT_TIMER_PENDING_STATUSES]),
           ),
         )
         .orderBy(asc(agentWakeupRequests.requestedAt))
@@ -3211,9 +3216,6 @@ export function heartbeatService(db: Db) {
         if (!policy.enabled || policy.intervalSec <= 0) continue;
 
         checked += 1;
-        const baseline = new Date(agent.lastHeartbeatAt ?? agent.createdAt).getTime();
-        const elapsedMs = now.getTime() - baseline;
-        if (elapsedMs < policy.intervalSec * 1000) continue;
         const timerBucket = buildHeartbeatTimerBucket(new Date(agent.lastHeartbeatAt ?? agent.createdAt), now, policy.intervalSec);
         if (!timerBucket) continue;
 
