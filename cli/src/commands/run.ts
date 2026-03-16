@@ -146,11 +146,33 @@ function maybeEnableUiDevMiddleware(entrypoint: string): void {
   }
 }
 
+async function ensurePluginSdkBuilt(projectRoot: string): Promise<void> {
+  const sdkDist = path.resolve(projectRoot, "packages/plugins/sdk/dist/index.js");
+  if (fs.existsSync(sdkDist)) return;
+
+  p.log.step("Building plugin SDK...");
+  const tscBin = path.resolve(projectRoot, "node_modules/typescript/bin/tsc");
+  const tsconfig = path.resolve(projectRoot, "packages/plugins/sdk/tsconfig.json");
+
+  const { spawnSync } = await import("node:child_process");
+  const result = spawnSync(process.execPath, [tscBin, "-p", tsconfig], {
+    cwd: projectRoot,
+    stdio: "inherit",
+  });
+
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    p.log.error("Plugin SDK build failed.");
+    process.exit(result.status ?? 1);
+  }
+}
+
 async function importServerEntry(): Promise<StartedServer> {
   // Dev mode: try local workspace path (monorepo with tsx)
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
   const devEntry = path.resolve(projectRoot, "server/src/index.ts");
   if (fs.existsSync(devEntry)) {
+    await ensurePluginSdkBuilt(projectRoot);
     maybeEnableUiDevMiddleware(devEntry);
     const mod = await import(pathToFileURL(devEntry).href);
     return await startServerFromModule(mod, devEntry);
