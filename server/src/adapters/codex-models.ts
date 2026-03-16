@@ -67,7 +67,7 @@ function resolveLlmDetails(): { apiKey: string | null; endpoint: string } {
   return { apiKey: null, endpoint: OPENAI_MODELS_ENDPOINT };
 }
 
-async function fetchOpenAiModels(apiKey: string, endpoint: string): Promise<AdapterModel[]> {
+async function fetchModelsFromEndpoint(apiKey: string, endpoint: string): Promise<AdapterModel[]> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), OPENAI_MODELS_TIMEOUT_MS);
   try {
@@ -110,7 +110,7 @@ export async function listCodexModels(): Promise<AdapterModel[]> {
     return cached.models;
   }
 
-  const fetched = await fetchOpenAiModels(apiKey, endpoint);
+  const fetched = await fetchModelsFromEndpoint(apiKey, endpoint);
   if (fetched.length > 0) {
     const merged = provider === "zai" ? dedupeModels(fetched) : mergedWithFallback(fetched);
     cached = {
