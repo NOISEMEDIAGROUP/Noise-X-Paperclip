@@ -76,8 +76,7 @@ export function Favorites() {
     return (
       <EmptyState
         icon={Star}
-        message="No favorites yet"
-        description="Star issues to add them to your favorites for quick access."
+        message="No favorites yet. Star issues to add them here for quick access."
       />
     );
   }

@@ -8,8 +8,6 @@ import { Button } from "@/components/ui/button";
 interface FavoriteButtonProps {
   issueId: string;
   companyId: string;
-  /** Variant for different contexts */
-  variant?: "icon" | "ghost";
   /** Size of the button */
   size?: "sm" | "xs";
   className?: string;
@@ -22,7 +20,6 @@ interface FavoriteButtonProps {
 export function FavoriteButton({
   issueId,
   companyId,
-  variant = "ghost",
   size = "sm",
   className,
 }: FavoriteButtonProps) {
@@ -115,7 +112,7 @@ export function FavoriteButton({
 
   return (
     <Button
-      variant={variant}
+      variant="ghost"
       size={buttonSize}
       onClick={handleClick}
       disabled={isPending}
