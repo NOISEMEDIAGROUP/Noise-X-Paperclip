@@ -12,6 +12,7 @@ import type {
   IssueComment,
 } from "@paperclipai/plugin-sdk";
 import { isAgentInvokable } from "@paperclipai/shared";
+import { conflict } from "../errors.js";
 import { companyService } from "./companies.js";
 import { agentService } from "./agents.js";
 import { projectService } from "./projects.js";
@@ -832,7 +833,7 @@ export function buildHostServices(
         await ensurePluginAvailableForCompany(companyId);
         const agent = requireInCompany("Agent", await agents.getById(params.agentId), companyId);
         if (!isAgentInvokable(agent.status)) {
-          throw new Error(`Agent is not invokable (status: ${agent.status})`);
+          throw conflict("Agent is not invokable in its current state", { status: agent.status });
         }
         const run = await heartbeat.wakeup(params.agentId, {
           source: "automation",
