@@ -90,8 +90,8 @@
       "id": "O3",
       "scenario": "Explicitly warns against `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` / `TeamCreate`",
       "pass": false,
-      "score": 4.7,
-      "reason": "Low coverage: assertion overlap 0%, score 4.7/10"
+      "score": 5,
+      "reason": "Low coverage: assertion overlap 0%, score 5.0/10"
     },
     {
       "id": "O4",
@@ -111,8 +111,8 @@
       "id": "O6",
       "scenario": "Explains SendMessage async behavior and CronCreate polling alternative",
       "pass": false,
-      "score": 4.3,
-      "reason": "Low coverage: assertion overlap 0%, score 4.3/10"
+      "score": 4.7,
+      "reason": "Low coverage: assertion overlap 0%, score 4.7/10"
     },
     {
       "id": "O7",
@@ -132,16 +132,16 @@
       "id": "E2",
       "scenario": "User asks about Paperclip multi-agent coordination specifically",
       "pass": false,
-      "score": 5.7,
-      "reason": "Low coverage: assertion overlap 40%, score 5.7/10"
+      "score": 6,
+      "reason": "Low coverage: assertion overlap 40%, score 6.0/10"
     },
     {
       "id": "E4",
       "scenario": "User wants TeamCreate despite the warning",
       "pass": false,
-      "score": 5,
-      "reason": "Low coverage: assertion overlap 38%, score 5.0/10"
+      "score": 6,
+      "reason": "Low coverage: assertion overlap 50%, score 6.0/10"
     }
   ],
-  "duration_ms": 6
+  "duration_ms": 16
 }

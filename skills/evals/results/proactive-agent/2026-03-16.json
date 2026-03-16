@@ -16,13 +16,13 @@
       "pct": 100
     },
     "output": {
-      "pass": 3,
-      "fail": 28,
+      "pass": 29,
+      "fail": 2,
       "total": 31,
-      "pct": 10
+      "pct": 94
     }
   },
-  "overall": 40,
+  "overall": 94,
   "failures": [
     {
       "id": "T7",
@@ -33,201 +33,19 @@
       "reason": "Keyword overlap 43% (confidence 55)"
     },
     {
-      "id": "O1",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 6,
-      "reason": "Low coverage: assertion overlap 71%, score 6.0/10"
-    },
-    {
-      "id": "O2",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 3.3,
-      "reason": "Low coverage: assertion overlap 20%, score 3.3/10"
-    },
-    {
-      "id": "O3",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 3.7,
-      "reason": "Low coverage: assertion overlap 25%, score 3.7/10"
-    },
-    {
-      "id": "O6",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 4.7,
-      "reason": "Low coverage: assertion overlap 40%, score 4.7/10"
-    },
-    {
-      "id": "O7",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 5,
-      "reason": "Low coverage: assertion overlap 57%, score 5.0/10"
-    },
-    {
-      "id": "O8",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 4.7,
-      "reason": "Low coverage: assertion overlap 40%, score 4.7/10"
-    },
-    {
-      "id": "O9",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 4.7,
-      "reason": "Low coverage: assertion overlap 43%, score 4.7/10"
-    },
-    {
-      "id": "O10",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 3.7,
-      "reason": "Low coverage: assertion overlap 25%, score 3.7/10"
-    },
-    {
-      "id": "O11",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 5,
-      "reason": "Low coverage: assertion overlap 50%, score 5.0/10"
-    },
-    {
-      "id": "O12",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 3.3,
-      "reason": "Low coverage: assertion overlap 20%, score 3.3/10"
-    },
-    {
-      "id": "O13",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 4,
-      "reason": "Low coverage: assertion overlap 33%, score 4.0/10"
-    },
-    {
-      "id": "O14",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 5,
-      "reason": "Low coverage: assertion overlap 50%, score 5.0/10"
-    },
-    {
-      "id": "O15",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 3.3,
-      "reason": "Low coverage: assertion overlap 20%, score 3.3/10"
-    },
-    {
-      "id": "O16",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 5,
-      "reason": "Low coverage: assertion overlap 57%, score 5.0/10"
-    },
-    {
-      "id": "O17",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 4,
-      "reason": "Low coverage: assertion overlap 33%, score 4.0/10"
-    },
-    {
-      "id": "O18",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 5.7,
-      "reason": "Low coverage: assertion overlap 60%, score 5.7/10"
-    },
-    {
-      "id": "O19",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 4.7,
-      "reason": "Low coverage: assertion overlap 40%, score 4.7/10"
-    },
-    {
-      "id": "O20",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 4,
-      "reason": "Low coverage: assertion overlap 33%, score 4.0/10"
-    },
-    {
-      "id": "O21",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 4,
-      "reason": "Low coverage: assertion overlap 33%, score 4.0/10"
-    },
-    {
-      "id": "O22",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 4,
-      "reason": "Low coverage: assertion overlap 33%, score 4.0/10"
-    },
-    {
       "id": "O23",
       "scenario": "trigger scenario",
       "pass": false,
-      "score": 4,
-      "reason": "Low coverage: assertion overlap 33%, score 4.0/10"
-    },
-    {
-      "id": "O24",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 5,
-      "reason": "Low coverage: assertion overlap 50%, score 5.0/10"
-    },
-    {
-      "id": "O25",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 4.7,
-      "reason": "Low coverage: assertion overlap 40%, score 4.7/10"
-    },
-    {
-      "id": "O26",
-      "scenario": "trigger scenario",
-      "pass": false,
       "score": 6,
-      "reason": "Low coverage: assertion overlap 75%, score 6.0/10"
-    },
-    {
-      "id": "O27",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 5.7,
-      "reason": "Low coverage: assertion overlap 60%, score 5.7/10"
-    },
-    {
-      "id": "O28",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 5,
-      "reason": "Low coverage: assertion overlap 50%, score 5.0/10"
-    },
-    {
-      "id": "O29",
-      "scenario": "trigger scenario",
-      "pass": false,
-      "score": 5.7,
-      "reason": "Low coverage: assertion overlap 60%, score 5.7/10"
+      "reason": "Low coverage: assertion overlap 33%, score 6.0/10"
     },
     {
       "id": "O31",
       "scenario": "trigger scenario",
       "pass": false,
-      "score": 2.3,
-      "reason": "Low coverage: assertion overlap 0%, score 2.3/10"
+      "score": 5.7,
+      "reason": "Low coverage: assertion overlap 25%, score 5.7/10"
     }
   ],
-  "duration_ms": 5
+  "duration_ms": 35
 }

@@ -407,6 +407,39 @@ function scoreGroup(results: TestResult[]): ScoreGroup {
   };
 }
 
+/**
+ * Load the full skill package: SKILL.md + all reference files + all workflow files.
+ * This gives output scoring access to the complete content, not just the router.
+ */
+function loadFullSkillContent(skillPath: string): string {
+  const skillDir = dirname(skillPath);
+  let content = readFileSync(skillPath, "utf-8");
+
+  // Append reference files
+  const refsDir = join(skillDir, "references");
+  if (existsSync(refsDir)) {
+    const refFiles = readdirSync(refsDir)
+      .filter((f: string) => f.endsWith(".md") && !f.startsWith("test-"))
+      .sort();
+    for (const refFile of refFiles) {
+      content += `\n\n${readFileSync(join(refsDir, refFile), "utf-8")}`;
+    }
+  }
+
+  // Append workflow files
+  const workflowsDir = join(skillDir, "Workflows");
+  if (existsSync(workflowsDir)) {
+    const wfFiles = readdirSync(workflowsDir)
+      .filter((f: string) => f.endsWith(".md"))
+      .sort();
+    for (const wfFile of wfFiles) {
+      content += `\n\n${readFileSync(join(workflowsDir, wfFile), "utf-8")}`;
+    }
+  }
+
+  return content;
+}
+
 function runEval(skillPath: string): EvalResult {
   const start = Date.now();
 
@@ -419,6 +452,7 @@ function runEval(skillPath: string): EvalResult {
   }
 
   const skillContent = readFileSync(fullSkillPath, "utf-8");
+  const fullContent = loadFullSkillContent(fullSkillPath);
   const meta = parseSkillMeta(skillContent);
 
   const testCasesPath = findTestCasesPath(fullSkillPath);
@@ -436,8 +470,9 @@ function runEval(skillPath: string): EvalResult {
   const noFireResults: TestResult[] = suite.noFireTests.map((t) =>
     scoreTriggerTest(t, meta.description)
   );
+  // Output tests score against full skill package (SKILL.md + references + workflows)
   const outputResults: TestResult[] = suite.outputTests.map((t) =>
-    scoreOutputTest(t, skillContent)
+    scoreOutputTest(t, fullContent)
   );
 
   const triggerScore = scoreGroup(triggerResults);

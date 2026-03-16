@@ -16,13 +16,13 @@
       "pct": 80
     },
     "output": {
-      "pass": 18,
-      "fail": 5,
+      "pass": 19,
+      "fail": 4,
       "total": 23,
-      "pct": 78
+      "pct": 83
     }
   },
-  "overall": 81,
+  "overall": 83,
   "failures": [
     {
       "id": "T6",
@@ -41,25 +41,18 @@
       "reason": "Keyword overlap 100% (confidence 65)"
     },
     {
-      "id": "O4",
-      "scenario": "T2 — PR creation",
-      "pass": false,
-      "score": 4,
-      "reason": "Low coverage: assertion overlap 33%, score 4.0/10"
-    },
-    {
       "id": "O5",
       "scenario": "T2 — PR creation",
       "pass": false,
-      "score": 3.7,
-      "reason": "Low coverage: assertion overlap 25%, score 3.7/10"
+      "score": 6,
+      "reason": "Low coverage: assertion overlap 75%, score 6.0/10"
     },
     {
       "id": "O6",
       "scenario": "T2 — PR creation",
       "pass": false,
-      "score": 2.3,
-      "reason": "Low coverage: assertion overlap 0%, score 2.3/10"
+      "score": 6,
+      "reason": "Low coverage: assertion overlap 67%, score 6.0/10"
     },
     {
       "id": "O22",
@@ -72,9 +65,9 @@
       "id": "O23",
       "scenario": "T8 — Combined",
       "pass": false,
-      "score": 4,
-      "reason": "Low coverage: assertion overlap 33%, score 4.0/10"
+      "score": 6,
+      "reason": "Low coverage: assertion overlap 67%, score 6.0/10"
     }
   ],
-  "duration_ms": 5
+  "duration_ms": 33
 }

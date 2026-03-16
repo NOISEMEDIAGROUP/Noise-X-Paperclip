@@ -16,13 +16,13 @@
       "pct": 60
     },
     "output": {
-      "pass": 0,
-      "fail": 10,
+      "pass": 1,
+      "fail": 9,
       "total": 10,
-      "pct": 0
+      "pct": 10
     }
   },
-  "overall": 48,
+  "overall": 52,
   "failures": [
     {
       "id": "T5",
@@ -60,72 +60,65 @@
       "id": "O1",
       "scenario": "SKILL.md shows Quick Entry table with 8 links (includes Why Agents Stay Dumb + Four-Phase Loop)",
       "pass": false,
-      "score": 4.7,
-      "reason": "Low coverage: assertion overlap 0%, score 4.7/10"
+      "score": 5,
+      "reason": "Low coverage: assertion overlap 0%, score 5.0/10"
     },
     {
       "id": "O2",
       "scenario": "Phase 1 section covers PostToolUse hook + JSON config",
       "pass": false,
-      "score": 4.3,
-      "reason": "Low coverage: assertion overlap 0%, score 4.3/10"
+      "score": 5,
+      "reason": "Low coverage: assertion overlap 0%, score 5.0/10"
     },
     {
       "id": "O3",
       "scenario": "Phase 2 section shows lessons-learned.md entry format",
       "pass": false,
-      "score": 4.7,
-      "reason": "Low coverage: assertion overlap 0%, score 4.7/10"
+      "score": 5,
+      "reason": "Low coverage: assertion overlap 0%, score 5.0/10"
     },
     {
       "id": "O4",
       "scenario": "Phase 2 specifies 2-occurrence threshold",
       "pass": false,
-      "score": 5,
-      "reason": "Low coverage: assertion overlap 0%, score 5.0/10"
+      "score": 6,
+      "reason": "Low coverage: assertion overlap 0%, score 6.0/10"
     },
     {
       "id": "O5",
       "scenario": "Phase 3 section includes \"the rule test\" concept",
       "pass": false,
-      "score": 4,
-      "reason": "Low coverage: assertion overlap 0%, score 4.0/10"
+      "score": 5,
+      "reason": "Low coverage: assertion overlap 0%, score 5.0/10"
     },
     {
       "id": "O6",
       "scenario": "Phase 4 section shows keep/discard scoring table",
       "pass": false,
-      "score": 4.3,
-      "reason": "Low coverage: assertion overlap 0%, score 4.3/10"
+      "score": 5,
+      "reason": "Low coverage: assertion overlap 0%, score 5.0/10"
     },
     {
       "id": "O7",
       "scenario": "Anti-rationalization table has 5 entries",
       "pass": false,
-      "score": 3.3,
-      "reason": "Low coverage: assertion overlap 0%, score 3.3/10"
+      "score": 6,
+      "reason": "Low coverage: assertion overlap 0%, score 6.0/10"
     },
     {
       "id": "O8",
       "scenario": "References section links all 6 reference files",
       "pass": false,
-      "score": 3.7,
-      "reason": "Low coverage: assertion overlap 0%, score 3.7/10"
-    },
-    {
-      "id": "O9",
-      "scenario": "Violation types table appears (in reference or SKILL.md)",
-      "pass": false,
-      "score": 3.7,
-      "reason": "Low coverage: assertion overlap 0%, score 3.7/10"
+      "score": 5,
+      "reason": "Low coverage: assertion overlap 0%, score 5.0/10"
     },
     {
       "id": "O10",
       "scenario": "Session-End Summary section covers Stop hook config",
       "pass": false,
-      "score": 4.7,
-      "reason": "Low coverage: assertion overlap 0%, score 4.7/10"
+      "score": 5,
+      "reason": "Low coverage: assertion overlap 0%, score 5.0/10"
     }
   ],
-  "duration_ms": 6
+  "duration_ms": 17
 }

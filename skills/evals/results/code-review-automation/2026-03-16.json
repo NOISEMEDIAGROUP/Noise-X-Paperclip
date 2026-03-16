@@ -16,13 +16,13 @@
       "pct": 100
     },
     "output": {
-      "pass": 8,
-      "fail": 2,
+      "pass": 10,
+      "fail": 0,
       "total": 10,
-      "pct": 80
+      "pct": 100
     }
   },
-  "overall": 89,
+  "overall": 96,
   "failures": [
     {
       "id": "T9",
@@ -31,21 +31,7 @@
       "pass": false,
       "score": 40,
       "reason": "Keyword overlap 33% (confidence 40)"
-    },
-    {
-      "id": "O5",
-      "scenario": "User has review-checklist.md",
-      "pass": false,
-      "score": 5.7,
-      "reason": "Low coverage: assertion overlap 40%, score 5.7/10"
-    },
-    {
-      "id": "O6",
-      "scenario": "\"post to PR\" intent",
-      "pass": false,
-      "score": 6,
-      "reason": "Low coverage: assertion overlap 33%, score 6.0/10"
     }
   ],
-  "duration_ms": 3
+  "duration_ms": 15
 }
