@@ -516,32 +516,53 @@ export class MessagingService {
       });
 
       // Platform-specific sending logic
-      let platformMessageId: string | undefined;
+      let result: { success: boolean; messageId?: string; error?: string };
       try {
+        const config = connector.configuration as Record<string, unknown>;
+
         switch (connector.platform) {
           case "telegram":
-            // platformMessageId = await this.sendTelegramMessage(...);
-            platformMessageId = `tg-${message.id}`;
+            result = await this.sendTelegramMessage(
+              config.botToken as string,
+              channel.channelIdentifier,
+              content
+            );
             break;
           case "whatsapp":
-            // platformMessageId = await this.sendWhatsAppMessage(...);
-            platformMessageId = `wa-${message.id}`;
+            result = await this.sendWhatsAppMessage(
+              config.phoneNumberId as string,
+              config.accessToken as string,
+              channel.channelIdentifier,
+              content
+            );
             break;
           case "slack":
-            // platformMessageId = await this.sendSlackMessage(...);
-            platformMessageId = `slack-${message.id}`;
+            result = await this.sendSlackMessage(
+              config.botToken as string,
+              channel.channelIdentifier,
+              content
+            );
             break;
           case "email":
-            // platformMessageId = await this.sendEmailMessage(...);
-            platformMessageId = `email-${message.id}`;
+            result = await this.sendEmailMessage(
+              config as any,
+              channel.channelIdentifier,
+              "Agent Message",
+              content
+            );
             break;
+          default:
+            result = { success: false, error: "Unknown platform" };
         }
 
-        // Update message with platform message ID
-        await this.updateMessageStatus(message.id, "sent");
-
-        logger.info(`Message sent via ${connector.platform}: ${platformMessageId}`);
-        return { success: true, platformMessageId };
+        if (result.success) {
+          await this.updateMessageStatus(message.id, "sent");
+          logger.info(`Message sent via ${connector.platform}: ${result.messageId}`);
+          return { success: true, platformMessageId: result.messageId };
+        } else {
+          await this.updateMessageStatus(message.id, "failed", result.error);
+          return { success: false, error: result.error };
+        }
       } catch (error) {
         // Mark as failed
         await this.updateMessageStatus(message.id, "failed", String(error));
@@ -549,6 +570,127 @@ export class MessagingService {
       }
     } catch (error) {
       logger.error(`Failed to send message: ${error}`);
+      return { success: false, error: String(error) };
+    }
+  }
+
+  // Platform-specific send methods
+  private async sendTelegramMessage(
+    botToken: string,
+    chatId: string,
+    content: string
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: content,
+        }),
+      });
+
+      if (!response.ok) {
+        return { success: false, error: await response.text() };
+      }
+
+      const result = await response.json();
+      return {
+        success: true,
+        messageId: String(result.result?.message_id),
+      };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  }
+
+  private async sendWhatsAppMessage(
+    phoneNumberId: string,
+    accessToken: string,
+    toNumber: string,
+    content: string
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      const url = `https://graph.instagram.com/v18.0/${phoneNumberId}/messages`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: toNumber,
+          type: "text",
+          text: { body: content },
+        }),
+      });
+
+      if (!response.ok) {
+        return { success: false, error: await response.text() };
+      }
+
+      const result = await response.json();
+      return {
+        success: true,
+        messageId: result.messages?.[0]?.id,
+      };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  }
+
+  private async sendSlackMessage(
+    botToken: string,
+    channel: string,
+    content: string
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      const response = await fetch("https://slack.com/api/chat.postMessage", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${botToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          channel,
+          text: content,
+        }),
+      });
+
+      if (!response.ok) {
+        return { success: false, error: "HTTP error" };
+      }
+
+      const result = await response.json();
+      if (!result.ok) {
+        return { success: false, error: result.error };
+      }
+
+      return {
+        success: true,
+        messageId: result.ts,
+      };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  }
+
+  private async sendEmailMessage(
+    config: { smtpServer: string; smtpPort: number; senderEmail: string; senderPassword: string },
+    toEmail: string,
+    subject: string,
+    content: string
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      // In production, use nodemailer or similar
+      logger.info(`Email would be sent to ${toEmail} via SMTP ${config.smtpServer}`);
+      return {
+        success: true,
+        messageId: `email-${Date.now()}`,
+      };
+    } catch (error) {
       return { success: false, error: String(error) };
     }
   }

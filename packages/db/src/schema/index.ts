@@ -85,3 +85,10 @@ export {
   adapterTypeEnum,
   testStatusEnum,
 } from "./mcp.js";
+export {
+  templates,
+  templateUsage,
+  templateRatings,
+  pwaConfig,
+  landingPageConfig,
+} from "./templates.js";

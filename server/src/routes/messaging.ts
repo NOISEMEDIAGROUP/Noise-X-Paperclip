@@ -1,9 +1,19 @@
 import { Router, type Request, type Response } from "express";
 import type { Db } from "@paperclipai/db";
 import { createMessagingService } from "../services/messaging.js";
+import {
+  handleTelegramWebhook,
+  handleWhatsAppWebhook,
+  handleSlackWebhook,
+  handleEmailWebhook,
+  sendTelegramMessage,
+  sendWhatsAppMessage,
+  sendSlackMessage,
+  sendEmailMessage,
+} from "../services/messaging-platform-handlers.js";
 import { logger } from "../middleware/logger.js";
 import { eq } from "drizzle-orm";
-import { agents } from "@paperclipai/db";
+import { agents, messagingChannels } from "@paperclipai/db";
 
 export function messagingRoutes(db: Db) {
   const router = Router({ mergeParams: true });
@@ -344,14 +354,56 @@ export function messagingRoutes(db: Db) {
 
         const messagingService = createMessagingService(db);
 
+        // Parse Telegram message
+        const parsedMessage = await handleTelegramWebhook(payload);
+        if (!parsedMessage) {
+          await messagingService.recordWebhookEvent(
+            connectorId,
+            "telegram.message",
+            payload,
+            "processed"
+          );
+          return res.json({ ok: true });
+        }
+
+        // Find or create channel
+        let channel = await db.query.messagingChannels.findFirst({
+          where: eq(messagingChannels.connectorId, connectorId),
+        });
+
+        if (!channel) {
+          // Create channel if it doesn't exist
+          channel = await messagingService.createChannel(
+            connectorId,
+            (await db.query.agents.findFirst({
+              where: eq(agents.id, ""), // Will be updated
+            }))?.id || "",
+            parsedMessage.channelIdentifier,
+            "direct"
+          );
+        }
+
+        // Store message
+        await messagingService.storeMessage(
+          channel.id,
+          channel.agentId,
+          {
+            direction: "inbound",
+            senderIdentifier: parsedMessage.senderIdentifier,
+            senderName: parsedMessage.senderName,
+            content: parsedMessage.content,
+            platformMessageId: parsedMessage.platformMessageId,
+            contentType: "text",
+          }
+        );
+
+        // Record webhook event
         await messagingService.recordWebhookEvent(
           connectorId,
           "telegram.message",
           payload,
           "processed"
         );
-
-        // TODO: Process Telegram message (parse, route to agent, etc.)
 
         res.json({ ok: true });
       } catch (error) {

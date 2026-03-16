@@ -33,6 +33,7 @@ import { createWorkflowWebhookRoutes } from "./routes/workflow-webhooks.js";
 import { knowledgeRoutes } from "./routes/knowledge.js";
 import { skillsRoutes } from "./routes/skills.js";
 import { messagingRoutes } from "./routes/messaging.js";
+import { mcpRoutes } from "./routes/mcp.js";
 import type { BetterAuthSessionResult } from "./auth/better-auth.js";
 
 type UiMode = "none" | "static" | "vite-dev";
@@ -120,6 +121,7 @@ export async function createApp(
   api.use(knowledgeRoutes(db));
   api.use("/skills", skillsRoutes(db));
   api.use(messagingRoutes(db));
+  api.use(mcpRoutes(db));
   api.use(assetRoutes(db, opts.storageService));
   api.use(projectRoutes(db));
   api.use(issueRoutes(db, opts.storageService));
