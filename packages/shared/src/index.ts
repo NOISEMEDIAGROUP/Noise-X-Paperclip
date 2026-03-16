@@ -136,6 +136,7 @@ export type {
   ProjectMilestone,
   WorkspaceCheckout,
   Issue,
+  IssueActiveRun,
   IssuePageResult,
   IssuePageSortDirection,
   IssuePageSortField,

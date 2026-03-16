@@ -88,7 +88,7 @@ export const listIssuesPageQuerySchema = z.object({
   pageSize: z.preprocess(parseOptionalPositiveInteger, z.number().int().min(1).max(100).default(50)),
   sortField: issuePageSortFieldSchema.optional(),
   sortDir: issuePageSortDirectionSchema.optional(),
-  terminalAgeHours: z.preprocess(parseTerminalAgeHours, z.number().int().positive().nullable().optional()),
+  terminalAgeHours: z.preprocess(parseTerminalAgeHours, z.number().int().positive().nullable().default(48)),
 });
 
 export const updateIssueSchema = createIssueSchema.partial().extend({

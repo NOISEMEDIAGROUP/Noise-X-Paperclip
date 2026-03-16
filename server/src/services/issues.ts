@@ -20,6 +20,7 @@ import {
 import {
   extractProjectMentionIds,
   type Issue,
+  type IssueActiveRun,
   type IssuePageResult,
   type IssuePageSortDirection,
   type IssuePageSortField,
@@ -87,22 +88,17 @@ export interface IssuePageFilters extends IssueFilters {
 
 type IssueRow = typeof issues.$inferSelect;
 type IssueLabelRow = typeof labels.$inferSelect;
-type IssueActiveRunRow = {
-  id: string;
-  status: string;
-  agentId: string;
-  invocationSource: string;
-  triggerDetail: string | null;
-  startedAt: Date | null;
-  finishedAt: Date | null;
-  createdAt: Date;
-};
+type IssueActiveRunRow = IssueActiveRun;
 type IssueWithLabels = IssueRow & { labels: IssueLabelRow[]; labelIds: string[] };
 type IssueWithLabelsAndRun = IssueWithLabels & { activeRun: IssueActiveRunRow | null };
 type IssueUserCommentStats = {
   issueId: string;
   myLastCommentAt: Date | null;
   lastExternalCommentAt: Date | null;
+};
+type IssueUserReadState = {
+  issueId: string;
+  myLastReadAt: Date | null;
 };
 type IssueUserContextInput = {
   createdByUserId: string | null;
@@ -464,6 +460,8 @@ async function enrichIssueRows(
 ): Promise<Issue[]> {
   const withLabels = await withIssueLabels(dbOrTx, rows);
   const runMap = await activeRunMapForIssues(dbOrTx, withLabels);
+  // Drizzle widens enum-backed columns to `string` on select, but these rows still originate from
+  // the validated issue schema and are serialized on the same API contract as the legacy list route.
   const withRuns = withActiveRuns(withLabels, runMap);
   if (!contextUserId || withRuns.length === 0) {
     return withRuns as unknown as Issue[];
@@ -493,7 +491,7 @@ async function enrichIssueRows(
       ),
     )
     .groupBy(issueComments.issueId);
-  const readRows: Array<{ issueId: string; myLastReadAt: Date | null }> = await dbOrTx
+  const readRows: IssueUserReadState[] = await dbOrTx
     .select({
       issueId: issueReadStates.issueId,
       myLastReadAt: issueReadStates.lastReadAt,

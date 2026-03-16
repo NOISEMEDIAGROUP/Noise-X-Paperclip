@@ -200,13 +200,13 @@ export function issueRoutes(db: Db, storage: StorageService) {
     res: Response,
     rawValue: string | undefined,
     paramName: string,
-  ) {
-    if (rawValue !== "me") return rawValue;
+  ): { ok: true; value: string | undefined } | { ok: false } {
+    if (rawValue !== "me") return { ok: true, value: rawValue };
     if (req.actor.type === "board" && req.actor.userId) {
-      return req.actor.userId;
+      return { ok: true, value: req.actor.userId };
     }
     res.status(403).json({ error: `${paramName}=me requires board authentication` });
-    return null;
+    return { ok: false };
   }
 
   function resolveIssueUserFilters(req: Request, res: Response) {
@@ -214,15 +214,15 @@ export function issueRoutes(db: Db, storage: StorageService) {
     const touchedByUserFilterRaw = req.query.touchedByUserId as string | undefined;
     const unreadForUserFilterRaw = req.query.unreadForUserId as string | undefined;
     const assigneeUserId = resolveSelfScopedUserFilter(req, res, assigneeUserFilterRaw, "assigneeUserId");
-    if (assigneeUserFilterRaw === "me" && assigneeUserId === null) return null;
+    if (!assigneeUserId.ok) return null;
     const touchedByUserId = resolveSelfScopedUserFilter(req, res, touchedByUserFilterRaw, "touchedByUserId");
-    if (touchedByUserFilterRaw === "me" && touchedByUserId === null) return null;
+    if (!touchedByUserId.ok) return null;
     const unreadForUserId = resolveSelfScopedUserFilter(req, res, unreadForUserFilterRaw, "unreadForUserId");
-    if (unreadForUserFilterRaw === "me" && unreadForUserId === null) return null;
+    if (!unreadForUserId.ok) return null;
     return {
-      assigneeUserId: assigneeUserId ?? undefined,
-      touchedByUserId: touchedByUserId ?? undefined,
-      unreadForUserId: unreadForUserId ?? undefined,
+      assigneeUserId: assigneeUserId.value,
+      touchedByUserId: touchedByUserId.value,
+      unreadForUserId: unreadForUserId.value,
     };
   }
 
