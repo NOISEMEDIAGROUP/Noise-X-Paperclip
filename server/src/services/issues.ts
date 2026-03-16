@@ -368,12 +368,15 @@ function issueStatusOrderExpr() {
 function terminalAgeCondition(terminalAgeHours: number | null | undefined, now: Date) {
   if (terminalAgeHours == null) return null;
   const cutoff = new Date(now.getTime() - terminalAgeHours * 60 * 60 * 1000);
+  // postgres-js expects text-compatible bindings inside this interpolated SQL
+  // fragment, so serialize the timestamp before comparing it to issue columns.
+  const cutoffIso = cutoff.toISOString();
   return sql<boolean>`
     CASE
       WHEN ${issues.status} = 'done'
-        THEN COALESCE(${issues.completedAt}, ${issues.updatedAt}, ${issues.createdAt}) >= ${cutoff}
+        THEN COALESCE(${issues.completedAt}, ${issues.updatedAt}, ${issues.createdAt}) >= ${cutoffIso}
       WHEN ${issues.status} = 'cancelled'
-        THEN COALESCE(${issues.cancelledAt}, ${issues.updatedAt}, ${issues.createdAt}) >= ${cutoff}
+        THEN COALESCE(${issues.cancelledAt}, ${issues.updatedAt}, ${issues.createdAt}) >= ${cutoffIso}
       ELSE TRUE
     END
   `;

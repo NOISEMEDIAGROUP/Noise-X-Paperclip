@@ -26,6 +26,15 @@ describe.sequential("issue workflow integration", () => {
 
   it("covers create, checkout conflict, review handoff, and activity auditing", async () => {
     const company = await harness.createCompany({ name: "Blue Labs" });
+    const emptyPage = await harness.board.get(`/companies/${company.id as string}/issues/page`);
+    expect(emptyPage.status).toBe(200);
+    expect(emptyPage.body).toMatchObject({
+      items: [],
+      page: 1,
+      total: 0,
+      totalPages: 1,
+    });
+
     const goal = await harness.createGoal(company.id as string, {
       title: "Ship V1",
       level: "company",
@@ -75,6 +84,23 @@ describe.sequential("issue workflow integration", () => {
     expect(createdIssue.goalId).toBe(goal.id);
     expect(createdIssue.assigneeAgentId).toBe(assignee.id);
     expect(createdIssue.status).toBe("backlog");
+
+    const populatedPage = await harness.board.get(`/companies/${company.id as string}/issues/page`);
+    expect(populatedPage.status).toBe(200);
+    expect(populatedPage.body).toMatchObject({
+      page: 1,
+      total: 1,
+      totalPages: 1,
+    });
+    expect(populatedPage.body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: createdIssue.id,
+          title: "Cover review handoffs",
+          identifier: createdIssue.identifier,
+        }),
+      ]),
+    );
 
     const checkedOut = await harness.asAgent(assigneeKey.token as string, checkoutRun.id as string)
       .post(`/issues/${createdIssue.id as string}/checkout`)

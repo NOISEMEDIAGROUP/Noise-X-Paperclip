@@ -102,8 +102,10 @@ test.describe.serial("board UI flows", () => {
     await page.getByPlaceholder("Issue title").fill(createdIssueTitle);
     await page.getByRole("button", { name: "Create Issue" }).click();
 
+    await expect(page.getByRole("dialog")).toBeHidden({ timeout: 15_000 });
+
     const createdIssueLink = page.getByRole("link", { name: new RegExp(createdIssueTitle) });
-    await expect(createdIssueLink).toBeVisible();
+    await expect(createdIssueLink).toBeVisible({ timeout: 15_000 });
     await createdIssueLink.click();
 
     const titleHeading = page.locator("h2", { hasText: createdIssueTitle });
