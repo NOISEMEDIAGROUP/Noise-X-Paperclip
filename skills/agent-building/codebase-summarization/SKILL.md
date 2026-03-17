@@ -39,11 +39,7 @@ Grouping strategy and example at `references/per-directory-groups.md`.
 
 ## Composability
 
-- **#004 context-cost-management**: Load CODEBASE.md at session start, read source files only when you need depth. 30-50% context reduction on familiar codebases.
-- **#008 structured-project-workflow**: Spec generation reads CODEBASE.md to understand existing architecture before writing implementation steps.
-- **#010 self-improving-agent**: CODEBASE.md (code map) + lessons-learned.md (decision map) = complete persistent agent context.
-
-Integration patterns at `references/composability.md`.
+Pairs with **#004 context-cost-management** (30-50% context reduction), **#008 structured-project-workflow** (architecture-aware spec generation), and **#010 self-improving-agent** (code map + decision map). Integration patterns at `references/composability.md`.
 
 ## Anti-Rationalization
 
