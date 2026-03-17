@@ -71,7 +71,7 @@ export function HermesLocalConfigFields({
   const selectedModelLabel = isCustomModel
     ? currentModel
     : HERMES_MODEL_OPTIONS.find((o) => o.value === currentModel)?.label ??
-      "Use Hermes Default";
+      "Auto-detect from Hermes Agent";
 
   const selectedProviderLabel =
     PROVIDER_OPTIONS.find((o) => o.value === currentProvider)?.label ??
@@ -178,6 +178,8 @@ export function HermesLocalConfigFields({
                 className={cn(
                   "flex items-center w-full px-2 py-1.5 text-sm rounded hover:bg-accent/50 text-left",
                   opt.value === currentProvider && "bg-accent",
+                  opt.value === "" && currentProvider === "" &&
+                    "text-muted-foreground",
                 )}
                 onClick={() => {
                   if (isCreate) {
