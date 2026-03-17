@@ -100,7 +100,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     runId,
     company: { id: agent.companyId },
     agent,
-    run: { id: runId, source: "on_demand" },
+    run: {
+      id: runId,
+      ...(asString(context.source, "").trim()
+        ? { source: asString(context.source, "").trim() }
+        : {}),
+    },
     context,
   };
   const renderedPrompt = renderTemplate(promptTemplate, templateData);
@@ -110,13 +115,13 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   // Build amp args
   const buildAmpArgs = (resumeThreadId: string | null) => {
     const args: string[] = [];
-    if (resumeThreadId) {
-      args.push("threads", "continue", "--thread", resumeThreadId);
-    }
     args.push("--execute", "--stream-json");
     if (dangerouslyAllowAll) args.push("--dangerously-allow-all");
     if (mode) args.push("--mode", mode);
     if (extraArgs.length > 0) args.push(...extraArgs);
+    if (resumeThreadId) {
+      args.push("threads", "continue", resumeThreadId);
+    }
     return args;
   };
 
@@ -200,6 +205,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     billingType: "credits",
     costUsd: parsedStream.costUsd ?? undefined,
     resultJson: parsedStream.resultJson,
-    summary: parsedStream.summary || asString(parsedStream.resultJson.result, ""),
+    summary: parsedStream.summary,
   };
 }

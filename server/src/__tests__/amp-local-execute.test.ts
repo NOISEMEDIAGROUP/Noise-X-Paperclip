@@ -164,11 +164,15 @@ describe("amp_local execute", () => {
       expect(result.exitCode).toBe(0);
 
       const capture = JSON.parse(await fs.readFile(capturePath, "utf8")) as CapturePayload;
-      // Should include thread continuation args
-      expect(capture.argv).toContain("threads");
-      expect(capture.argv).toContain("continue");
-      expect(capture.argv).toContain("--thread");
-      expect(capture.argv).toContain("T-previous-thread");
+      // Should include thread continuation args with global flags first.
+      expect(capture.argv).toEqual([
+        "--execute",
+        "--stream-json",
+        "--dangerously-allow-all",
+        "threads",
+        "continue",
+        "T-previous-thread",
+      ]);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

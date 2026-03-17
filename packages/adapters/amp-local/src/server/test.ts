@@ -112,10 +112,11 @@ export async function testEnvironment(
     const probe = await runChildProcess(
       `amp-envtest-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       command,
-      ["--execute", "--stream-json", "--dangerously-allow-all", "Respond with hello."],
+      ["--execute", "--stream-json", "--dangerously-allow-all"],
       {
         cwd,
         env,
+        stdin: "Respond with hello.",
         timeoutSec: 60,
         graceSec: 5,
         onLog: async () => {},
@@ -145,7 +146,7 @@ export async function testEnvironment(
         ...(hasHello
           ? {}
           : {
-              hint: "Try running `amp --execute --stream-json \"Respond with hello.\"` manually to debug.",
+              hint: "Try running `printf 'Respond with hello.' | amp --execute --stream-json` manually to debug.",
             }),
       });
     } else {
@@ -161,7 +162,7 @@ export async function testEnvironment(
         ...(detail ? { detail } : {}),
         hint: authRequired
           ? "Set AMP_API_KEY in the agent's env config, or run `amp` interactively to log in."
-          : "Run `amp --execute --stream-json \"Respond with hello.\"` manually to debug.",
+          : "Run `printf 'Respond with hello.' | amp --execute --stream-json` manually to debug.",
       });
     }
   }
