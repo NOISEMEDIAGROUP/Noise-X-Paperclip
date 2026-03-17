@@ -1594,6 +1594,29 @@ export function heartbeatService(db: Db) {
     if (reaped.length > 0) {
       logger.warn({ reapedCount: reaped.length, runIds: reaped }, "reaped orphaned heartbeat runs");
     }
+
+    // Clean up issues whose execution_run_id points to a run that no longer
+    // exists (or is no longer queued/running).  This catches locks that
+    // survived a hard crash where the run was cleaned up but the issue lock
+    // was never released.
+    const staleLockedIssues = await db.execute(
+      sql`UPDATE issues
+          SET execution_run_id = NULL,
+              execution_agent_name_key = NULL,
+              execution_locked_at = NULL,
+              updated_at = now()
+          WHERE execution_run_id IS NOT NULL
+            AND execution_run_id NOT IN (
+              SELECT id FROM heartbeat_runs WHERE status IN ('queued', 'running')
+            )
+          RETURNING identifier`,
+    );
+    const clearedCount = (staleLockedIssues as any).length ?? (staleLockedIssues as any).rowCount ?? 0;
+    if (clearedCount > 0) {
+      const identifiers = (staleLockedIssues as any).map?.((r: any) => r.identifier) ?? [];
+      logger.warn({ clearedCount, identifiers }, "cleared orphaned issue execution locks");
+    }
+
     return { reaped: reaped.length, runIds: reaped };
   }
 
