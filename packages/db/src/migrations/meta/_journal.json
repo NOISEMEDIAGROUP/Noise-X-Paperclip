@@ -269,10 +269,24 @@
       "breakpoints": true
     },
     {
-      "idx": 37,
+      "idx": 38,
       "version": "7",
       "when": 1773767518242,
-      "tag": "0037_faulty_venus",
+      "tag": "0038_owner_permission_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1773767518243,
+      "tag": "0039_company_image",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1773767518244,
+      "tag": "0040_faulty_venus",
       "breakpoints": true
     }
   ]
