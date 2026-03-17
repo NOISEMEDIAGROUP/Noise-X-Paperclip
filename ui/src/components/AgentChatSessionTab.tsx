@@ -1,15 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ChatMessage, CreateChatMessageResponse, HeartbeatRun, HeartbeatRunEvent } from "@paperclipai/shared";
-import { Loader2, MessageSquarePlus, Send } from "lucide-react";
+import type { ChatMessage, ChatSession, CreateChatMessageResponse, HeartbeatRun, HeartbeatRunEvent } from "@paperclipai/shared";
+import { Archive, Ellipsis, Loader2, MessageSquarePlus, Pencil, RotateCcw, Send, Trash2 } from "lucide-react";
 import { chatApi, type ChatLogEvent } from "../api/chat";
 import { heartbeatsApi } from "../api/heartbeats";
 import { getUIAdapter, buildTranscript } from "../adapters";
 import { queryKeys } from "../lib/queryKeys";
-import { relativeTime } from "../lib/utils";
+import { relativeTime, cn } from "../lib/utils";
+import { displaySessionTitle, filterChatSessions, groupChatSessions } from "../lib/chat-sessions";
 import { MarkdownBody } from "./MarkdownBody";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type StreamStatus = "pending" | "streaming" | "completed" | "failed" | "cancelled" | "timed_out";
 
@@ -39,7 +49,7 @@ function deriveAssistantPreview(streamState: StreamState | null, adapterType: st
   if (streamState.status === "failed") return "Run failed before producing a response.";
   if (streamState.status === "timed_out") return "Run timed out before producing a response.";
   if (streamState.status === "cancelled") return "Run was cancelled before producing a response.";
-  return "Agent is thinking…";
+  return "Agent is thinking...";
 }
 
 function parsePersistedLogContent(content: string): ChatLogEvent[] {
@@ -93,27 +103,36 @@ export function AgentChatSessionTab({
   agentName: string;
 }) {
   const queryClient = useQueryClient();
+  const sessionsQueryKey = queryKeys.chatSessions(agentId, true);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
-  const [isRenaming, setIsRenaming] = useState(false);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const autoExpandedRunIdRef = useRef<string | null>(null);
   const [draft, setDraft] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
   const [streamState, setStreamState] = useState<StreamState | null>(null);
+  const [completedMessageId, setCompletedMessageId] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const lastAttemptedStreamIdRef = useRef<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const transcriptRef = useRef<HTMLDivElement | null>(null);
+  const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const { data: sessions = [], isLoading: sessionsLoading, error: sessionsError } = useQuery({
-    queryKey: queryKeys.chatSessions(agentId),
-    queryFn: () => chatApi.listSessions(agentId),
+    queryKey: sessionsQueryKey,
+    queryFn: () => chatApi.listSessions(agentId, { includeArchived: true }),
     enabled: Boolean(agentId),
   });
 
   useEffect(() => {
-    if (selectedSessionId) return;
-    if (sessions.length === 0) return;
-    setSelectedSessionId(sessions[0]?.id ?? null);
+    if (!sessions.length) {
+      setSelectedSessionId(null);
+      return;
+    }
+    if (selectedSessionId && sessions.some((session) => session.id === selectedSessionId)) return;
+    const firstActive = sessions.find((session) => !session.archivedAt);
+    setSelectedSessionId(firstActive?.id ?? sessions[0]?.id ?? null);
   }, [selectedSessionId, sessions]);
 
   const selectedSession = useMemo(
@@ -122,8 +141,12 @@ export function AgentChatSessionTab({
   );
 
   useEffect(() => {
-    setRenameDraft(selectedSession?.title ?? "");
-  }, [selectedSession?.id, selectedSession?.title]);
+    if (!selectedSession) {
+      setRenamingSessionId(null);
+      return;
+    }
+    if (renamingSessionId === selectedSession.id) setRenameDraft(selectedSession.title ?? "");
+  }, [renamingSessionId, selectedSession]);
 
   const { data: messages = [], isLoading, error } = useQuery({
     queryKey: selectedSessionId ? queryKeys.chatMessages(agentId, selectedSessionId) : ["chat", "messages", "none"],
@@ -134,6 +157,12 @@ export function AgentChatSessionTab({
   const closeStream = useCallback(() => {
     eventSourceRef.current?.close();
     eventSourceRef.current = null;
+  }, []);
+
+  const scrollToTranscriptBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const container = transcriptRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior });
   }, []);
 
   const appendAssistantMessage = useCallback(
@@ -152,6 +181,9 @@ export function AgentChatSessionTab({
     (sessionId: string, result: Pick<CreateChatMessageResponse, "message" | "runId">) => {
       closeStream();
       lastAttemptedStreamIdRef.current = result.message.id;
+      setCompletedMessageId(null);
+      autoExpandedRunIdRef.current = result.runId ?? null;
+      if (result.runId) setExpandedRunId(result.runId);
       setStreamState({
         sourceMessageId: result.message.id,
         runId: result.runId,
@@ -166,6 +198,9 @@ export function AgentChatSessionTab({
 
       source.addEventListener("ready", (event) => {
         const payload = JSON.parse((event as MessageEvent).data) as { runId: string };
+        const previousAutoRunId = autoExpandedRunIdRef.current;
+        autoExpandedRunIdRef.current = payload.runId;
+        setExpandedRunId((current) => (current === null || current === previousAutoRunId ? payload.runId : current));
         setStreamState((current) =>
           current && current.sourceMessageId === result.message.id
             ? { ...current, runId: payload.runId, status: "streaming" }
@@ -191,6 +226,11 @@ export function AgentChatSessionTab({
         };
         if (payload.message) {
           appendAssistantMessage(payload.message);
+          setCompletedMessageId(payload.message.id);
+        }
+        if (autoExpandedRunIdRef.current === payload.runId) {
+          autoExpandedRunIdRef.current = null;
+          setExpandedRunId((current) => (current === payload.runId ? null : current));
         }
         setStreamState((current) =>
           current && current.sourceMessageId === result.message.id
@@ -218,9 +258,7 @@ export function AgentChatSessionTab({
     [agentId, appendAssistantMessage, closeStream, queryClient],
   );
 
-  useEffect(() => {
-    return () => closeStream();
-  }, [closeStream]);
+  useEffect(() => () => closeStream(), [closeStream]);
 
   useEffect(() => {
     if (!selectedSessionId) return;
@@ -244,18 +282,29 @@ export function AgentChatSessionTab({
   }, [messages, selectedSessionId, startStream, streamState]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, streamState]);
+    scrollToTranscriptBottom("auto");
+  }, [selectedSessionId, scrollToTranscriptBottom]);
+
+  useEffect(() => {
+    if (!eventSourceRef.current) return;
+    scrollToTranscriptBottom("smooth");
+  }, [messages.length, scrollToTranscriptBottom, streamState?.logs.length]);
+
+  useEffect(() => {
+    if (!completedMessageId) return;
+    const node = messageRefs.current[completedMessageId];
+    if (!node) return;
+    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    setCompletedMessageId(null);
+  }, [completedMessageId, messages.length]);
 
   const createSession = useMutation({
     mutationFn: () => chatApi.createSession(agentId, {}),
     onSuccess: (result) => {
-      queryClient.setQueryData(queryKeys.chatSessions(agentId), (current: typeof sessions | undefined) => [
-        result.session,
-        ...(current ?? []),
-      ]);
+      queryClient.setQueryData<ChatSession[]>(sessionsQueryKey, (current) => [result.session, ...(current ?? [])]);
       setSelectedSessionId(result.session.id);
       setSendError(null);
+      setSearchQuery("");
     },
     onError: (mutationError) => {
       setSendError(mutationError instanceof Error ? mutationError.message : "Failed to create chat session");
@@ -280,15 +329,15 @@ export function AgentChatSessionTab({
   });
 
   const renameSession = useMutation({
-    mutationFn: (nextTitle: string) =>
-      chatApi.updateSession(agentId, selectedSessionId!, {
+    mutationFn: ({ sessionId, nextTitle }: { sessionId: string; nextTitle: string }) =>
+      chatApi.updateSession(agentId, sessionId, {
         title: nextTitle.trim() || null,
       }),
     onSuccess: ({ session }) => {
-      queryClient.setQueryData(queryKeys.chatSessions(agentId), (current: typeof sessions | undefined) =>
+      queryClient.setQueryData<ChatSession[]>(sessionsQueryKey, (current) =>
         (current ?? []).map((item) => (item.id === session.id ? session : item)),
       );
-      setIsRenaming(false);
+      setRenamingSessionId(null);
       setSendError(null);
     },
     onError: (mutationError) => {
@@ -296,22 +345,23 @@ export function AgentChatSessionTab({
     },
   });
 
-  const archiveSession = useMutation({
-    mutationFn: () => chatApi.updateSession(agentId, selectedSessionId!, { archived: true }),
+  const updateArchivedSession = useMutation({
+    mutationFn: ({ sessionId, archived }: { sessionId: string; archived: boolean }) =>
+      chatApi.updateSession(agentId, sessionId, { archived }),
     onSuccess: ({ session }) => {
-      queryClient.setQueryData(queryKeys.chatSessions(agentId), (current: typeof sessions | undefined) =>
-        (current ?? []).filter((item) => item.id !== session.id),
+      queryClient.setQueryData<ChatSession[]>(sessionsQueryKey, (current) =>
+        (current ?? []).map((item) => (item.id === session.id ? session : item)),
       );
       setSelectedSessionId((currentId) => {
-        if (!currentId || currentId !== session.id) return currentId;
-        const remaining = sessions.filter((item) => item.id !== session.id);
-        return remaining[0]?.id ?? null;
+        if (!currentId || currentId !== session.id || !session.archivedAt) return currentId;
+        const latest = queryClient.getQueryData<ChatSession[]>(sessionsQueryKey) ?? [];
+        const nextActive = latest.find((item) => item.id !== session.id && !item.archivedAt);
+        return nextActive?.id ?? latest.find((item) => item.id !== session.id)?.id ?? null;
       });
-      setSelectedRunId(null);
       setSendError(null);
     },
     onError: (mutationError) => {
-      setSendError(mutationError instanceof Error ? mutationError.message : "Failed to archive session");
+      setSendError(mutationError instanceof Error ? mutationError.message : "Failed to update chat session");
     },
   });
 
@@ -320,13 +370,12 @@ export function AgentChatSessionTab({
   const hasPersistedAssistantForActiveRun = Boolean(
     activeRunId && messages.some((message) => message.role === "assistant" && message.runId === activeRunId),
   );
-  const canSend = draft.trim().length > 0 && !sendMessage.isPending && !eventSourceRef.current;
+  const canSend = draft.trim().length > 0 && !sendMessage.isPending && !eventSourceRef.current && !selectedSession?.archivedAt;
 
-  const runIdForDetails = selectedRunId ?? streamState?.runId ?? null;
   const { data: runDetail } = useQuery({
-    queryKey: runIdForDetails ? queryKeys.runDetail(runIdForDetails) : ["heartbeat-run", "none"],
-    queryFn: () => heartbeatsApi.get(runIdForDetails!),
-    enabled: Boolean(runIdForDetails),
+    queryKey: expandedRunId ? queryKeys.runDetail(expandedRunId) : ["heartbeat-run", "none"],
+    queryFn: () => heartbeatsApi.get(expandedRunId!),
+    enabled: Boolean(expandedRunId),
     refetchInterval: (query) => {
       const run = query.state.data as HeartbeatRun | undefined;
       if (!run) return false;
@@ -335,17 +384,17 @@ export function AgentChatSessionTab({
   });
 
   const { data: runEvents = [] } = useQuery({
-    queryKey: runIdForDetails ? ["heartbeat-run-events", runIdForDetails] : ["heartbeat-run-events", "none"],
-    queryFn: () => heartbeatsApi.events(runIdForDetails!, 0, 200),
-    enabled: Boolean(runIdForDetails),
+    queryKey: expandedRunId ? ["heartbeat-run-events", expandedRunId] : ["heartbeat-run-events", "none"],
+    queryFn: () => heartbeatsApi.events(expandedRunId!, 0, 200),
+    enabled: Boolean(expandedRunId),
     refetchInterval: runDetail && (runDetail.status === "running" || runDetail.status === "queued") ? 2000 : false,
   });
 
   const { data: persistedRunLogs = [] } = useQuery({
-    queryKey: runIdForDetails ? ["heartbeat-run-logs", runIdForDetails] : ["heartbeat-run-logs", "none"],
-    enabled: Boolean(runIdForDetails),
+    queryKey: expandedRunId ? ["heartbeat-run-logs", expandedRunId] : ["heartbeat-run-logs", "none"],
+    enabled: Boolean(expandedRunId),
     queryFn: async () => {
-      const runId = runIdForDetails!;
+      const runId = expandedRunId!;
       const records: ChatLogEvent[] = [];
       let offset = 0;
       while (true) {
@@ -361,22 +410,39 @@ export function AgentChatSessionTab({
 
   const runLogEvents = useMemo(() => {
     if (
-      runIdForDetails &&
-      streamState?.runId === runIdForDetails &&
+      expandedRunId &&
+      streamState?.runId === expandedRunId &&
       (streamState.status === "pending" || streamState.status === "streaming")
     ) {
       return streamState.logs;
     }
     return persistedRunLogs;
-  }, [persistedRunLogs, runIdForDetails, streamState]);
+  }, [expandedRunId, persistedRunLogs, streamState]);
 
   const runTranscript = useMemo(
     () => buildTranscript(runLogEvents, getUIAdapter(adapterType).parseStdoutLine),
     [adapterType, runLogEvents],
   );
 
+  const filteredSessions = useMemo(() => filterChatSessions(sessions, searchQuery), [searchQuery, sessions]);
+  const groupedSessions = useMemo(
+    () => groupChatSessions(filteredSessions, { activeSessionId: selectedSessionId }),
+    [filteredSessions, selectedSessionId],
+  );
+
+  const toggleRunDetails = useCallback((runId: string | null) => {
+    if (!runId) return;
+    setExpandedRunId((current) => (current === runId ? null : runId));
+    if (autoExpandedRunIdRef.current === runId) autoExpandedRunIdRef.current = null;
+  }, []);
+
+  const runUrlFor = useCallback(
+    (runId: string) => `/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(runId)}`,
+    [agentId],
+  );
+
   const renderInlineRunDetails = (runId: string | null) => {
-    if (!runId || runId !== runIdForDetails) return null;
+    if (!runId || runId !== expandedRunId) return null;
     return (
       <div className="mt-3 space-y-2 rounded-md border border-border/60 bg-background/60 p-3 text-xs">
         {runDetail && (
@@ -425,233 +491,343 @@ export function AgentChatSessionTab({
     );
   };
 
+  const renderSection = (title: string, items: ChatSession[]) => (
+    <div className="space-y-1">
+      <div className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {title} <span className="ml-1">{items.length}</span>
+      </div>
+      {items.length === 0 ? (
+        <div className="px-2 py-1 text-xs text-muted-foreground">No conversations</div>
+      ) : (
+        items.map((session) => {
+          const isSelected = session.id === selectedSessionId;
+          const isRenaming = session.id === renamingSessionId;
+          const isUpdatingArchive = updateArchivedSession.isPending;
+          const isUpdatingName = renameSession.isPending;
+          return (
+            <div
+              key={session.id}
+              className={cn(
+                "group rounded-md border border-transparent px-2 py-2 text-xs transition-colors",
+                isSelected ? "border-border bg-accent/40" : "hover:bg-accent/20",
+              )}
+            >
+              {isRenaming ? (
+                <div className="space-y-2">
+                  <Input
+                    value={renameDraft}
+                    onChange={(event) => setRenameDraft(event.target.value)}
+                    className="h-8 text-xs"
+                    placeholder="Conversation name"
+                  />
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      disabled={isUpdatingName}
+                      onClick={() => renameSession.mutate({ sessionId: session.id, nextTitle: renameDraft })}
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => {
+                        setRenamingSessionId(null);
+                        setRenameDraft(session.title ?? "");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-start justify-between gap-2">
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 text-left"
+                      onClick={() => {
+                        setSelectedSessionId(session.id);
+                        setExpandedRunId(null);
+                        autoExpandedRunIdRef.current = null;
+                        setStreamState(null);
+                        closeStream();
+                      }}
+                    >
+                      <div className="truncate text-sm font-medium">{displaySessionTitle(session)}</div>
+                      <div className="truncate text-[11px] text-muted-foreground">
+                        {relativeTime(session.lastMessageAt ?? session.updatedAt)}
+                      </div>
+                    </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className={cn(
+                            "h-6 w-6 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
+                            isSelected && "opacity-100",
+                          )}
+                          onClick={(event) => event.stopPropagation()}
+                          aria-label="Conversation options"
+                        >
+                          <Ellipsis className="h-3.5 w-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            setRenamingSessionId(session.id);
+                            setRenameDraft(session.title ?? "");
+                          }}
+                        >
+                          <Pencil />
+                          Rename
+                        </DropdownMenuItem>
+                        {session.archivedAt ? (
+                          <DropdownMenuItem
+                            disabled={isUpdatingArchive}
+                            onSelect={() => updateArchivedSession.mutate({ sessionId: session.id, archived: false })}
+                          >
+                            <RotateCcw />
+                            Restore
+                          </DropdownMenuItem>
+                        ) : (
+                          <>
+                            <DropdownMenuItem
+                              disabled={isUpdatingArchive}
+                              onSelect={() => updateArchivedSession.mutate({ sessionId: session.id, archived: true })}
+                            >
+                              <Archive />
+                              Archive
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              variant="destructive"
+                              disabled={isUpdatingArchive}
+                              onSelect={() => updateArchivedSession.mutate({ sessionId: session.id, archived: true })}
+                            >
+                              <Trash2 />
+                              Delete
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+
   return (
-    <div className="space-y-4">
-      <div className="rounded-lg border border-border bg-background p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="text-xs font-medium text-muted-foreground">Session</div>
-          <div className="flex flex-wrap items-center gap-2">
+    <div className="overflow-hidden rounded-lg border border-border bg-background">
+      <div className="grid h-[74vh] min-h-[34rem] grid-cols-[18rem_1fr]">
+        <aside className="border-r border-border bg-card/40 p-3">
+          <div className="mb-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-sm font-semibold">Conversations</div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 px-2"
+                onClick={() => createSession.mutate()}
+                disabled={createSession.isPending}
+              >
+                {createSession.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <MessageSquarePlus className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            </div>
+            <Input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className="h-8 text-xs"
+              placeholder="Search conversations..."
+            />
+          </div>
+          <div className="h-[calc(100%-5rem)] space-y-4 overflow-y-auto pr-1">
             {sessionsLoading && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Loading...
+                Loading conversations...
               </div>
             )}
-            {sessions.map((session) => (
-              <Button
-                key={session.id}
-                type="button"
-                size="sm"
-                variant={session.id === selectedSessionId ? "default" : "outline"}
-                onClick={() => {
-                  setSelectedSessionId(session.id);
-                  setSelectedRunId(null);
-                  setStreamState(null);
-                  closeStream();
-                }}
-                className="h-7 px-2 text-xs"
-              >
-                {session.title?.trim() || "Untitled"}
-              </Button>
-            ))}
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-7 px-2 text-xs"
-            onClick={() => createSession.mutate()}
-            disabled={createSession.isPending}
-          >
-            {createSession.isPending ? (
-              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <MessageSquarePlus className="mr-1 h-3.5 w-3.5" />
-            )}
-            New session
-          </Button>
-        </div>
-        {selectedSession && (
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {isRenaming ? (
+            {!sessionsLoading && (
               <>
-                <input
-                  value={renameDraft}
-                  onChange={(event) => setRenameDraft(event.target.value)}
-                  className="h-8 rounded-md border border-border bg-background px-2 text-xs"
-                  placeholder="Session name"
-                />
-                <Button
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  disabled={renameSession.isPending}
-                  onClick={() => renameSession.mutate(renameDraft)}
-                >
-                  Save
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-2 text-xs"
-                  onClick={() => {
-                    setIsRenaming(false);
-                    setRenameDraft(selectedSession.title ?? "");
-                  }}
-                >
-                  Cancel
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-2 text-xs"
-                  onClick={() => setIsRenaming(true)}
-                >
-                  Rename
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                  onClick={() => archiveSession.mutate()}
-                  disabled={archiveSession.isPending}
-                >
-                  Archive
-                </Button>
+                {renderSection("Open", groupedSessions.open)}
+                {renderSection("Previous 7 days", groupedSessions.previous7Days)}
+                {renderSection("Older", groupedSessions.older)}
+                {renderSection("Archived", groupedSessions.archived)}
               </>
             )}
+            {sessionsError && (
+              <div className="text-xs text-destructive">
+                {sessionsError instanceof Error ? sessionsError.message : "Failed to load chat sessions"}
+              </div>
+            )}
           </div>
-        )}
-        {sessionsError && (
-          <div className="mt-2 text-xs text-destructive">
-            {sessionsError instanceof Error ? sessionsError.message : "Failed to load chat sessions"}
+        </aside>
+
+        <section className="flex min-h-0 flex-col">
+          <div className="border-b border-border px-6 py-3 lg:px-12">
+            <div className="text-sm font-semibold">{selectedSession ? displaySessionTitle(selectedSession) : "Conversation"}</div>
+            <div className="text-xs text-muted-foreground">
+              {selectedSession
+                ? selectedSession.archivedAt
+                  ? "Archived conversation (read-only)"
+                  : "Conversation with detailed run traces"
+                : "Select or create a conversation to begin"}
+            </div>
           </div>
-        )}
-      </div>
 
-      <div className="rounded-lg border border-border bg-background">
-        <div className="border-b border-border px-4 py-3">
-          <h3 className="text-sm font-semibold">Conversation</h3>
-        </div>
+          <div ref={transcriptRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4 lg:px-12">
+            {isLoading && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading chat history...
+              </div>
+            )}
+            {error && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                {error instanceof Error ? error.message : "Failed to load chat history"}
+              </div>
+            )}
+            {!selectedSessionId && !sessionsLoading && (
+              <div className="rounded-md border border-dashed border-border px-4 py-8 text-sm text-muted-foreground">
+                Create a chat session to begin.
+              </div>
+            )}
+            {!isLoading && !error && selectedSessionId && messages.length === 0 && (
+              <div className="rounded-md border border-dashed border-border px-4 py-8 text-sm text-muted-foreground">
+                Start the conversation by sending a message to this agent.
+              </div>
+            )}
 
-        <div className="max-h-[68vh] min-h-[22rem] space-y-3 overflow-y-auto p-4">
-          {isLoading && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading chat history...
-            </div>
-          )}
-          {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-              {error instanceof Error ? error.message : "Failed to load chat history"}
-            </div>
-          )}
-          {!selectedSessionId && !sessionsLoading && (
-            <div className="rounded-md border border-dashed border-border px-4 py-8 text-sm text-muted-foreground">
-              Create a chat session to begin.
-            </div>
-          )}
-          {!isLoading && !error && selectedSessionId && messages.length === 0 && (
-            <div className="rounded-md border border-dashed border-border px-4 py-8 text-sm text-muted-foreground">
-              Start the conversation by sending a message to this agent.
-            </div>
-          )}
-
-          {messages.map((message) => {
-            const isUser = message.role === "user";
-            const detailsOpen = message.runId && message.runId === runIdForDetails;
-            return (
-              <div key={message.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+            {messages.map((message) => {
+              const isUser = message.role === "user";
+              const detailsOpen = message.runId && message.runId === expandedRunId;
+              return (
                 <div
-                  className={`max-w-[85%] rounded-md border px-4 py-3 text-sm ${
-                    isUser ? "border-border/60 bg-accent/20" : "border-border/60 bg-card"
-                  }`}
+                  key={message.id}
+                  ref={(node) => {
+                    messageRefs.current[message.id] = node;
+                  }}
+                  className={cn("flex", isUser ? "justify-end" : "justify-start")}
                 >
-                  <div className="mb-1 flex items-center justify-between gap-3">
-                    <span className="text-xs font-medium text-muted-foreground">{isUser ? "You" : agentName}</span>
-                    <span className="text-[11px] text-muted-foreground">{relativeTime(message.createdAt)}</span>
+                  <div
+                    className={cn(
+                      "max-w-[86%] rounded-md border px-4 py-3 text-sm",
+                      isUser ? "border-border/60 bg-accent/20" : "border-border/60 bg-card",
+                    )}
+                  >
+                    <div className="mb-1 flex items-center justify-between gap-3">
+                      <span className="text-xs font-medium text-muted-foreground">{isUser ? "You" : agentName}</span>
+                      <span className="text-[11px] text-muted-foreground">{relativeTime(message.createdAt)}</span>
+                    </div>
+                    {isUser ? (
+                      <div className="whitespace-pre-wrap">{message.content}</div>
+                    ) : (
+                      <MarkdownBody>{message.content}</MarkdownBody>
+                    )}
+                    {!isUser && message.runId && (
+                      <div className="mt-2 flex items-center gap-3 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => toggleRunDetails(message.runId)}
+                          className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                        >
+                          {detailsOpen ? "Hide run details" : "Show run details"}
+                        </button>
+                        <Link
+                          to={runUrlFor(message.runId)}
+                          className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                        >
+                          View Run
+                        </Link>
+                      </div>
+                    )}
+                    {!isUser ? renderInlineRunDetails(message.runId) : null}
                   </div>
-                  {isUser ? (
-                    <div className="whitespace-pre-wrap">{message.content}</div>
-                  ) : (
-                    <MarkdownBody>{message.content}</MarkdownBody>
-                  )}
-                  {!isUser && message.runId && (
-                    <div className="mt-2">
+                </div>
+              );
+            })}
+
+            {streamState && !hasPersistedAssistantForActiveRun && (
+              <div className="flex justify-start">
+                <div className="max-w-[86%] rounded-md border border-border/60 bg-card px-4 py-3 text-sm">
+                  <div className="mb-1 flex items-center justify-between gap-3">
+                    <span className="text-xs font-medium text-muted-foreground">{agentName}</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {streamState.status === "streaming" || streamState.status === "pending" ? "Streaming..." : streamState.status}
+                    </span>
+                  </div>
+                  <MarkdownBody>{assistantPreview}</MarkdownBody>
+                  {streamState.runId && (
+                    <div className="mt-2 flex items-center gap-3 text-[11px]">
                       <button
                         type="button"
-                        onClick={() => setSelectedRunId(detailsOpen ? null : message.runId)}
-                        className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                        onClick={() => toggleRunDetails(streamState.runId)}
+                        className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
                       >
-                        {detailsOpen ? "Hide run details" : "Show run details"}
+                        {streamState.runId === expandedRunId ? "Hide run details" : "Show run details"}
                       </button>
+                      <Link
+                        to={runUrlFor(streamState.runId)}
+                        className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                      >
+                        View Run
+                      </Link>
                     </div>
                   )}
-                  {!isUser ? renderInlineRunDetails(message.runId) : null}
+                  {renderInlineRunDetails(streamState.runId)}
                 </div>
               </div>
-            );
-          })}
-
-          {streamState && !hasPersistedAssistantForActiveRun && (
-            <div className="flex justify-start">
-              <div className="max-w-[85%] rounded-md border border-border/60 bg-card px-4 py-3 text-sm">
-                <div className="mb-1 flex items-center justify-between gap-3">
-                  <span className="text-xs font-medium text-muted-foreground">{agentName}</span>
-                  <span className="text-[11px] text-muted-foreground">
-                    {streamState.status === "streaming" || streamState.status === "pending" ? "Streaming..." : streamState.status}
-                  </span>
-                </div>
-                <MarkdownBody>{assistantPreview}</MarkdownBody>
-                {streamState.runId && (
-                  <div className="mt-2">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedRunId(streamState.runId === runIdForDetails ? null : streamState.runId)}
-                      className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                    >
-                      {streamState.runId === runIdForDetails ? "Hide run details" : "Show run details"}
-                    </button>
-                  </div>
-                )}
-                {renderInlineRunDetails(streamState.runId)}
-              </div>
-            </div>
-          )}
-          <div ref={bottomRef} />
-        </div>
-
-        <div className="sticky bottom-0 z-10 border-t border-border bg-background/95 p-4 backdrop-blur-sm">
-          <div className="space-y-2">
-            <Textarea
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder="Message this agent..."
-              rows={3}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey && canSend) {
-                  event.preventDefault();
-                  sendMessage.mutate(draft.trim());
-                }
-              }}
-              disabled={!selectedSessionId || sendMessage.isPending || Boolean(eventSourceRef.current)}
-            />
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-xs text-muted-foreground">
-                {eventSourceRef.current
-                  ? "Wait for the current response to finish before sending another message."
-                  : "Press Enter to send. Use Shift+Enter for a new line."}
-              </div>
-              <Button size="sm" onClick={() => sendMessage.mutate(draft.trim())} disabled={!selectedSessionId || !canSend}>
-                {sendMessage.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                Send
-              </Button>
-            </div>
-            {sendError && <div className="text-sm text-destructive">{sendError}</div>}
+            )}
           </div>
-        </div>
+
+          <div className="border-t border-border bg-background/95 px-6 py-4 backdrop-blur-sm lg:px-12">
+            <div className="space-y-2">
+              <Textarea
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder={selectedSession?.archivedAt ? "Archived conversations are read-only." : "Message this agent..."}
+                rows={3}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey && canSend) {
+                    event.preventDefault();
+                    sendMessage.mutate(draft.trim());
+                  }
+                }}
+                disabled={!selectedSessionId || sendMessage.isPending || Boolean(eventSourceRef.current) || Boolean(selectedSession?.archivedAt)}
+              />
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs text-muted-foreground">
+                  {selectedSession?.archivedAt
+                    ? "Restore this conversation from the sidebar to continue chatting."
+                    : eventSourceRef.current
+                      ? "Wait for the current response to finish before sending another message."
+                      : "Press Enter to send. Use Shift+Enter for a new line."}
+                </div>
+                <Button size="sm" onClick={() => sendMessage.mutate(draft.trim())} disabled={!selectedSessionId || !canSend}>
+                  {sendMessage.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                  Send
+                </Button>
+              </div>
+              {sendError && <div className="text-sm text-destructive">{sendError}</div>}
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );

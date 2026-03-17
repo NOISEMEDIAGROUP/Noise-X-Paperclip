@@ -21,7 +21,13 @@ export interface ChatLogEvent {
 }
 
 export const chatApi = {
-  listSessions: (agentId: string) => api.get<ChatSession[]>(sessionsBasePath(agentId)),
+  listSessions: (agentId: string, options?: { includeArchived?: boolean }) => {
+    const includeArchived = options?.includeArchived ?? false;
+    const params = new URLSearchParams();
+    if (includeArchived) params.set("includeArchived", "true");
+    const suffix = params.toString();
+    return api.get<ChatSession[]>(`${sessionsBasePath(agentId)}${suffix ? `?${suffix}` : ""}`);
+  },
   createSession: (agentId: string, body?: { title?: string }) =>
     api.post<CreateChatSessionResponse>(sessionsBasePath(agentId), body ?? {}),
   updateSession: (agentId: string, sessionId: string, body: { title?: string | null; archived?: boolean }) =>

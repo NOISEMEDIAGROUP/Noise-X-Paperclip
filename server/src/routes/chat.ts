@@ -30,7 +30,10 @@ export function chatRoutes(db: Db) {
   router.get("/agents/:agentId/chat/sessions", async (req, res) => {
     const agent = await resolveAgent(req, res);
     if (!agent) return;
-    const sessions = await chat.listSessions(agent.id);
+    const includeArchivedRaw = req.query.includeArchived;
+    const includeArchived =
+      includeArchivedRaw === "true" || includeArchivedRaw === "1";
+    const sessions = await chat.listSessions(agent.id, { includeArchived });
     res.json(sessions);
   });
 

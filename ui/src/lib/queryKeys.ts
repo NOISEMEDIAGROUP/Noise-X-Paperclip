@@ -30,6 +30,7 @@ export const queryKeys = {
     activity: (issueId: string) => ["issues", "activity", issueId] as const,
     runs: (issueId: string) => ["issues", "runs", issueId] as const,
     approvals: (issueId: string) => ["issues", "approvals", issueId] as const,
+    reviewBundle: (issueId: string) => ["issues", "review-bundle", issueId] as const,
     liveRuns: (issueId: string) => ["issues", "live-runs", issueId] as const,
     activeRun: (issueId: string) => ["issues", "active-run", issueId] as const,
   },
@@ -71,7 +72,8 @@ export const queryKeys = {
   runDetail: (runId: string) => ["heartbeat-run", runId] as const,
   liveRuns: (companyId: string) => ["live-runs", companyId] as const,
   runIssues: (runId: string) => ["run-issues", runId] as const,
-  chatSessions: (agentId: string) => ["chat", "sessions", agentId] as const,
+  chatSessions: (agentId: string, includeArchived: boolean = false) =>
+    ["chat", "sessions", agentId, includeArchived ? "with-archived" : "active-only"] as const,
   chatMessages: (agentId: string, sessionId: string) => ["chat", "messages", agentId, sessionId] as const,
   skills: {
     list: (companyId: string) => ["skills", companyId] as const,
