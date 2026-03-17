@@ -56,11 +56,7 @@ Tool scoping patterns by agent type → `references/04-tool-access.md`
 
 ## Composability Bridge
 
-AGENTS.md wires agents into a team:
-- Reference skills with `/skill-name` in capabilities
-- Define `reportsTo` for escalation chain
-- List authorized data sources
-- Document sub-agent coordination patterns
+AGENTS.md wires agents into a team: skills invocation (`/skill-name`), `reportsTo` escalation chain, authorized data sources, sub-agent coordination.
 
 Orchestrator composition patterns → `references/05-composability.md`
 
