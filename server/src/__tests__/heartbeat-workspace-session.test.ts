@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveDefaultAgentWorkspaceDir } from "../home-paths.js";
 import {
+  LIVE_HEARTBEAT_RUN_STATUSES,
   resolveRuntimeSessionParamsForWorkspace,
   shouldResetTaskSessionForWake,
   type ResolvedWorkspaceForRun,
@@ -149,5 +150,11 @@ describe("shouldResetTaskSessionForWake", () => {
         wakeTriggerDetail: "callback",
       }),
     ).toBe(false);
+  });
+});
+
+describe("LIVE_HEARTBEAT_RUN_STATUSES", () => {
+  it("keeps queued, running, and cancelling in the shared live-run set", () => {
+    expect(LIVE_HEARTBEAT_RUN_STATUSES).toEqual(["queued", "running", "cancelling"]);
   });
 });

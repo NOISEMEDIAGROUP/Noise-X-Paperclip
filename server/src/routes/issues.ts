@@ -27,6 +27,7 @@ import {
   logActivity,
   projectService,
 } from "../services/index.js";
+import { LIVE_HEARTBEAT_RUN_STATUSES } from "../services/heartbeat.js";
 import { logger } from "../middleware/logger.js";
 import { forbidden, HttpError, unauthorized } from "../errors.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
@@ -34,7 +35,6 @@ import { shouldWakeAssigneeOnCheckout } from "./issues-checkout-wakeup.js";
 import { isAllowedContentType, MAX_ATTACHMENT_BYTES } from "../attachment-types.js";
 
 const MAX_ISSUE_COMMENT_LIMIT = 500;
-const LIVE_HEARTBEAT_RUN_STATUSES = ["queued", "running", "cancelling"] as const;
 
 export function issueRoutes(db: Db, storage: StorageService) {
   const router = Router();

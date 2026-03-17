@@ -47,7 +47,7 @@ const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_MAX = 10;
 const DEFERRED_WAKE_CONTEXT_KEY = "_paperclipWakeContext";
-const LIVE_HEARTBEAT_RUN_STATUSES = ["queued", "running", "cancelling"] as const;
+export const LIVE_HEARTBEAT_RUN_STATUSES = ["queued", "running", "cancelling"] as const;
 const startLocksByAgent = new Map<string, Promise<void>>();
 const REPO_ONLY_CWD_SENTINEL = "/__paperclip_repo_only__";
 const SESSIONED_LOCAL_ADAPTERS = new Set([
@@ -1251,7 +1251,7 @@ export function heartbeatService(db: Db) {
       .then((rows: Array<typeof heartbeatRuns.$inferSelect>) => rows[0] ?? null);
     if (!run) throw notFound("Heartbeat run not found");
 
-    if (run.status === "queued") {
+    if (run.status === "queued" || run.status === "running") {
       const cancelling = await executor
         .update(heartbeatRuns)
         .set({
@@ -1260,29 +1260,7 @@ export function heartbeatService(db: Db) {
           errorCode: "cancelled",
           updatedAt: new Date(),
         })
-        .where(and(eq(heartbeatRuns.id, run.id), eq(heartbeatRuns.status, "queued")))
-        .returning()
-        .then((rows: Array<typeof heartbeatRuns.$inferSelect>) => rows[0] ?? null);
-      if (cancelling) {
-        return {
-          runId: cancelling.id,
-          companyId: cancelling.companyId,
-          agentId: cancelling.agentId,
-          requestedStatus: "cancelling",
-        };
-      }
-    }
-
-    if (run.status === "running") {
-      const cancelling = await executor
-        .update(heartbeatRuns)
-        .set({
-          status: "cancelling",
-          error: opts?.error ?? "Cancellation requested by control plane",
-          errorCode: "cancelled",
-          updatedAt: new Date(),
-        })
-        .where(and(eq(heartbeatRuns.id, run.id), eq(heartbeatRuns.status, "running")))
+        .where(and(eq(heartbeatRuns.id, run.id), inArray(heartbeatRuns.status, ["queued", "running"])))
         .returning()
         .then((rows: Array<typeof heartbeatRuns.$inferSelect>) => rows[0] ?? null);
       if (cancelling) {
