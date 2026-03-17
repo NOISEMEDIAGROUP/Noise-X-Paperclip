@@ -44,7 +44,7 @@ RUN npm install --global --omit=dev @anthropic-ai/claude-code@latest @openai/cod
   && apt-get update && apt-get install -y --no-install-recommends gosu \
   && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
   && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-  && apt-get update && apt-get install -y --no-install-recommends gh openssh-client \
+  && apt-get update && apt-get install -y --no-install-recommends gh \
   && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production \
@@ -63,21 +63,6 @@ EXPOSE 3100
 COPY <<'ENTRYPOINT' /entrypoint.sh
 #!/bin/sh
 chown -R node:node /paperclip
-
-# Start SSH tunnel to OpenClaw gateway if key exists
-OPENCLAW_SSH_KEY="/paperclip/.ssh/clawdbot-key.pem"
-if [ -f "$OPENCLAW_SSH_KEY" ]; then
-  echo "[entrypoint] Starting SSH tunnel to OpenClaw gateway (127.0.0.1:18789 -> 3.130.67.249:18789)"
-  gosu node ssh -f -N -L 18789:127.0.0.1:18789 \
-    -i "$OPENCLAW_SSH_KEY" \
-    -o StrictHostKeyChecking=no \
-    -o ServerAliveInterval=30 \
-    -o ServerAliveCountMax=3 \
-    -o ConnectTimeout=10 \
-    -o ExitOnForwardFailure=yes \
-    clawd@3.130.67.249 &
-  echo "[entrypoint] SSH tunnel starting in background (PID: $!)"
-fi
 
 exec gosu node node --import ./server/node_modules/tsx/dist/loader.mjs server/dist/index.js
 ENTRYPOINT
