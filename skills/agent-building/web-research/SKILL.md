@@ -54,16 +54,6 @@ Never skip Phase 4. Uncorroborated claims are opinions, not findings.
 
 ---
 
-## Why One-Shot WebFetch Fails
-
-Claude fills gaps in fetched content with training data. A single source amplifies bias. The more confident the output sounds, the more likely part of it is hallucinated.
-
-**Detection signal:** If Claude cites a URL without having explicitly called WebFetch on it this session, that citation is hallucinated.
-
-→ Failure taxonomy and hallucination detection patterns: `references/research-loop.md`
-
----
-
 ## Progressive Deepening Protocol
 
 1. Keyword search → identify the source landscape (which domains cover this topic?)
