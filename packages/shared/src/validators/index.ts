@@ -45,6 +45,17 @@ export {
 } from "./agent.js";
 
 export {
+  upsertProjectProfileSchema,
+  updateProjectProfileSchema,
+  createProjectIntegrationSchema,
+  createProjectScraperSchema,
+  type UpsertProjectProfile,
+  type UpdateProjectProfile,
+  type CreateProjectIntegration,
+  type CreateProjectScraper,
+} from "./project-profile.js";
+
+export {
   createProjectSchema,
   updateProjectSchema,
   createProjectWorkspaceSchema,

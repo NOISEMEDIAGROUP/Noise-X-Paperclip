@@ -43,3 +43,6 @@ export { pluginEntities } from "./plugin_entities.js";
 export { pluginJobs, pluginJobRuns } from "./plugin_jobs.js";
 export { pluginWebhookDeliveries } from "./plugin_webhooks.js";
 export { pluginLogs } from "./plugin_logs.js";
+export { projectProfiles } from "./project_profiles.js";
+export { projectIntegrations } from "./project_integrations.js";
+export { projectScrapers } from "./project_scrapers.js";

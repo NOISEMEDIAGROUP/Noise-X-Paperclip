@@ -12,6 +12,14 @@ export type {
 export type { AssetImage } from "./asset.js";
 export type { Project, ProjectGoalRef, ProjectWorkspace } from "./project.js";
 export type {
+  ProjectProfile,
+  ProjectTechStack,
+  ProjectModuleStats,
+  ProjectIosCompanion,
+  ProjectIntegration,
+  ProjectScraper,
+} from "./project-profile.js";
+export type {
   WorkspaceRuntimeService,
   ExecutionWorkspaceStrategyType,
   ExecutionWorkspaceMode,

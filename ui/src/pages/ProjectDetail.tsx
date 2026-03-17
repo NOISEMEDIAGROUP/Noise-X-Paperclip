@@ -19,12 +19,13 @@ import { PageSkeleton } from "../components/PageSkeleton";
 import { PageTabBar } from "../components/PageTabBar";
 import { projectRouteRef, cn } from "../lib/utils";
 import { Tabs } from "@/components/ui/tabs";
+import { ProjectProfilePanel } from "../components/ProjectProfilePanel";
 import { PluginLauncherOutlet } from "@/plugins/launchers";
 import { PluginSlotMount, PluginSlotOutlet, usePluginSlots } from "@/plugins/slots";
 
 /* ── Top-level tab types ── */
 
-type ProjectBaseTab = "overview" | "list" | "configuration";
+type ProjectBaseTab = "overview" | "list" | "configuration" | "profile";
 type ProjectPluginTab = `plugin:${string}`;
 type ProjectTab = ProjectBaseTab | ProjectPluginTab;
 
@@ -39,6 +40,7 @@ function resolveProjectTab(pathname: string, projectId: string): ProjectTab | nu
   const tab = segments[projectsIdx + 2];
   if (tab === "overview") return "overview";
   if (tab === "configuration") return "configuration";
+  if (tab === "profile") return "profile";
   if (tab === "issues") return "list";
   return null;
 }
@@ -303,6 +305,10 @@ export function ProjectDetail() {
       navigate(`/projects/${canonicalProjectRef}/configuration`, { replace: true });
       return;
     }
+    if (activeTab === "profile") {
+      navigate(`/projects/${canonicalProjectRef}/profile`, { replace: true });
+      return;
+    }
     if (activeTab === "list") {
       if (filter) {
         navigate(`/projects/${canonicalProjectRef}/issues/${filter}`, { replace: true });
@@ -442,6 +448,7 @@ export function ProjectDetail() {
           items={[
             { value: "overview", label: "Overview" },
             { value: "list", label: "List" },
+            { value: "profile", label: "Profile" },
             { value: "configuration", label: "Configuration" },
             ...pluginTabItems.map((item) => ({
               value: item.value,
@@ -467,6 +474,12 @@ export function ProjectDetail() {
 
       {activeTab === "list" && project?.id && resolvedCompanyId && (
         <ProjectIssuesList projectId={project.id} companyId={resolvedCompanyId} />
+      )}
+
+      {activeTab === "profile" && project?.id && (
+        <div className="max-w-4xl">
+          <ProjectProfilePanel projectId={project.id} />
+        </div>
       )}
 
       {activeTab === "configuration" && (

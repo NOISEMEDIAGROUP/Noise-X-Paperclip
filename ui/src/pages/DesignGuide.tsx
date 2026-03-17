@@ -7,8 +7,16 @@ import {
   CircleDot,
   Command as CommandIcon,
   DollarSign,
+  Download,
+  File,
+  FileCode,
+  FileJson,
+  FileSpreadsheet,
+  FileText,
+  FileType,
   Hexagon,
   History,
+  Image,
   Inbox,
   LayoutDashboard,
   ListTodo,
@@ -1306,6 +1314,46 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  KEYBOARD SHORTCUTS                                           */}
       {/* ============================================================ */}
+      <Section title="Attachment Display Pattern">
+        <SubSection title="File Type Cards">
+          <p className="text-xs text-muted-foreground mb-3">
+            Attachments render with a contextual icon, human-readable type label, and formatted size.
+            Actions (download, delete) appear on hover via <code className="font-mono">group-hover:opacity-100</code>.
+          </p>
+          <div className="space-y-2 max-w-sm">
+            {[
+              { icon: Image, filename: "screenshot.png", label: "PNG", size: "142.3 KB" },
+              { icon: FileType, filename: "report.pdf", label: "PDF", size: "2.1 MB" },
+              { icon: FileJson, filename: "config.json", label: "JSON", size: "8.7 KB" },
+              { icon: FileSpreadsheet, filename: "data.csv", label: "CSV", size: "45.0 KB" },
+              { icon: FileCode, filename: "index.html", label: "HTML", size: "12.4 KB" },
+              { icon: FileText, filename: "notes.md", label: "Markdown", size: "3.2 KB" },
+              { icon: File, filename: "archive.tar.gz", label: "GZ", size: "8.8 MB" },
+            ].map(({ icon: Icon, filename, label, size }) => (
+              <div key={filename} className="border border-border rounded-md p-2.5 group">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2 min-w-0">
+                    <Icon className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0">
+                      <span className="text-xs font-medium block truncate">{filename}</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{label} · {size}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button type="button" className="text-muted-foreground hover:text-foreground p-0.5 rounded" title="Download">
+                      <Download className="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" className="text-muted-foreground hover:text-destructive p-0.5 rounded" title="Delete">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </SubSection>
+      </Section>
+
       <Section title="Keyboard Shortcuts">
         <div className="border border-border rounded-md divide-y divide-border text-sm">
           {[

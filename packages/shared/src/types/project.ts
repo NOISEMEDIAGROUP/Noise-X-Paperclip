@@ -1,5 +1,6 @@
 import type { ProjectStatus } from "../constants.js";
 import type { ProjectExecutionWorkspacePolicy, WorkspaceRuntimeService } from "./workspace-runtime.js";
+import type { ProjectProfile } from "./project-profile.js";
 
 export interface ProjectGoalRef {
   id: string;
@@ -38,6 +39,7 @@ export interface Project {
   executionWorkspacePolicy: ProjectExecutionWorkspacePolicy | null;
   workspaces: ProjectWorkspace[];
   primaryWorkspace: ProjectWorkspace | null;
+  profile?: ProjectProfile | null;
   archivedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;

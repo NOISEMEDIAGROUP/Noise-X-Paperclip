@@ -38,8 +38,16 @@ import {
   Activity as ActivityIcon,
   ChevronDown,
   ChevronRight,
+  Download,
   EyeOff,
+  File,
+  FileCode,
+  FileJson,
+  FileSpreadsheet,
+  FileText,
+  FileType,
   Hexagon,
+  Image,
   ListTree,
   MessageSquare,
   MoreHorizontal,
@@ -78,6 +86,40 @@ const ACTION_LABELS: Record<string, string> = {
   "approval.approved": "approved",
   "approval.rejected": "rejected",
 };
+
+function getAttachmentIcon(contentType: string) {
+  if (contentType.startsWith("image/")) return Image;
+  if (contentType === "application/pdf") return FileType;
+  if (contentType === "application/json") return FileJson;
+  if (contentType === "text/csv") return FileSpreadsheet;
+  if (contentType === "text/html") return FileCode;
+  if (contentType === "text/markdown" || contentType === "text/plain") return FileText;
+  if (contentType.startsWith("text/")) return File;
+  return File;
+}
+
+function getAttachmentLabel(contentType: string): string {
+  const map: Record<string, string> = {
+    "image/png": "PNG",
+    "image/jpeg": "JPEG",
+    "image/jpg": "JPEG",
+    "image/webp": "WebP",
+    "image/gif": "GIF",
+    "application/pdf": "PDF",
+    "application/json": "JSON",
+    "text/csv": "CSV",
+    "text/html": "HTML",
+    "text/markdown": "Markdown",
+    "text/plain": "Text",
+  };
+  return map[contentType.toLowerCase()] ?? contentType.split("/")[1]?.toUpperCase() ?? "File";
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function humanizeValue(value: unknown): string {
   if (typeof value !== "string") return String(value ?? "none");
@@ -624,6 +666,7 @@ export function IssueDetail() {
   };
 
   const isImageAttachment = (attachment: IssueAttachment) => attachment.contentType.startsWith("image/");
+
   const attachmentList = attachments ?? [];
   const hasAttachments = attachmentList.length > 0;
   const attachmentUploadButton = (
@@ -892,43 +935,63 @@ export function IssueDetail() {
         )}
 
         <div className="space-y-2">
-          {attachmentList.map((attachment) => (
-            <div key={attachment.id} className="border border-border rounded-md p-2">
-              <div className="flex items-center justify-between gap-2">
-                <a
-                  href={attachment.contentPath}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs hover:underline truncate"
-                  title={attachment.originalFilename ?? attachment.id}
-                >
-                  {attachment.originalFilename ?? attachment.id}
-                </a>
-                <button
-                  type="button"
-                  className="text-muted-foreground hover:text-destructive"
-                  onClick={() => deleteAttachment.mutate(attachment.id)}
-                  disabled={deleteAttachment.isPending}
-                  title="Delete attachment"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+          {attachmentList.map((attachment) => {
+            const AttachmentIcon = getAttachmentIcon(attachment.contentType);
+            const isImage = isImageAttachment(attachment);
+            const filename = attachment.originalFilename ?? attachment.id;
+            return (
+            <div key={attachment.id} className="border border-border rounded-md p-2.5 group">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2 min-w-0">
+                  <AttachmentIcon className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0">
+                    <a
+                      href={attachment.contentPath}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-medium hover:underline block truncate"
+                      title={filename}
+                    >
+                      {filename}
+                    </a>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {getAttachmentLabel(attachment.contentType)} · {formatFileSize(attachment.byteSize)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <a
+                    href={attachment.contentPath}
+                    download={filename}
+                    className="text-muted-foreground hover:text-foreground p-0.5 rounded"
+                    title="Download"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                  </a>
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-destructive p-0.5 rounded"
+                    onClick={() => deleteAttachment.mutate(attachment.id)}
+                    disabled={deleteAttachment.isPending}
+                    title="Delete attachment"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                {attachment.contentType} · {(attachment.byteSize / 1024).toFixed(1)} KB
-              </p>
-              {isImageAttachment(attachment) && (
+              {isImage && (
                 <a href={attachment.contentPath} target="_blank" rel="noreferrer">
                   <img
                     src={attachment.contentPath}
-                    alt={attachment.originalFilename ?? "attachment"}
+                    alt={filename}
                     className="mt-2 max-h-56 rounded border border-border object-contain bg-accent/10"
                     loading="lazy"
                   />
                 </a>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
         </div>
       ) : null}

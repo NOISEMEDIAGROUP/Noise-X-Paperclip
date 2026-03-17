@@ -19,12 +19,67 @@ import { ActivityRow } from "../components/ActivityRow";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { cn, formatCents } from "../lib/utils";
-import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard } from "lucide-react";
+import { AlertTriangle, Bot, CircleDot, DollarSign, OctagonX, ShieldCheck, LayoutDashboard } from "lucide-react";
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
 import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
 import { PageSkeleton } from "../components/PageSkeleton";
 import type { Agent, Issue } from "@paperclipai/shared";
 import { PluginSlotOutlet } from "@/plugins/slots";
+
+function BudgetWarningStrip({
+  spendCents,
+  budgetCents,
+  utilizationPercent,
+}: {
+  spendCents: number;
+  budgetCents: number;
+  utilizationPercent: number;
+}) {
+  if (budgetCents <= 0 || utilizationPercent < 80) return null;
+
+  const isOver = utilizationPercent >= 100;
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-3 rounded-md border px-4 py-3",
+        isOver
+          ? "border-red-500/30 bg-red-950/30 dark:border-red-500/25 dark:bg-red-950/40"
+          : "border-amber-400/30 bg-amber-950/20 dark:border-amber-500/25 dark:bg-amber-950/30",
+      )}
+    >
+      {isOver ? (
+        <OctagonX className="h-4 w-4 text-red-500 shrink-0" />
+      ) : (
+        <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+      )}
+      <div className="flex-1 min-w-0">
+        <p className={cn("text-sm font-medium", isOver ? "text-red-300" : "text-amber-300")}>
+          {isOver
+            ? "Monthly budget exceeded — agents may be auto-paused"
+            : `Budget ${utilizationPercent}% used — approaching monthly limit`}
+        </p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {formatCents(spendCents)} spent of {formatCents(budgetCents)} budget this month
+        </p>
+      </div>
+      <div className="shrink-0 w-24">
+        <div className="h-1.5 w-full rounded-full bg-muted/60 overflow-hidden">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all",
+              isOver ? "bg-red-500" : "bg-amber-400",
+            )}
+            style={{ width: `${Math.min(utilizationPercent, 100)}%` }}
+          />
+        </div>
+        <p className={cn("text-[10px] text-right mt-0.5", isOver ? "text-red-400" : "text-amber-400")}>
+          {utilizationPercent}%
+        </p>
+      </div>
+    </div>
+  );
+}
 
 function getRecentIssues(issues: Issue[]): Issue[] {
   return [...issues]
@@ -261,6 +316,12 @@ export function Dashboard() {
               }
             />
           </div>
+
+          <BudgetWarningStrip
+            spendCents={data.costs.monthSpendCents}
+            budgetCents={data.costs.monthBudgetCents}
+            utilizationPercent={data.costs.monthUtilizationPercent}
+          />
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <ChartCard title="Run Activity" subtitle="Last 14 days">
