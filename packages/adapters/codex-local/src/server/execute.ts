@@ -403,12 +403,17 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ? renderTemplate(bootstrapPromptTemplate, templateData).trim()
       : "";
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
+  const wakeCommentBody = asString(context.wakeCommentBody, "").trim();
+  const wakeCommentNote = wakeCommentBody
+    ? `You were mentioned in a comment:\n\n${wakeCommentBody}`
+    : "";
   const prompt = joinPromptSections([
     instructionsPrefix,
     renderedBootstrapPrompt,
     sessionHandoffNote,
+    wakeCommentNote,
     renderedPrompt,
-  ]);
+  ]) || "Continue your Paperclip work.";
   const promptMetrics = {
     promptChars: prompt.length,
     instructionsChars,
