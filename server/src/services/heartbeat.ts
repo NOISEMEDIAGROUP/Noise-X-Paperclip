@@ -274,6 +274,16 @@ function enrichWakeContextSnapshot(input: {
     contextSnapshot.wakeTriggerDetail = triggerDetail;
   }
 
+  // Pass through custom payload fields (e.g., Discord message, external triggers)
+  if (payload) {
+    const reservedKeys = new Set(["issueId", "commentId", "taskId", "taskKey", "wakeReason", "wakeSource", "wakeTriggerDetail", "wakeCommentId"]);
+    for (const [key, value] of Object.entries(payload)) {
+      if (!reservedKeys.has(key) && value != null && contextSnapshot[key] == null) {
+        contextSnapshot[key] = value;
+      }
+    }
+  }
+
   return {
     contextSnapshot,
     issueIdFromPayload,
