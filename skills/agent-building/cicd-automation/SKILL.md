@@ -81,8 +81,6 @@ Intercepts Bash calls containing `git push`. Checks if tests are red (re-runs th
 
 ## CI Failure Analysis Loop
 
-When CI fails after a push, use `gh` CLI to pull the failure into Claude's context:
-
 ```bash
 gh run list --limit 1                          # Get latest run ID
 gh run watch <run-id>                          # Wait for completion
@@ -141,5 +139,3 @@ Exits non-zero if any check fails — wire as a required merge step.
 | `references/ci-failure-loop.md` | gh run commands, auto-fix loop pattern, 3-attempt escalation rule |
 | `references/pr-gate.md` | gh pr checks integration, spec loop wiring, merge block pattern |
 | `references/claude-md-config.md` | CLAUDE.md template, escalation rules, override documentation |
-| `references/test-cases.md` | Trigger, no-trigger, and output test cases |
-| `references/test-log.md` | Iteration history and scores |
