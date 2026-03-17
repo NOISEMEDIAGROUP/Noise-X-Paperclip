@@ -8,6 +8,7 @@ import {
   agentRuntimeState,
   agentTaskSessions,
   agentWakeupRequests,
+  goals,
   heartbeatRunEvents,
   heartbeatRuns,
   issues,
@@ -1569,11 +1570,29 @@ export function heartbeatService(db: Db) {
             id: issues.id,
             identifier: issues.identifier,
             title: issues.title,
+            goalId: issues.goalId,
           })
           .from(issues)
           .where(and(eq(issues.id, issueId), eq(issues.companyId, agent.companyId)))
           .then((rows) => rows[0] ?? null)
       : null;
+
+    // Resolve the goal linked to the current issue so adapters can include
+    // strategic context in the agent prompt.
+    const issueGoal = issueRef?.goalId
+      ? await db
+          .select({
+            id: goals.id,
+            title: goals.title,
+            description: goals.description,
+            level: goals.level,
+            status: goals.status,
+          })
+          .from(goals)
+          .where(eq(goals.id, issueRef.goalId))
+          .then((rows) => rows[0] ?? null)
+      : null;
+
     const executionWorkspace = await realizeExecutionWorkspace({
       base: {
         baseCwd: resolvedWorkspace.cwd,
@@ -1641,6 +1660,16 @@ export function heartbeatService(db: Db) {
     }
     if (executionWorkspace.projectId && !readNonEmptyString(context.projectId)) {
       context.projectId = executionWorkspace.projectId;
+    }
+
+    // Inject goal context so adapters (and prompt templates) can reference
+    // the strategic goal this issue is aligned to.
+    if (issueGoal) {
+      context.goalId = issueGoal.id;
+      context.goalTitle = issueGoal.title;
+      context.goalDescription = issueGoal.description ?? null;
+      context.goalLevel = issueGoal.level;
+      context.goalStatus = issueGoal.status;
     }
     const runtimeSessionFallback = taskKey || resetTaskSession ? null : runtime.sessionId;
     let previousSessionDisplayId = truncateDisplayId(
