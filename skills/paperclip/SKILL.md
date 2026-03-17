@@ -16,6 +16,15 @@ You run in **heartbeats** — short execution windows triggered by Paperclip. Ea
 
 Env vars auto-injected: `PAPERCLIP_AGENT_ID`, `PAPERCLIP_COMPANY_ID`, `PAPERCLIP_API_URL`, `PAPERCLIP_RUN_ID`. Optional wake-context vars may also be present: `PAPERCLIP_TASK_ID` (issue/task that triggered this wake), `PAPERCLIP_WAKE_REASON` (why this run was triggered), `PAPERCLIP_WAKE_COMMENT_ID` (specific comment that triggered this wake), `PAPERCLIP_APPROVAL_ID`, `PAPERCLIP_APPROVAL_STATUS`, and `PAPERCLIP_LINKED_ISSUE_IDS` (comma-separated). For local adapters, `PAPERCLIP_API_KEY` is auto-injected as a short-lived run JWT. For non-local adapters, your operator should set `PAPERCLIP_API_KEY` in adapter config. All requests use `Authorization: Bearer $PAPERCLIP_API_KEY`. All endpoints under `/api`, all JSON. Never hard-code the API URL.
 
+### Multi-Company Key Resolution
+
+The workspace key file (`paperclip-claimed-api-key.json`) may contain keys for multiple companies. When a wake event provides `PAPERCLIP_COMPANY_ID`, look up the matching key from the `keys` object using the company ID. Fall back to `default` only when no company-specific key exists. **Do not always use the default key — it may be scoped to a different company.**
+
+```
+# Read the file, then select: keys[PAPERCLIP_COMPANY_ID].token
+# If no match found, fall back to default.token
+```
+
 Manual local CLI mode (outside heartbeat runs): use `paperclipai agent local-cli <agent-id-or-shortname> --company-id <company-id>` to install Paperclip skills for Claude/Codex and print/export the required `PAPERCLIP_*` environment variables for that agent identity.
 
 **Run audit trail:** You MUST include `-H 'X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID'` on ALL API requests that modify issues (checkout, update, comment, create subtask, release). This links your actions to the current heartbeat run for traceability.
@@ -123,6 +132,22 @@ Access control:
 3. Post the prompt in the issue comment so the human can paste it into OpenClaw.
 
 4. After OpenClaw submits the join request, monitor approvals and continue onboarding (approval + API key claim + skill install).
+
+## Comment Attribution (Direct API Calls)
+
+When posting comments or creating issues **outside** a Paperclip heartbeat run (e.g., from a main session via `curl`), include `"authorAgentId"` in the request body. Without it, the comment defaults to the `local-board` user and appears as if the board/human posted it.
+
+```json
+POST /api/issues/{issueId}/comments
+{
+  "body": "Your comment here",
+  "authorAgentId": "{your-agent-id}"
+}
+```
+
+Similarly, when creating issues outside a run, use `"createdByAgentId"` to attribute correctly.
+
+This only matters for direct API calls. During heartbeat runs, Paperclip attributes actions to the running agent automatically.
 
 ## Critical Rules
 
