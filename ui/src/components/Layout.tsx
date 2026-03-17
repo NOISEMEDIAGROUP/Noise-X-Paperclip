@@ -31,6 +31,8 @@ import {
 import { queryKeys } from "../lib/queryKeys";
 import { cn } from "../lib/utils";
 import { NotFoundPage } from "../pages/NotFound";
+import { CopilotSidebar } from "@copilotkit/react-ui";
+import { useCopilotActions } from "../hooks/useCopilotActions";
 import { Button } from "@/components/ui/button";
 
 const INSTANCE_SETTINGS_MEMORY_KEY = "paperclip.lastInstanceSettingsPath";
@@ -132,6 +134,7 @@ export function Layout() {
   const togglePanel = togglePanelVisible;
 
   useCompanyPageMemory();
+  useCopilotActions();
 
   useKeyboardShortcuts({
     onNewIssue: () => openNewIssue(),
@@ -418,6 +421,15 @@ export function Layout() {
       <NewGoalDialog />
       <NewAgentDialog />
       <ToastViewport />
+      <CopilotSidebar
+        defaultOpen={false}
+        clickOutsideToClose={false}
+        labels={{
+          title: "Paperclip AI",
+          initial: "Ask me to create issues, manage agents, check costs, or navigate anywhere in your workspace.",
+          placeholder: "Ask Paperclip AI...",
+        }}
+      />
     </div>
   );
 }

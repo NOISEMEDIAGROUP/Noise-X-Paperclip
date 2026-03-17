@@ -16,6 +16,8 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { initPluginBridge } from "./plugins/bridge-init";
 import { PluginLauncherProvider } from "./plugins/launchers";
+import { CopilotKit } from "@copilotkit/react-core";
+import "@copilotkit/react-ui/styles.css";
 import "@mdxeditor/editor/style.css";
 import "./index.css";
 
@@ -40,27 +42,29 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <CompanyProvider>
-          <ToastProvider>
-            <LiveUpdatesProvider>
-              <BrowserRouter>
-                <TooltipProvider>
-                  <BreadcrumbProvider>
-                    <SidebarProvider>
-                      <PanelProvider>
-                        <PluginLauncherProvider>
-                          <DialogProvider>
-                            <App />
-                          </DialogProvider>
-                        </PluginLauncherProvider>
-                      </PanelProvider>
-                    </SidebarProvider>
-                  </BreadcrumbProvider>
-                </TooltipProvider>
-              </BrowserRouter>
-            </LiveUpdatesProvider>
-          </ToastProvider>
-        </CompanyProvider>
+        <CopilotKit runtimeUrl="/api/copilotkit">
+          <CompanyProvider>
+            <ToastProvider>
+              <LiveUpdatesProvider>
+                <BrowserRouter>
+                  <TooltipProvider>
+                    <BreadcrumbProvider>
+                      <SidebarProvider>
+                        <PanelProvider>
+                          <PluginLauncherProvider>
+                            <DialogProvider>
+                              <App />
+                            </DialogProvider>
+                          </PluginLauncherProvider>
+                        </PanelProvider>
+                      </SidebarProvider>
+                    </BreadcrumbProvider>
+                  </TooltipProvider>
+                </BrowserRouter>
+              </LiveUpdatesProvider>
+            </ToastProvider>
+          </CompanyProvider>
+        </CopilotKit>
       </ThemeProvider>
     </QueryClientProvider>
   </StrictMode>
