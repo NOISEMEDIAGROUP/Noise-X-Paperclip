@@ -62,21 +62,6 @@ Orchestrator composition patterns → `references/05-composability.md`
 
 Four ready-to-copy templates (Researcher, Builder, Reviewer, Orchestrator) → `references/06-templates.md`
 
-## Anti-Patterns and Maintenance
-
-| Anti-Pattern | Failure Mode |
-|---|---|
-| Instruction dump | Walls of text agents ignore at line 150+ |
-| Workflow creep | Agent takes work outside its mandate |
-| Permission sprawl | Overprivileged agents cause unexpected side effects |
-| Missing anti-rationalization | Agent talks itself out of the hard parts |
-| No data sources declared | Agent uses whatever it finds, quality undefined |
-| Stale routing tables | Triggers no longer match current workflows |
-
-Audit quarterly: Is routing table current? Does tool access match the role? Any mandate drift?
-
----
-
 ## Anti-Rationalization
 
 | What you'll tell yourself | The truth |
