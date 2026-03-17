@@ -80,6 +80,20 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
       return;
     }
 
+    // Local service token bypass — allows bots on the same server to access the API
+    const serviceToken = process.env.PAPERCLIP_SERVICE_TOKEN;
+    if (serviceToken && token === serviceToken) {
+      req.actor = {
+        type: "board",
+        userId: "service-bot",
+        isInstanceAdmin: true,
+        runId: runIdHeader ?? undefined,
+        source: "local_implicit",
+      };
+      next();
+      return;
+    }
+
     const tokenHash = hashToken(token);
     const key = await db
       .select()
