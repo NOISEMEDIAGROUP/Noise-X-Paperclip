@@ -19,17 +19,14 @@ Git + multi-agent Claude Code = a race condition. Two agents, one working tree, 
 | Auto-commit hooks (PreToolUse, Stop) | [05-hooks.md](references/05-hooks.md) |
 | Complete end-to-end loop walkthrough | [07-full-loop.md](references/07-full-loop.md) |
 
-## The Core Pattern (30-Second Version)
+## Core Pattern
 
 ```bash
-# 1. Each agent gets its own worktree
+# Each agent gets its own worktree — zero lock contention
 git worktree add /tmp/worktree-agent-a feat/task-a
 git worktree add /tmp/worktree-agent-b feat/task-b
 
-# 2. Each agent works in its own directory — zero contention
-# 3. Both create PRs with gh CLI
+# Each creates its PR, then cleans up
 gh pr create --title "feat: task-a" --body "..." --base main
-
-# 4. Cleanup
 git worktree remove /tmp/worktree-agent-a
 ```
