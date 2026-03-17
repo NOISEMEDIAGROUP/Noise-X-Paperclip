@@ -17,6 +17,7 @@ import {
   listPaperclipSkillEntries,
   removeMaintainerOnlySkillSymlinks,
   renderTemplate,
+  buildWakeCommentNote,
   joinPromptSections,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
@@ -403,10 +404,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ? renderTemplate(bootstrapPromptTemplate, templateData).trim()
       : "";
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
-  const wakeCommentBody = asString(context.wakeCommentBody, "").trim();
-  const wakeCommentNote = wakeCommentBody
-    ? `You were mentioned in a comment:\n\n${wakeCommentBody}`
-    : "";
+  const wakeCommentNote = buildWakeCommentNote(context);
   const prompt = joinPromptSections([
     instructionsPrefix,
     renderedBootstrapPrompt,

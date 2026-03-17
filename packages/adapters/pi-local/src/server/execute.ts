@@ -9,6 +9,7 @@ import {
   asStringArray,
   parseObject,
   buildPaperclipEnv,
+  buildWakeCommentNote,
   joinPromptSections,
   redactEnvForLogs,
   ensureAbsoluteDirectory,
@@ -294,10 +295,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ? renderTemplate(bootstrapPromptTemplate, templateData).trim()
       : "";
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
-  const wakeCommentBody = asString(context.wakeCommentBody, "").trim();
-  const wakeCommentNote = wakeCommentBody
-    ? `You were mentioned in a comment:\n\n${wakeCommentBody}`
-    : "";
+  const wakeCommentNote = buildWakeCommentNote(context);
   const userPrompt = joinPromptSections([
     renderedBootstrapPrompt,
     sessionHandoffNote,
