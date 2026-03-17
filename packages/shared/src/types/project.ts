@@ -1,5 +1,6 @@
 import type { ProjectStatus } from "../constants.js";
 import type { ProjectExecutionWorkspacePolicy, WorkspaceRuntimeService } from "./workspace-runtime.js";
+import type { ProjectReviewBundlePolicy } from "./review-bundle.js";
 
 export interface ProjectGoalRef {
   id: string;
@@ -36,6 +37,7 @@ export interface Project {
   targetDate: string | null;
   color: string | null;
   executionWorkspacePolicy: ProjectExecutionWorkspacePolicy | null;
+  reviewBundlePolicy?: ProjectReviewBundlePolicy | null;
   workspaces: ProjectWorkspace[];
   primaryWorkspace: ProjectWorkspace | null;
   archivedAt: Date | null;

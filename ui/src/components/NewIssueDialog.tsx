@@ -72,6 +72,7 @@ interface IssueDraft {
   assigneeThinkingEffort: string;
   assigneeChrome: boolean;
   useIsolatedExecutionWorkspace: boolean;
+  reviewBundleMode: "inherit" | "optional" | "required";
   recurringEnabled: boolean;
   recurringName: string;
   recurringExpression: string;
@@ -188,6 +189,7 @@ export function NewIssueDialog() {
   const [assigneeThinkingEffort, setAssigneeThinkingEffort] = useState("");
   const [assigneeChrome, setAssigneeChrome] = useState(false);
   const [useIsolatedExecutionWorkspace, setUseIsolatedExecutionWorkspace] = useState(false);
+  const [reviewBundleMode, setReviewBundleMode] = useState<"inherit" | "optional" | "required">("inherit");
   const [recurringSectionOpen, setRecurringSectionOpen] = useState(false);
   const [recurringEnabled, setRecurringEnabled] = useState(false);
   const [recurringName, setRecurringName] = useState("");
@@ -346,6 +348,7 @@ export function NewIssueDialog() {
       assigneeThinkingEffort,
       assigneeChrome,
       useIsolatedExecutionWorkspace,
+      reviewBundleMode,
       recurringEnabled,
       recurringName,
       recurringExpression,
@@ -363,6 +366,7 @@ export function NewIssueDialog() {
     assigneeThinkingEffort,
     assigneeChrome,
     useIsolatedExecutionWorkspace,
+    reviewBundleMode,
     recurringEnabled,
     recurringName,
     recurringExpression,
@@ -390,6 +394,7 @@ export function NewIssueDialog() {
       setAssigneeThinkingEffort("");
       setAssigneeChrome(false);
       setUseIsolatedExecutionWorkspace(false);
+      setReviewBundleMode("inherit");
       setRecurringEnabled(false);
       setRecurringSectionOpen(false);
       setRecurringName("");
@@ -407,6 +412,7 @@ export function NewIssueDialog() {
       setAssigneeThinkingEffort(draft.assigneeThinkingEffort ?? "");
       setAssigneeChrome(draft.assigneeChrome ?? false);
       setUseIsolatedExecutionWorkspace(draft.useIsolatedExecutionWorkspace ?? false);
+      setReviewBundleMode(draft.reviewBundleMode ?? "inherit");
       setRecurringEnabled(draft.recurringEnabled ?? false);
       setRecurringSectionOpen(false);
       setRecurringName(draft.recurringName ?? "");
@@ -422,6 +428,7 @@ export function NewIssueDialog() {
       setAssigneeThinkingEffort("");
       setAssigneeChrome(false);
       setUseIsolatedExecutionWorkspace(false);
+      setReviewBundleMode("inherit");
       setRecurringEnabled(false);
       setRecurringSectionOpen(false);
       setRecurringName("");
@@ -471,6 +478,7 @@ export function NewIssueDialog() {
     setAssigneeThinkingEffort("");
     setAssigneeChrome(false);
     setUseIsolatedExecutionWorkspace(false);
+    setReviewBundleMode("inherit");
     setRecurringEnabled(false);
     setRecurringSectionOpen(false);
     setRecurringName("");
@@ -493,6 +501,7 @@ export function NewIssueDialog() {
     setAssigneeThinkingEffort("");
     setAssigneeChrome(false);
     setUseIsolatedExecutionWorkspace(false);
+    setReviewBundleMode("inherit");
   }
 
   function discardDraft() {
@@ -533,6 +542,7 @@ export function NewIssueDialog() {
       ...(projectId ? { projectId } : {}),
       ...(assigneeAdapterOverrides ? { assigneeAdapterOverrides } : {}),
       ...(executionWorkspaceSettings ? { executionWorkspaceSettings } : {}),
+      reviewBundleMode,
       recurring: recurringEnabled
         ? {
           enabled: true,
@@ -572,6 +582,9 @@ export function NewIssueDialog() {
   const currentPriority = priorities.find((p) => p.value === priority);
   const currentAssignee = (agents ?? []).find((a) => a.id === assigneeId);
   const currentProject = orderedProjects.find((project) => project.id === projectId);
+  const currentProjectReviewBundlePolicy = currentProject?.reviewBundlePolicy ?? null;
+  const currentProjectSupportsReviewBundles = Boolean(currentProjectReviewBundlePolicy?.enabled);
+  const currentProjectAllowsReviewBundleOverride = currentProjectReviewBundlePolicy?.allowIssueOverride ?? true;
   const currentProjectExecutionWorkspacePolicy = SHOW_EXPERIMENTAL_ISSUE_WORKTREE_UI
     ? currentProject?.executionWorkspacePolicy ?? null
     : null;
@@ -624,6 +637,7 @@ export function NewIssueDialog() {
     const policy = SHOW_EXPERIMENTAL_ISSUE_WORKTREE_UI ? nextProject?.executionWorkspacePolicy : null;
     executionWorkspaceDefaultProjectId.current = nextProjectId || null;
     setUseIsolatedExecutionWorkspace(Boolean(policy?.enabled && policy.defaultMode === "isolated"));
+    setReviewBundleMode("inherit");
   }, [orderedProjects]);
 
   useEffect(() => {
@@ -895,6 +909,54 @@ export function NewIssueDialog() {
             </div>
           </div>
         </div>
+
+        {currentProjectSupportsReviewBundles && (
+          <div className="px-4 pb-2 shrink-0">
+            <div className="space-y-1">
+              <div className="text-xs font-medium">Review bundle</div>
+              {currentProjectAllowsReviewBundleOverride ? (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    className={cn(
+                      "px-2 py-1 rounded-md text-xs border border-border hover:bg-accent/50 transition-colors",
+                      reviewBundleMode === "inherit" && "bg-accent",
+                    )}
+                    onClick={() => setReviewBundleMode("inherit")}
+                  >
+                    Use project default
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      "px-2 py-1 rounded-md text-xs border border-border hover:bg-accent/50 transition-colors",
+                      reviewBundleMode === "optional" && "bg-accent",
+                    )}
+                    onClick={() => setReviewBundleMode("optional")}
+                  >
+                    Optional
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      "px-2 py-1 rounded-md text-xs border border-border hover:bg-accent/50 transition-colors",
+                      reviewBundleMode === "required" && "bg-accent",
+                    )}
+                    onClick={() => setReviewBundleMode("required")}
+                  >
+                    Required
+                  </button>
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground">
+                  This project enforces its default:
+                  {" "}
+                  {currentProjectReviewBundlePolicy?.defaultMode === "required" ? "Required" : "Optional"}.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {currentProjectSupportsExecutionWorkspace && (
           <div className="px-4 pb-2 shrink-0">

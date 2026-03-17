@@ -15,6 +15,7 @@ import { PriorityIcon } from "./PriorityIcon";
 import { Identity } from "./Identity";
 import { formatDate, cn, projectUrl } from "../lib/utils";
 import { timeAgo } from "../lib/timeAgo";
+import { resolveEffectiveReviewBundleMode } from "../lib/review-bundles";
 import { Separator } from "@/components/ui/separator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { User, Hexagon, ArrowUpRight, Tag, Plus, Trash2 } from "lucide-react";
@@ -108,6 +109,7 @@ export function IssueProperties({ issue, onUpdate, inline }: IssuePropertiesProp
   const [assigneeSearch, setAssigneeSearch] = useState("");
   const [projectOpen, setProjectOpen] = useState(false);
   const [projectSearch, setProjectSearch] = useState("");
+  const [reviewModeOpen, setReviewModeOpen] = useState(false);
   const [labelsOpen, setLabelsOpen] = useState(false);
   const [labelSearch, setLabelSearch] = useState("");
   const [newLabelName, setNewLabelName] = useState("");
@@ -185,6 +187,16 @@ export function IssueProperties({ issue, onUpdate, inline }: IssuePropertiesProp
   const currentProjectExecutionWorkspacePolicy = SHOW_EXPERIMENTAL_ISSUE_WORKTREE_UI
     ? currentProject?.executionWorkspacePolicy ?? null
     : null;
+  const currentProjectReviewBundlePolicy = currentProject?.reviewBundlePolicy ?? null;
+  const currentProjectReviewBundlesEnabled = currentProjectReviewBundlePolicy?.enabled === true;
+  const currentProjectAllowReviewOverride = currentProjectReviewBundlePolicy?.allowIssueOverride ?? true;
+  const reviewBundleMode = issue.reviewBundleMode ?? "inherit";
+  const effectiveReviewBundle = resolveEffectiveReviewBundleMode({
+    projectPolicy: currentProjectReviewBundlePolicy,
+    issueMode: reviewBundleMode,
+  });
+  const effectiveReviewBundleMode = effectiveReviewBundle.mode;
+  const effectiveReviewBundleSource = effectiveReviewBundle.source;
   const currentProjectSupportsExecutionWorkspace = Boolean(currentProjectExecutionWorkspacePolicy?.enabled);
   const usesIsolatedExecutionWorkspace = issue.executionWorkspaceSettings?.mode === "isolated"
     ? true
@@ -418,7 +430,7 @@ export function IssueProperties({ issue, onUpdate, inline }: IssuePropertiesProp
             !issue.projectId && "bg-accent"
           )}
           onClick={() => {
-            onUpdate({ projectId: null, executionWorkspaceSettings: null });
+              onUpdate({ projectId: null, executionWorkspaceSettings: null, reviewBundleMode: "inherit" });
             setProjectOpen(false);
           }}
         >
@@ -443,6 +455,7 @@ export function IssueProperties({ issue, onUpdate, inline }: IssuePropertiesProp
                 executionWorkspaceSettings: SHOW_EXPERIMENTAL_ISSUE_WORKTREE_UI && p.executionWorkspacePolicy?.enabled
                   ? { mode: p.executionWorkspacePolicy.defaultMode === "isolated" ? "isolated" : "project_primary" }
                   : null,
+                reviewBundleMode: "inherit",
               });
               setProjectOpen(false);
             }}
@@ -564,6 +577,81 @@ export function IssueProperties({ issue, onUpdate, inline }: IssuePropertiesProp
               </button>
             </div>
           </PropertyRow>
+        )}
+
+        {(currentProjectReviewBundlesEnabled || reviewBundleMode !== "inherit") && (
+          <PropertyPicker
+            inline={inline}
+            label="Review"
+            open={reviewModeOpen}
+            onOpenChange={setReviewModeOpen}
+            triggerContent={(
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    "inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                    effectiveReviewBundleMode === "required"
+                      ? "border-amber-500/40 text-amber-600 dark:text-amber-400"
+                      : "border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
+                  )}
+                >
+                  {effectiveReviewBundleMode === "required" ? "Review required" : "Review optional"}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  via {effectiveReviewBundleSource}
+                </span>
+              </div>
+            )}
+            popoverClassName="w-56"
+          >
+            {currentProjectAllowReviewOverride ? (
+              <div className="space-y-1">
+                <button
+                  className={cn(
+                    "flex w-full items-center justify-between rounded px-2 py-1.5 text-xs hover:bg-accent/50",
+                    reviewBundleMode === "inherit" && "bg-accent",
+                  )}
+                  onClick={() => {
+                    onUpdate({ reviewBundleMode: "inherit" });
+                    setReviewModeOpen(false);
+                  }}
+                >
+                  <span>Use project default</span>
+                  <span className="text-muted-foreground">
+                    {currentProjectReviewBundlePolicy?.defaultMode === "required" ? "Required" : "Optional"}
+                  </span>
+                </button>
+                <button
+                  className={cn(
+                    "flex w-full items-center rounded px-2 py-1.5 text-xs hover:bg-accent/50",
+                    reviewBundleMode === "optional" && "bg-accent",
+                  )}
+                  onClick={() => {
+                    onUpdate({ reviewBundleMode: "optional" });
+                    setReviewModeOpen(false);
+                  }}
+                >
+                  Optional for this issue
+                </button>
+                <button
+                  className={cn(
+                    "flex w-full items-center rounded px-2 py-1.5 text-xs hover:bg-accent/50",
+                    reviewBundleMode === "required" && "bg-accent",
+                  )}
+                  onClick={() => {
+                    onUpdate({ reviewBundleMode: "required" });
+                    setReviewModeOpen(false);
+                  }}
+                >
+                  Required for this issue
+                </button>
+              </div>
+            ) : (
+              <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                This project enforces its default review mode for all issues.
+              </p>
+            )}
+          </PropertyPicker>
         )}
 
         {issue.parentId && (

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { issuesApi } from "../api/issues";
+import { reviewBundlesApi } from "../api/review-bundles";
 import { taskCronsApi } from "../api/taskCrons";
 import { activityApi } from "../api/activity";
 import { heartbeatsApi } from "../api/heartbeats";
@@ -16,6 +17,7 @@ import { readIssueDetailBreadcrumb } from "../lib/issueDetailBreadcrumb";
 import { cronPresetOptions } from "../lib/cron-presets";
 import { useProjectOrder } from "../hooks/useProjectOrder";
 import { relativeTime, cn, formatTokens } from "../lib/utils";
+import { resolveEffectiveReviewBundleMode } from "../lib/review-bundles";
 import { InlineEditor } from "../components/InlineEditor";
 import { CommentThread } from "../components/CommentThread";
 import { IssueProperties } from "../components/IssueProperties";
@@ -49,7 +51,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { ActivityEvent } from "@paperclipai/shared";
-import type { Agent, IssueAttachment } from "@paperclipai/shared";
+import type { Agent, IssueAttachment, IssueReviewBundle } from "@paperclipai/shared";
 
 type CommentReassignment = {
   assigneeAgentId: string | null;
@@ -75,6 +77,11 @@ const ACTION_LABELS: Record<string, string> = {
   "approval.created": "requested approval",
   "approval.approved": "approved",
   "approval.rejected": "rejected",
+  "review_bundle.saved": "saved a review bundle draft",
+  "review_bundle.submitted": "submitted a review bundle",
+  "review_bundle.approved": "approved a review bundle",
+  "review_bundle.changes_requested": "requested review changes",
+  "issue.done_blocked_by_review_bundle": "attempted to mark done without approved review bundle",
 };
 
 function humanizeValue(value: unknown): string {
@@ -160,6 +167,7 @@ export function IssueDetail() {
   const [mobilePropsOpen, setMobilePropsOpen] = useState(false);
   const [detailTab, setDetailTab] = useState("comments");
   const [secondaryOpen, setSecondaryOpen] = useState({
+    reviewBundle: false,
     approvals: false,
     cost: false,
     recurring: false,
@@ -170,6 +178,14 @@ export function IssueDetail() {
   const [recurringIssueMode, setRecurringIssueMode] = useState<"create_new" | "reuse_existing" | "reopen_existing">("reopen_existing");
   const [recurringError, setRecurringError] = useState<string | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewDraft, setReviewDraft] = useState({
+    summary: "",
+    deliverable: "",
+    testingNotes: "",
+    riskNotes: "",
+    followUpNotes: "",
+  });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const lastMarkedReadIssueIdRef = useRef<string | null>(null);
   const recurringPresetValue = useMemo(() => {
@@ -213,6 +229,12 @@ export function IssueDetail() {
   const { data: attachments } = useQuery({
     queryKey: queryKeys.issues.attachments(issueId!),
     queryFn: () => issuesApi.listAttachments(issueId!),
+    enabled: !!issueId,
+  });
+
+  const { data: reviewBundle } = useQuery({
+    queryKey: queryKeys.issues.reviewBundle(issueId!),
+    queryFn: () => reviewBundlesApi.get(issueId!),
     enabled: !!issueId,
   });
 
@@ -406,6 +428,7 @@ export function IssueDetail() {
     queryClient.invalidateQueries({ queryKey: queryKeys.issues.activity(issueId!) });
     queryClient.invalidateQueries({ queryKey: queryKeys.issues.runs(issueId!) });
     queryClient.invalidateQueries({ queryKey: queryKeys.issues.approvals(issueId!) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.issues.reviewBundle(issueId!) });
     queryClient.invalidateQueries({ queryKey: queryKeys.issues.attachments(issueId!) });
     queryClient.invalidateQueries({ queryKey: queryKeys.issues.liveRuns(issueId!) });
     queryClient.invalidateQueries({ queryKey: queryKeys.issues.activeRun(issueId!) });
@@ -431,7 +454,14 @@ export function IssueDetail() {
   const updateIssue = useMutation({
     mutationFn: (data: Record<string, unknown>) => issuesApi.update(issueId!, data),
     onSuccess: () => {
+      setReviewError(null);
       invalidateIssue();
+    },
+    onError: (err) => {
+      const message = err instanceof Error ? err.message : "Failed to update issue";
+      if (message.toLowerCase().includes("review bundle")) {
+        setReviewError(message);
+      }
     },
   });
 
@@ -463,6 +493,50 @@ export function IssueDetail() {
     onSuccess: () => {
       invalidateIssue();
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.comments(issueId!) });
+    },
+  });
+
+  const saveReviewBundle = useMutation({
+    mutationFn: (data: Record<string, unknown>) => reviewBundlesApi.saveDraft(issueId!, data),
+    onSuccess: () => {
+      setReviewError(null);
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.reviewBundle(issueId!) });
+    },
+    onError: (err) => {
+      setReviewError(err instanceof Error ? err.message : "Failed to save review bundle");
+    },
+  });
+
+  const submitReviewBundle = useMutation({
+    mutationFn: (data: Record<string, unknown>) => reviewBundlesApi.submit(issueId!, data),
+    onSuccess: () => {
+      setReviewError(null);
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.reviewBundle(issueId!) });
+    },
+    onError: (err) => {
+      setReviewError(err instanceof Error ? err.message : "Failed to submit review bundle");
+    },
+  });
+
+  const approveReviewBundle = useMutation({
+    mutationFn: () => reviewBundlesApi.approve(issueId!, {}),
+    onSuccess: () => {
+      setReviewError(null);
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.reviewBundle(issueId!) });
+    },
+    onError: (err) => {
+      setReviewError(err instanceof Error ? err.message : "Failed to approve review bundle");
+    },
+  });
+
+  const requestReviewChanges = useMutation({
+    mutationFn: () => reviewBundlesApi.requestChanges(issueId!, {}),
+    onSuccess: () => {
+      setReviewError(null);
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.reviewBundle(issueId!) });
+    },
+    onError: (err) => {
+      setReviewError(err instanceof Error ? err.message : "Failed to request review changes");
     },
   });
 
@@ -572,6 +646,17 @@ export function IssueDetail() {
   }, [issue, recurringName]);
 
   useEffect(() => {
+    if (!reviewBundle) return;
+    setReviewDraft({
+      summary: reviewBundle.summary ?? "",
+      deliverable: reviewBundle.deliverable ?? "",
+      testingNotes: reviewBundle.testingNotes ?? "",
+      riskNotes: reviewBundle.riskNotes ?? "",
+      followUpNotes: reviewBundle.followUpNotes ?? "",
+    });
+  }, [reviewBundle]);
+
+  useEffect(() => {
     if (issue) {
       openPanel(
         <IssueProperties issue={issue} onUpdate={(data) => updateIssue.mutate(data)} />
@@ -586,6 +671,25 @@ export function IssueDetail() {
 
   // Ancestors are returned oldest-first from the server (root at end, immediate parent at start)
   const ancestors = issue.ancestors ?? [];
+  const issueProject = (projects ?? []).find((project) => project.id === issue.projectId) ?? null;
+  const reviewPolicy = issueProject?.reviewBundlePolicy ?? null;
+  const reviewMode = issue.reviewBundleMode ?? "inherit";
+  const effectiveReview = resolveEffectiveReviewBundleMode({
+    projectPolicy: reviewPolicy,
+    issueMode: reviewMode,
+  });
+  const effectiveReviewMode = effectiveReview.mode;
+  const reviewRequired = effectiveReviewMode === "required";
+  const reviewApproved = reviewBundle?.status === "approved";
+  const reviewStateLabel = !reviewPolicy?.enabled && reviewMode === "inherit"
+    ? "Not required"
+    : reviewBundle?.status === "approved"
+      ? "Approved"
+      : reviewBundle?.status === "changes_requested"
+        ? "Changes requested"
+        : reviewBundle?.status === "submitted"
+          ? "Awaiting review"
+          : "Draft";
 
   const handleFilePicked = async (evt: ChangeEvent<HTMLInputElement>) => {
     const file = evt.target.files?.[0];
@@ -757,6 +861,23 @@ export function IssueDetail() {
         />
       </div>
 
+      {(reviewRequired || reviewError) && (
+        <div className={cn(
+          "rounded-md border px-3 py-2 text-xs",
+          reviewError
+            ? "border-destructive/40 bg-destructive/10 text-destructive"
+            : reviewApproved
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+              : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+        )}>
+          {reviewError ?? (
+            reviewApproved
+              ? "Review bundle approved. This issue can now be marked done."
+              : "This issue requires an approved review bundle before it can be marked done."
+          )}
+        </div>
+      )}
+
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-medium text-muted-foreground">Attachments</h3>
@@ -924,6 +1045,121 @@ export function IssueDetail() {
           )}
         </TabsContent>
       </Tabs>
+
+      <Collapsible
+        open={secondaryOpen.reviewBundle}
+        onOpenChange={(open) => setSecondaryOpen((prev) => ({ ...prev, reviewBundle: open }))}
+        className="rounded-lg border border-border"
+      >
+        <CollapsibleTrigger className="flex w-full items-center justify-between px-3 py-2 text-left">
+          <span className="text-sm font-medium text-muted-foreground">
+            Review Bundle ({reviewStateLabel})
+          </span>
+          <ChevronDown
+            className={cn("h-4 w-4 text-muted-foreground transition-transform", secondaryOpen.reviewBundle && "rotate-180")}
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="border-t border-border p-3 space-y-3">
+            <div className="text-xs text-muted-foreground">
+              Effective mode: <span className="text-foreground font-medium">{reviewRequired ? "Required" : "Optional"}</span>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Summary</label>
+              <textarea
+                className="w-full rounded border border-border bg-transparent px-2 py-1.5 text-sm outline-none min-h-[72px]"
+                value={reviewDraft.summary}
+                onChange={(e) => setReviewDraft((prev) => ({ ...prev, summary: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Deliverable</label>
+              <textarea
+                className="w-full rounded border border-border bg-transparent px-2 py-1.5 text-sm outline-none min-h-[72px]"
+                value={reviewDraft.deliverable}
+                onChange={(e) => setReviewDraft((prev) => ({ ...prev, deliverable: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Testing notes</label>
+                <textarea
+                  className="w-full rounded border border-border bg-transparent px-2 py-1.5 text-xs outline-none min-h-[60px]"
+                  value={reviewDraft.testingNotes}
+                  onChange={(e) => setReviewDraft((prev) => ({ ...prev, testingNotes: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Risks</label>
+                <textarea
+                  className="w-full rounded border border-border bg-transparent px-2 py-1.5 text-xs outline-none min-h-[60px]"
+                  value={reviewDraft.riskNotes}
+                  onChange={(e) => setReviewDraft((prev) => ({ ...prev, riskNotes: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Follow-ups</label>
+                <textarea
+                  className="w-full rounded border border-border bg-transparent px-2 py-1.5 text-xs outline-none min-h-[60px]"
+                  value={reviewDraft.followUpNotes}
+                  onChange={(e) => setReviewDraft((prev) => ({ ...prev, followUpNotes: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  saveReviewBundle.mutate({
+                    summary: reviewDraft.summary,
+                    deliverable: reviewDraft.deliverable,
+                    testingNotes: reviewDraft.testingNotes || null,
+                    riskNotes: reviewDraft.riskNotes || null,
+                    followUpNotes: reviewDraft.followUpNotes || null,
+                    linkedRunId: issue.executionRunId ?? null,
+                  })}
+                disabled={saveReviewBundle.isPending || submitReviewBundle.isPending}
+              >
+                {saveReviewBundle.isPending ? "Saving..." : "Save draft"}
+              </Button>
+              <Button
+                size="sm"
+                onClick={() =>
+                  submitReviewBundle.mutate({
+                    summary: reviewDraft.summary,
+                    deliverable: reviewDraft.deliverable,
+                    testingNotes: reviewDraft.testingNotes || null,
+                    riskNotes: reviewDraft.riskNotes || null,
+                    followUpNotes: reviewDraft.followUpNotes || null,
+                    linkedRunId: issue.executionRunId ?? null,
+                  })}
+                disabled={submitReviewBundle.isPending}
+              >
+                {submitReviewBundle.isPending ? "Submitting..." : "Submit for review"}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => approveReviewBundle.mutate()}
+                disabled={approveReviewBundle.isPending || reviewBundle?.status !== "submitted"}
+              >
+                {approveReviewBundle.isPending ? "Approving..." : "Approve"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => requestReviewChanges.mutate()}
+                disabled={requestReviewChanges.isPending || reviewBundle?.status !== "submitted"}
+              >
+                {requestReviewChanges.isPending ? "Requesting..." : "Request changes"}
+              </Button>
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
 
       {linkedApprovals && linkedApprovals.length > 0 && (
         <Collapsible

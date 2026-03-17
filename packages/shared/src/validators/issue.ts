@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ISSUE_PRIORITIES, ISSUE_STATUSES } from "../constants.js";
+import { issueReviewBundleModeSchema } from "./review-bundle.js";
 
 const executionWorkspaceStrategySchema = z
   .object({
@@ -41,6 +42,7 @@ export const createIssueSchema = z.object({
   billingCode: z.string().optional().nullable(),
   assigneeAdapterOverrides: issueAssigneeAdapterOverridesSchema.optional().nullable(),
   executionWorkspaceSettings: issueExecutionWorkspaceSettingsSchema.optional().nullable(),
+  reviewBundleMode: issueReviewBundleModeSchema.optional().default("inherit"),
   labelIds: z.array(z.string().uuid()).optional(),
 });
 

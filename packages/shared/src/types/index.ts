@@ -12,6 +12,15 @@ export type {
 export type { AssetImage } from "./asset.js";
 export type { Project, ProjectGoalRef, ProjectWorkspace } from "./project.js";
 export type {
+  ProjectReviewBundlePolicy,
+  ReviewBundleRequirementMode,
+  IssueReviewBundleMode,
+  IssueReviewBundleStatus,
+  IssueReviewBundleExternalLink,
+  IssueReviewBundleEvidence,
+  IssueReviewBundle,
+} from "./review-bundle.js";
+export type {
   WorkspaceRuntimeService,
   ExecutionWorkspaceStrategyType,
   ExecutionWorkspaceMode,

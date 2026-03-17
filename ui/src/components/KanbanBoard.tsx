@@ -21,6 +21,7 @@ import { StatusIcon } from "./StatusIcon";
 import { PriorityIcon } from "./PriorityIcon";
 import { Identity } from "./Identity";
 import type { Issue } from "@paperclipai/shared";
+import { Clock3 } from "lucide-react";
 
 const boardStatuses = [
   "backlog",
@@ -45,6 +46,7 @@ interface KanbanBoardProps {
   issues: Issue[];
   agents?: Agent[];
   liveIssueIds?: Set<string>;
+  recurringIssueIds?: Set<string>;
   onUpdateIssue: (id: string, data: Record<string, unknown>) => void;
 }
 
@@ -55,11 +57,13 @@ function KanbanColumn({
   issues,
   agents,
   liveIssueIds,
+  recurringIssueIds,
 }: {
   status: string;
   issues: Issue[];
   agents?: Agent[];
   liveIssueIds?: Set<string>;
+  recurringIssueIds?: Set<string>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
 
@@ -90,6 +94,7 @@ function KanbanColumn({
               issue={issue}
               agents={agents}
               isLive={liveIssueIds?.has(issue.id)}
+              isRecurring={recurringIssueIds?.has(issue.id)}
             />
           ))}
         </SortableContext>
@@ -104,11 +109,13 @@ function KanbanCard({
   issue,
   agents,
   isLive,
+  isRecurring,
   isOverlay,
 }: {
   issue: Issue;
   agents?: Agent[];
   isLive?: boolean;
+  isRecurring?: boolean;
   isOverlay?: boolean;
 }) {
   const {
@@ -152,6 +159,11 @@ function KanbanCard({
           <span className="text-xs text-muted-foreground font-mono shrink-0">
             {issue.identifier ?? issue.id.slice(0, 8)}
           </span>
+          {isRecurring && (
+            <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1 py-0.5 text-[10px] text-amber-600 dark:text-amber-400">
+              <Clock3 className="h-2.5 w-2.5" />
+            </span>
+          )}
           {isLive && (
             <span className="relative flex h-2 w-2 shrink-0 mt-0.5">
               <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
@@ -184,6 +196,7 @@ export function KanbanBoard({
   issues,
   agents,
   liveIssueIds,
+  recurringIssueIds,
   onUpdateIssue,
 }: KanbanBoardProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -261,6 +274,7 @@ export function KanbanBoard({
             issues={columnIssues[status] ?? []}
             agents={agents}
             liveIssueIds={liveIssueIds}
+            recurringIssueIds={recurringIssueIds}
           />
         ))}
       </div>

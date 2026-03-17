@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Link } from "@/lib/router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
 import { issuesApi } from "../api/issues";
+import { taskCronsApi } from "../api/taskCrons";
 import { queryKeys } from "../lib/queryKeys";
 import { groupBy } from "../lib/groupBy";
 import { formatDate, cn } from "../lib/utils";
@@ -18,9 +19,34 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
-import { CircleDot, Plus, Filter, ArrowUpDown, Layers, Check, X, ChevronRight, List, Columns3, User, Search } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  CircleDot,
+  Plus,
+  Filter,
+  ArrowUpDown,
+  Layers,
+  Check,
+  X,
+  ChevronRight,
+  List,
+  Columns3,
+  User,
+  Search,
+  Clock3,
+  Pause,
+  Play,
+  Save,
+} from "lucide-react";
 import { KanbanBoard } from "./KanbanBoard";
 import type { Issue } from "@paperclipai/shared";
+import type { TaskCronSchedule } from "@paperclipai/shared";
 
 /* ── Helpers ── */
 
@@ -38,6 +64,7 @@ export type IssueViewState = {
   priorities: string[];
   assignees: string[];
   labels: string[];
+  recurringFilter: "all" | "recurring_only";
   sortField: "status" | "priority" | "title" | "created" | "updated";
   sortDir: "asc" | "desc";
   groupBy: "status" | "priority" | "assignee" | "none";
@@ -50,6 +77,7 @@ const defaultViewState: IssueViewState = {
   priorities: [],
   assignees: [],
   labels: [],
+  recurringFilter: "all",
   sortField: "updated",
   sortDir: "desc",
   groupBy: "none",
@@ -87,12 +115,17 @@ function toggleInArray(arr: string[], value: string): string[] {
   return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
 }
 
-function applyFilters(issues: Issue[], state: IssueViewState): Issue[] {
+function applyFilters(
+  issues: Issue[],
+  state: IssueViewState,
+  recurringIssueIds: Set<string>,
+): Issue[] {
   let result = issues;
   if (state.statuses.length > 0) result = result.filter((i) => state.statuses.includes(i.status));
   if (state.priorities.length > 0) result = result.filter((i) => state.priorities.includes(i.priority));
   if (state.assignees.length > 0) result = result.filter((i) => i.assigneeAgentId != null && state.assignees.includes(i.assigneeAgentId));
   if (state.labels.length > 0) result = result.filter((i) => (i.labelIds ?? []).some((id) => state.labels.includes(id)));
+  if (state.recurringFilter === "recurring_only") result = result.filter((i) => recurringIssueIds.has(i.id));
   return result;
 }
 
@@ -124,6 +157,7 @@ function countActiveFilters(state: IssueViewState): number {
   if (state.priorities.length > 0) count++;
   if (state.assignees.length > 0) count++;
   if (state.labels.length > 0) count++;
+  if (state.recurringFilter === "recurring_only") count++;
   return count;
 }
 
@@ -165,6 +199,7 @@ export function IssuesList({
 }: IssuesListProps) {
   const { selectedCompanyId } = useCompany();
   const { openNewIssue } = useDialog();
+  const queryClient = useQueryClient();
 
   // Scope the storage key per company so folding/view state is independent across companies.
   const scopedKey = selectedCompanyId ? `${viewStateKey}:${selectedCompanyId}` : viewStateKey;
@@ -176,7 +211,9 @@ export function IssuesList({
     return getViewState(scopedKey);
   });
   const [assigneePickerIssueId, setAssigneePickerIssueId] = useState<string | null>(null);
+  const [recurringPickerIssueId, setRecurringPickerIssueId] = useState<string | null>(null);
   const [assigneeSearch, setAssigneeSearch] = useState("");
+  const [recurringDrafts, setRecurringDrafts] = useState<Record<string, string>>({});
   const [issueSearch, setIssueSearch] = useState(initialSearch ?? "");
   const [debouncedIssueSearch, setDebouncedIssueSearch] = useState(issueSearch);
   const normalizedIssueSearch = debouncedIssueSearch.trim();
@@ -217,6 +254,43 @@ export function IssuesList({
     enabled: !!selectedCompanyId && normalizedIssueSearch.length > 0,
   });
 
+  const { data: recurringSchedules = [] } = useQuery({
+    queryKey: queryKeys.taskCrons.company(selectedCompanyId!),
+    queryFn: () => taskCronsApi.listCompanySchedules(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const recurringByIssueId = useMemo(() => {
+    const map = new Map<string, TaskCronSchedule[]>();
+    for (const schedule of recurringSchedules) {
+      if (!schedule.issueId) continue;
+      const existing = map.get(schedule.issueId);
+      if (existing) existing.push(schedule);
+      else map.set(schedule.issueId, [schedule]);
+    }
+    return map;
+  }, [recurringSchedules]);
+
+  const recurringIssueIds = useMemo(
+    () => new Set<string>(Array.from(recurringByIssueId.keys())),
+    [recurringByIssueId],
+  );
+
+  const updateSchedule = useMutation({
+    mutationFn: ({
+      scheduleId,
+      patch,
+    }: {
+      scheduleId: string;
+      patch: { enabled?: boolean; expression?: string };
+    }) =>
+      taskCronsApi.updateSchedule(scheduleId, patch, selectedCompanyId ?? undefined),
+    onSuccess: () => {
+      if (!selectedCompanyId) return;
+      queryClient.invalidateQueries({ queryKey: queryKeys.taskCrons.company(selectedCompanyId) });
+    },
+  });
+
   const agentName = useCallback((id: string | null) => {
     if (!id || !agents) return null;
     return agents.find((a) => a.id === id)?.name ?? null;
@@ -224,9 +298,9 @@ export function IssuesList({
 
   const filtered = useMemo(() => {
     const sourceIssues = normalizedIssueSearch.length > 0 ? searchedIssues : issues;
-    const filteredByControls = applyFilters(sourceIssues, viewState);
+    const filteredByControls = applyFilters(sourceIssues, viewState, recurringIssueIds);
     return sortIssues(filteredByControls, viewState);
-  }, [issues, searchedIssues, viewState, normalizedIssueSearch]);
+  }, [issues, searchedIssues, viewState, normalizedIssueSearch, recurringIssueIds]);
 
   const { data: labels } = useQuery({
     queryKey: queryKeys.issues.labels(selectedCompanyId!),
@@ -278,6 +352,9 @@ export function IssuesList({
     setAssigneeSearch("");
   };
 
+  const scheduleDraftValue = (schedule: TaskCronSchedule) =>
+    recurringDrafts[schedule.id] ?? schedule.expression;
+
   return (
     <div className="space-y-4">
       {/* Toolbar */}
@@ -303,6 +380,21 @@ export function IssuesList({
         </div>
 
         <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
+          <Select
+            value={viewState.recurringFilter}
+            onValueChange={(value) =>
+              updateView({ recurringFilter: value as "all" | "recurring_only" })
+            }
+          >
+            <SelectTrigger className="h-8 w-[130px] text-xs">
+              <SelectValue placeholder="Scope" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All issues</SelectItem>
+              <SelectItem value="recurring_only">Recurring only</SelectItem>
+            </SelectContent>
+          </Select>
+
           {/* View mode toggle */}
           <div className="flex items-center border border-border rounded-md overflow-hidden mr-1">
             <button
@@ -335,7 +427,7 @@ export function IssuesList({
                     className="h-3 w-3 ml-1 hidden sm:block"
                     onClick={(e) => {
                       e.stopPropagation();
-                      updateView({ statuses: [], priorities: [], assignees: [], labels: [] });
+                      updateView({ statuses: [], priorities: [], assignees: [], labels: [], recurringFilter: "all" });
                     }}
                   />
                 )}
@@ -348,7 +440,15 @@ export function IssuesList({
                   {activeFilterCount > 0 && (
                     <button
                       className="text-xs text-muted-foreground hover:text-foreground"
-                      onClick={() => updateView({ statuses: [], priorities: [], assignees: [], labels: [] })}
+                      onClick={() =>
+                        updateView({
+                          statuses: [],
+                          priorities: [],
+                          assignees: [],
+                          labels: [],
+                          recurringFilter: "all",
+                        })
+                      }
                     >
                       Clear
                     </button>
@@ -376,6 +476,22 @@ export function IssuesList({
                       );
                     })}
                   </div>
+                </div>
+
+                <div className="border-t border-border" />
+
+                <div className="space-y-1.5">
+                  <span className="text-xs text-muted-foreground">Scope</span>
+                  <label className="flex items-center gap-2 px-2 py-1 rounded-sm hover:bg-accent/50 cursor-pointer">
+                    <Checkbox
+                      checked={viewState.recurringFilter === "recurring_only"}
+                      onCheckedChange={(checked) =>
+                        updateView({ recurringFilter: checked ? "recurring_only" : "all" })
+                      }
+                    />
+                    <Clock3 className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-sm">Recurring only</span>
+                  </label>
                 </div>
 
                 <div className="border-t border-border" />
@@ -555,6 +671,7 @@ export function IssuesList({
           issues={filtered}
           agents={agents}
           liveIssueIds={liveIssueIds}
+          recurringIssueIds={recurringIssueIds}
           onUpdateIssue={onUpdateIssue}
         />
       ) : (
@@ -625,6 +742,12 @@ export function IssuesList({
                       <span className="text-xs text-muted-foreground font-mono shrink-0">
                         {issue.identifier ?? issue.id.slice(0, 8)}
                       </span>
+                      {recurringIssueIds.has(issue.id) && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-600 dark:text-amber-400">
+                          <Clock3 className="h-2.5 w-2.5" />
+                          Recurring
+                        </span>
+                      )}
                       {liveIssueIds?.has(issue.id) && (
                         <span className="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 rounded-full bg-blue-500/10">
                           <span className="relative flex h-2 w-2">
@@ -643,6 +766,109 @@ export function IssuesList({
 
                   {/* Desktop-only trailing content */}
                   <span className="hidden sm:flex sm:order-3 items-center gap-2 sm:gap-3 shrink-0 ml-auto">
+                    {(() => {
+                      const issueSchedules = recurringByIssueId.get(issue.id) ?? [];
+                      if (issueSchedules.length === 0) return null;
+                      const enabledCount = issueSchedules.filter((schedule) => schedule.enabled).length;
+                      return (
+                        <Popover
+                          open={recurringPickerIssueId === issue.id}
+                          onOpenChange={(open) => setRecurringPickerIssueId(open ? issue.id : null)}
+                        >
+                          <PopoverTrigger asChild>
+                            <button
+                              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent/50 transition-colors"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                            >
+                              <Clock3 className="h-3.5 w-3.5" />
+                              {enabledCount}/{issueSchedules.length}
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            className="w-80 p-2"
+                            align="end"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="space-y-2">
+                              {issueSchedules.map((schedule) => (
+                                <div key={schedule.id} className="rounded border border-border p-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-medium truncate">{schedule.name}</span>
+                                    <span className="ml-auto">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-6 px-2 text-[10px]"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          updateSchedule.mutate({
+                                            scheduleId: schedule.id,
+                                            patch: { enabled: !schedule.enabled },
+                                          });
+                                        }}
+                                        disabled={updateSchedule.isPending}
+                                      >
+                                        {schedule.enabled ? (
+                                          <>
+                                            <Pause className="h-3 w-3 mr-1" />
+                                            Stop
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Play className="h-3 w-3 mr-1" />
+                                            Start
+                                          </>
+                                        )}
+                                      </Button>
+                                    </span>
+                                  </div>
+                                  <div className="mt-2 flex items-center gap-1.5">
+                                    <input
+                                      className="w-full rounded-md border border-border bg-transparent px-2 py-1 text-[11px] font-mono"
+                                      value={scheduleDraftValue(schedule)}
+                                      onChange={(e) =>
+                                        setRecurringDrafts((prev) => ({
+                                          ...prev,
+                                          [schedule.id]: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-6 px-2 text-[10px]"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        updateSchedule.mutate({
+                                          scheduleId: schedule.id,
+                                          patch: { expression: scheduleDraftValue(schedule).trim() },
+                                        });
+                                      }}
+                                      disabled={
+                                        updateSchedule.isPending ||
+                                        scheduleDraftValue(schedule).trim().length === 0
+                                      }
+                                    >
+                                      <Save className="h-3 w-3 mr-1" />
+                                      Save
+                                    </Button>
+                                  </div>
+                                  <div className="mt-1 text-[10px] text-muted-foreground">
+                                    {schedule.timezone} - {schedule.enabled ? "enabled" : "disabled"} - next{" "}
+                                    {schedule.nextTriggerAt ? timeAgo(schedule.nextTriggerAt) : "not scheduled"}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      );
+                    })()}
                     {(issue.labels ?? []).length > 0 && (
                       <span className="hidden md:flex items-center gap-1 max-w-[240px] overflow-hidden">
                         {(issue.labels ?? []).slice(0, 3).map((label) => (

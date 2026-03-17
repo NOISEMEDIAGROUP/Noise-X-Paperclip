@@ -47,6 +47,9 @@ export type ProjectConfigFieldKey =
   | "description"
   | "status"
   | "goals"
+  | "review_bundle_enabled"
+  | "review_bundle_default_mode"
+  | "review_bundle_allow_issue_override"
   | "execution_workspace_enabled"
   | "execution_workspace_default_mode"
   | "execution_workspace_base_ref"
@@ -217,6 +220,10 @@ export function ProjectProperties({
 
   const availableGoals = (allGoals ?? []).filter((g) => !linkedGoalIds.includes(g.id));
   const workspaces = project.workspaces ?? [];
+  const reviewBundlePolicy = project.reviewBundlePolicy ?? null;
+  const reviewBundlesEnabled = reviewBundlePolicy?.enabled === true;
+  const reviewBundleDefaultMode = reviewBundlePolicy?.defaultMode === "required" ? "required" : "optional";
+  const reviewBundleAllowIssueOverride = reviewBundlePolicy?.allowIssueOverride ?? true;
   const executionWorkspacePolicy = project.executionWorkspacePolicy ?? null;
   const executionWorkspacesEnabled = executionWorkspacePolicy?.enabled === true;
   const executionWorkspaceDefaultMode =
@@ -279,6 +286,19 @@ export function ProjectProperties({
         defaultMode: executionWorkspaceDefaultMode,
         allowIssueOverride: executionWorkspacePolicy?.allowIssueOverride ?? true,
         ...executionWorkspacePolicy,
+        ...patch,
+      },
+    };
+  };
+
+  const updateReviewBundlePolicy = (patch: Record<string, unknown>) => {
+    if (!onUpdate && !onFieldUpdate) return;
+    return {
+      reviewBundlePolicy: {
+        enabled: reviewBundlesEnabled,
+        defaultMode: reviewBundleDefaultMode,
+        allowIssueOverride: reviewBundleAllowIssueOverride,
+        ...reviewBundlePolicy,
         ...patch,
       },
     };
@@ -747,6 +767,134 @@ export function ProjectProperties({
           {updateWorkspace.isError && (
             <p className="text-xs text-destructive">Failed to update workspace.</p>
           )}
+        </div>
+
+        <Separator className="my-4" />
+
+        <div className="py-1.5 space-y-2">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span>Review Bundles</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-border text-[10px] text-muted-foreground hover:text-foreground"
+                  aria-label="Review bundles help"
+                >
+                  ?
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                Configure whether issues require an approved review bundle before they can be marked done.
+              </TooltipContent>
+            </Tooltip>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <span>Enable review bundles</span>
+                  <SaveIndicator state={fieldState("review_bundle_enabled")} />
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  When enabled, issues can use a structured review artifact with explicit submit and decision states.
+                </div>
+              </div>
+              {onUpdate || onFieldUpdate ? (
+                <button
+                  className={cn(
+                    "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+                    reviewBundlesEnabled ? "bg-green-600" : "bg-muted",
+                  )}
+                  type="button"
+                  onClick={() =>
+                    commitField(
+                      "review_bundle_enabled",
+                      updateReviewBundlePolicy({ enabled: !reviewBundlesEnabled })!,
+                    )}
+                >
+                  <span
+                    className={cn(
+                      "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform",
+                      reviewBundlesEnabled ? "translate-x-4.5" : "translate-x-0.5",
+                    )}
+                  />
+                </button>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  {reviewBundlesEnabled ? "Enabled" : "Disabled"}
+                </span>
+              )}
+            </div>
+
+            {reviewBundlesEnabled && (
+              <>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span>Require review by default</span>
+                      <SaveIndicator state={fieldState("review_bundle_default_mode")} />
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Required means issues must have an approved review bundle before they can move to done.
+                    </div>
+                  </div>
+                  <button
+                    className={cn(
+                      "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+                      reviewBundleDefaultMode === "required" ? "bg-green-600" : "bg-muted",
+                    )}
+                    type="button"
+                    onClick={() =>
+                      commitField(
+                        "review_bundle_default_mode",
+                        updateReviewBundlePolicy({
+                          defaultMode: reviewBundleDefaultMode === "required" ? "optional" : "required",
+                        })!,
+                      )}
+                  >
+                    <span
+                      className={cn(
+                        "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform",
+                        reviewBundleDefaultMode === "required" ? "translate-x-4.5" : "translate-x-0.5",
+                      )}
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span>Allow issue-level override</span>
+                      <SaveIndicator state={fieldState("review_bundle_allow_issue_override")} />
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      If disabled, issues always follow the project default requirement.
+                    </div>
+                  </div>
+                  <button
+                    className={cn(
+                      "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+                      reviewBundleAllowIssueOverride ? "bg-green-600" : "bg-muted",
+                    )}
+                    type="button"
+                    onClick={() =>
+                      commitField(
+                        "review_bundle_allow_issue_override",
+                        updateReviewBundlePolicy({ allowIssueOverride: !reviewBundleAllowIssueOverride })!,
+                      )}
+                  >
+                    <span
+                      className={cn(
+                        "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform",
+                        reviewBundleAllowIssueOverride ? "translate-x-4.5" : "translate-x-0.5",
+                      )}
+                    />
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {SHOW_EXPERIMENTAL_ISSUE_WORKTREE_UI && (

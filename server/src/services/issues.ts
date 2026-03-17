@@ -22,6 +22,12 @@ import {
   defaultIssueExecutionWorkspaceSettingsForProject,
   parseProjectExecutionWorkspacePolicy,
 } from "./execution-workspace-policy.js";
+import {
+  parseIssueReviewBundleMode,
+  parseProjectReviewBundlePolicy,
+  resolveReviewBundleRequirement,
+} from "./review-bundle-policy.js";
+import { reviewBundleService } from "./review-bundles.js";
 
 const ALL_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
 
@@ -302,6 +308,8 @@ function withActiveRuns(
 }
 
 export function issueService(db: Db) {
+  const reviewBundlesSvc = reviewBundleService(db);
+
   async function assertAssignableAgent(companyId: string, agentId: string) {
     const assignee = await db
       .select({
@@ -643,9 +651,13 @@ export function issueService(db: Db) {
       return db.transaction(async (tx) => {
         let executionWorkspaceSettings =
           (issueData.executionWorkspaceSettings as Record<string, unknown> | null | undefined) ?? null;
+        let projectReviewBundlePolicy: ReturnType<typeof parseProjectReviewBundlePolicy> = null;
         if (executionWorkspaceSettings == null && issueData.projectId) {
           const project = await tx
-            .select({ executionWorkspacePolicy: projects.executionWorkspacePolicy })
+            .select({
+              executionWorkspacePolicy: projects.executionWorkspacePolicy,
+              reviewBundlePolicy: projects.reviewBundlePolicy,
+            })
             .from(projects)
             .where(and(eq(projects.id, issueData.projectId), eq(projects.companyId, companyId)))
             .then((rows) => rows[0] ?? null);
@@ -653,6 +665,24 @@ export function issueService(db: Db) {
             defaultIssueExecutionWorkspaceSettingsForProject(
               parseProjectExecutionWorkspacePolicy(project?.executionWorkspacePolicy),
             ) as Record<string, unknown> | null;
+          projectReviewBundlePolicy = parseProjectReviewBundlePolicy(project?.reviewBundlePolicy);
+        } else if (issueData.projectId) {
+          const project = await tx
+            .select({ reviewBundlePolicy: projects.reviewBundlePolicy })
+            .from(projects)
+            .where(and(eq(projects.id, issueData.projectId), eq(projects.companyId, companyId)))
+            .then((rows) => rows[0] ?? null);
+          projectReviewBundlePolicy = parseProjectReviewBundlePolicy(project?.reviewBundlePolicy);
+        }
+        const reviewBundleMode = parseIssueReviewBundleMode(issueData.reviewBundleMode);
+        const reviewRequirement = resolveReviewBundleRequirement({
+          projectPolicy: projectReviewBundlePolicy,
+          issueMode: reviewBundleMode,
+        });
+        if (issueData.status === "done" && reviewRequirement.mode === "required") {
+          throw unprocessable("Issue requires an approved review bundle before it can be marked done", {
+            requirement: reviewRequirement,
+          });
         }
         const [company] = await tx
           .update(companies)
@@ -666,6 +696,7 @@ export function issueService(db: Db) {
         const values = {
           ...issueData,
           ...(executionWorkspaceSettings ? { executionWorkspaceSettings } : {}),
+          reviewBundleMode,
           companyId,
           issueNumber,
           identifier,
@@ -701,6 +732,23 @@ export function issueService(db: Db) {
 
       if (issueData.status) {
         assertTransition(existing.status, issueData.status);
+      }
+
+      if (issueData.status === "done" && existing.status !== "done") {
+        const nextProjectId = issueData.projectId !== undefined ? issueData.projectId : existing.projectId;
+        const nextReviewBundleMode =
+          issueData.reviewBundleMode !== undefined ? String(issueData.reviewBundleMode) : existing.reviewBundleMode;
+        const completionCheck = await reviewBundlesSvc.isCompletionAllowedForIssue({
+          issueId: existing.id,
+          companyId: existing.companyId,
+          projectId: nextProjectId,
+          reviewBundleMode: nextReviewBundleMode,
+        });
+        if (!completionCheck.allowed) {
+          throw unprocessable("Issue requires an approved review bundle before it can be marked done", {
+            requirement: completionCheck.requirement,
+          });
+        }
       }
 
       const patch: Partial<typeof issues.$inferInsert> = {

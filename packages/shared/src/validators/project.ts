@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PROJECT_STATUSES } from "../constants.js";
+import { projectReviewBundlePolicySchema } from "./review-bundle.js";
 
 const executionWorkspaceStrategySchema = z
   .object({
@@ -68,6 +69,7 @@ const projectFields = {
   targetDate: z.string().optional().nullable(),
   color: z.string().optional().nullable(),
   executionWorkspacePolicy: projectExecutionWorkspacePolicySchema.optional().nullable(),
+  reviewBundlePolicy: projectReviewBundlePolicySchema.optional().nullable(),
   archivedAt: z.string().datetime().optional().nullable(),
 };
 

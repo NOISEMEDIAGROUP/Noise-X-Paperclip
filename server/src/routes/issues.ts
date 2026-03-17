@@ -485,6 +485,31 @@ export function issueRoutes(db: Db, storage: StorageService) {
     try {
       issue = await svc.update(id, updateFields);
     } catch (err) {
+      if (
+        err instanceof HttpError &&
+        err.status === 422 &&
+        updateFields.status === "done" &&
+        typeof err.message === "string" &&
+        err.message.toLowerCase().includes("review bundle")
+      ) {
+        const actor = getActorInfo(req);
+        await logActivity(db, {
+          companyId: existing.companyId,
+          actorType: actor.actorType,
+          actorId: actor.actorId,
+          agentId: actor.agentId,
+          runId: actor.runId,
+          action: "issue.done_blocked_by_review_bundle",
+          entityType: "issue",
+          entityId: existing.id,
+          details: {
+            status: "done",
+            identifier: existing.identifier,
+            reason: err.message,
+            requirement: err.details,
+          },
+        });
+      }
       if (err instanceof HttpError && err.status === 422) {
         logger.warn(
           {

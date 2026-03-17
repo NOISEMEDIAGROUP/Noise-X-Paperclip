@@ -75,6 +75,26 @@ export {
   type LinkIssueApproval,
   type CreateIssueAttachmentMetadata,
 } from "./issue.js";
+export {
+  reviewBundleRequirementModeSchema,
+  issueReviewBundleModeSchema,
+  projectReviewBundlePolicySchema,
+  issueReviewBundleStatusSchema,
+  issueReviewBundleExternalLinkSchema,
+  issueReviewBundleEvidenceSchema,
+  upsertIssueReviewBundleSchema,
+  submitIssueReviewBundleSchema,
+  resolveIssueReviewBundleSchema,
+  type ReviewBundleRequirementMode,
+  type IssueReviewBundleMode,
+  type ProjectReviewBundlePolicy,
+  type IssueReviewBundleStatus,
+  type IssueReviewBundleExternalLink,
+  type IssueReviewBundleEvidence,
+  type UpsertIssueReviewBundle,
+  type SubmitIssueReviewBundle,
+  type ResolveIssueReviewBundle,
+} from "./review-bundle.js";
 
 export {
   createGoalSchema,

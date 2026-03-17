@@ -2,6 +2,7 @@ import type { IssuePriority, IssueStatus } from "../constants.js";
 import type { Goal } from "./goal.js";
 import type { Project, ProjectWorkspace } from "./project.js";
 import type { IssueExecutionWorkspaceSettings } from "./workspace-runtime.js";
+import type { IssueReviewBundleMode } from "./review-bundle.js";
 
 export interface IssueAncestorProject {
   id: string;
@@ -75,6 +76,7 @@ export interface Issue {
   billingCode: string | null;
   assigneeAdapterOverrides: IssueAssigneeAdapterOverrides | null;
   executionWorkspaceSettings: IssueExecutionWorkspaceSettings | null;
+  reviewBundleMode?: IssueReviewBundleMode;
   startedAt: Date | null;
   completedAt: Date | null;
   cancelledAt: Date | null;
