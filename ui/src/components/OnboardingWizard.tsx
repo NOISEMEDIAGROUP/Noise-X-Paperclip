@@ -61,6 +61,7 @@ type AdapterType =
   | "opencode_local"
   | "pi_local"
   | "cursor"
+  | "hermes_local"
   | "process"
   | "http"
   | "openclaw_gateway";
@@ -178,7 +179,8 @@ export function OnboardingWizard() {
     adapterType === "codex_local" ||
     adapterType === "gemini_local" ||
     adapterType === "opencode_local" ||
-    adapterType === "cursor";
+    adapterType === "cursor" ||
+    adapterType === "hermes_local";
   const effectiveAdapterCommand =
     command.trim() ||
     (adapterType === "codex_local"
@@ -189,6 +191,8 @@ export function OnboardingWizard() {
       ? "agent"
       : adapterType === "opencode_local"
       ? "opencode"
+      : adapterType === "hermes_local"
+      ? "hermes"
       : "claude");
 
   useEffect(() => {
@@ -781,6 +785,12 @@ export function OnboardingWizard() {
                             desc: "Local Cursor agent"
                           },
                           {
+                            value: "hermes_local" as const,
+                            label: "Hermes Agent",
+                            icon: Terminal,
+                            desc: "Local Hermes agent"
+                          },
+                          {
                             value: "openclaw_gateway" as const,
                             label: "OpenClaw Gateway",
                             icon: Bot,
@@ -841,7 +851,8 @@ export function OnboardingWizard() {
                     adapterType === "gemini_local" ||
                     adapterType === "opencode_local" ||
                     adapterType === "pi_local" ||
-                    adapterType === "cursor") && (
+                    adapterType === "cursor" ||
+                    adapterType === "hermes_local") && (
                     <div className="space-y-3">
                       <div>
                         <div className="flex items-center gap-1.5 mb-1">
