@@ -25,13 +25,7 @@ Full format spec, real example, and token/value breakdown at `references/codebas
 
 ## On-Demand Summarization
 
-Trigger phrases that produce architectural maps mid-session:
-- "give me a map of this repo"
-- "summarize the [module] module"
-- "show me the codebase architecture"
-- "map all files that touch [concept]"
-
-Prompt patterns and consistent output formats at `references/on-demand-summarization.md`.
+Trigger phrases and prompt patterns at `references/on-demand-summarization.md`.
 
 ## Stale Detection
 
