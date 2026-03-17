@@ -6,9 +6,7 @@ description: Automate the full git workflow in Claude Code — worktrees for par
 
 # Git Workflow Automation
 
-Git + multi-agent Claude Code = a race condition waiting to happen. Two agents, one working tree, shared refs — someone hits `fatal: unable to lock ref` and everything stops.
-
-The fix is two commands: `git worktree add` and `gh pr create`. The pattern is a loop: branch → implement → commit → PR → merge → cleanup. No human touching a terminal.
+Git + multi-agent Claude Code = a race condition. Two agents, one working tree, shared refs — `fatal: unable to lock ref`. The fix: `git worktree add` + `gh pr create`, looping branch → commit → PR → merge → cleanup. No human needed.
 
 ## Quick Entry
 
