@@ -207,6 +207,7 @@ describe("PATCH /issues/:id task control", () => {
       assigneeAgentId: "00000000-0000-4000-8000-000000000002",
     });
     expect(mockHeartbeatService.cancelRun).toHaveBeenCalledWith("run-1");
+    expect(mockAccessService.hasPermission).toHaveBeenCalledTimes(1);
   });
 
   it("preserves legacy canCreateAgents-based task control for ancestor managers", async () => {
