@@ -65,7 +65,7 @@ automatically pick up the new settings.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | model | string | auto | Model to use (provider/model format). Set to "auto" to use the current Hermes default |
-| provider | string | (auto) | API provider: auto, openrouter, nous, openai-codex, zai, kimi-coding, minimax, custom |
+| provider | string | (auto) | API provider: auto, openrouter, nous, anthropic, openai-codex, zai, kimi-coding, minimax, custom |
 | timeoutSec | number | 300 | Execution timeout in seconds |
 | graceSec | number | 10 | Grace period after SIGTERM before SIGKILL |
 
@@ -87,11 +87,24 @@ automatically pick up the new settings.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| hermesCommand | string | hermes | Path to hermes CLI binary |
+| hermesCommand | string | hermes | CLI command or wrapper script name (e.g. hermes-qwen) |
 | verbose | boolean | false | Enable verbose output |
 | extraArgs | string[] | [] | Additional CLI arguments |
 | env | object | {} | Extra environment variables |
 | promptTemplate | string | (default) | Custom prompt template with {{variable}} placeholders |
+
+## Running Multiple Instances
+
+To run multiple Hermes agents with different models (e.g. cloud Grok + local Qwen):
+
+1. Create a derivative directory with its own config, state, and personality
+2. Symlink shared runtime: \`bin/\`, \`hermes-agent/\`, \`node/\` → \`~/.hermes/\`
+3. Copy (not symlink) \`state.db\` — SQLite needs exclusive file locks
+4. Create a wrapper script that sets \`HERMES_HOME\` and execs \`hermes\`
+5. Set \`hermesCommand\` to the wrapper name (e.g. \`hermes-qwen\`)
+
+The adapter reads \`HERMES_HOME\` from the wrapper script and auto-detects
+model/provider from the correct \`config.yaml\`.
 
 ## Available Template Variables
 

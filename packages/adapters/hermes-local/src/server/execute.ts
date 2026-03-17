@@ -120,8 +120,14 @@ interface DetectedHermesConfig {
 
 /**
  * Resolve the Hermes home directory for a given CLI command.
- * If the command is a wrapper script (e.g. hermes-qwen) that sets HERMES_HOME,
- * return that path. Otherwise fall back to ~/.hermes.
+ *
+ * Hermes derivatives (e.g. hermes-qwen, hermes-grok) use wrapper scripts
+ * that set HERMES_HOME to an instance-specific directory. Each derivative
+ * has its own config, state, memories, and personality but symlinks to the
+ * shared runtime (hermes-agent/, bin/, node/).
+ *
+ * Searches well-known bin directories and $PATH for the wrapper script,
+ * then extracts HERMES_HOME from it. Falls back to ~/.hermes.
  */
 function detectHermesHome(hermesCmd?: string): string {
   try {
