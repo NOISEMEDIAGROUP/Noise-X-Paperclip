@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { Db } from "@paperclipai/db";
+import { z } from "zod";
 import {
   companyPortabilityExportSchema,
   companyPortabilityImportSchema,
@@ -9,6 +10,33 @@ import {
   DEFAULT_OFFICE_CONFIG,
 } from "@paperclipai/shared";
 import type { OfficeConfig } from "@paperclipai/shared";
+
+const officeConfigSchema = z.object({
+  areas: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    icon: z.string(),
+    x: z.number(),
+    y: z.number(),
+    width: z.number().positive(),
+    height: z.number().positive(),
+    color: z.string(),
+    description: z.string().optional(),
+  })),
+  movementRules: z.array(z.object({
+    id: z.string(),
+    priority: z.number(),
+    condition: z.object({
+      status: z.array(z.string()).optional(),
+      role: z.array(z.string()).optional(),
+      adapterType: z.array(z.string()).optional(),
+    }),
+    targetAreaId: z.string(),
+  })),
+  defaultAreaId: z.string(),
+  canvasWidth: z.number().positive(),
+  canvasHeight: z.number().positive(),
+});
 import { forbidden } from "../errors.js";
 import { validate } from "../middleware/validate.js";
 import { accessService, companyPortabilityService, companyService, logActivity } from "../services/index.js";
@@ -199,8 +227,13 @@ export function companyRoutes(db: Db) {
     assertBoard(req);
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
+    const parsed = officeConfigSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(422).json({ error: "Invalid office config", details: parsed.error.format() });
+      return;
+    }
     const company = await svc.update(companyId, {
-      officeConfig: req.body as Record<string, unknown>,
+      officeConfig: parsed.data as unknown as Record<string, unknown>,
     });
     if (!company) {
       res.status(404).json({ error: "Company not found" });

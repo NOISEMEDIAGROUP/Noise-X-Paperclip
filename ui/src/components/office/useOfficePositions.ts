@@ -23,12 +23,16 @@ export function useOfficePositions(
       const index = areaAgentCounts.get(area.id) ?? 0;
       areaAgentCounts.set(area.id, index + 1);
 
-      // Grid layout within area with padding
+      // Grid layout within area with padding, clamped to area bounds
       const padding = 20;
       const avatarSize = 56;
       const cols = Math.max(1, Math.floor((area.width - padding * 2) / (avatarSize + 12)));
-      const row = Math.floor(index / cols);
-      const col = index % cols;
+      const maxRows = Math.max(1, Math.floor((area.height - 36 - padding * 2) / (avatarSize + 16)));
+      const maxVisible = cols * maxRows;
+      // Wrap positions to stay within area bounds
+      const wrappedIndex = index % maxVisible;
+      const row = Math.floor(wrappedIndex / cols);
+      const col = wrappedIndex % cols;
 
       // Slight hash-based offset for organic feel
       const hash = simpleHash(agent.id);

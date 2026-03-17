@@ -77,8 +77,18 @@ export function Office() {
     return () => { window.removeEventListener("click", close); window.removeEventListener("keydown", onKey); };
   }, [contextMenu]);
 
-  // Center the office — retry until container has size
+  // Re-fit when config dimensions change
+  const canvasDimsRef = useRef(`${config.canvasWidth}x${config.canvasHeight}`);
   const hasInitialized = useRef(false);
+  useEffect(() => {
+    const key = `${config.canvasWidth}x${config.canvasHeight}`;
+    if (canvasDimsRef.current !== key) {
+      canvasDimsRef.current = key;
+      hasInitialized.current = false;
+    }
+  }, [config.canvasWidth, config.canvasHeight]);
+
+  // Center the office — retry until container has size
   useEffect(() => {
     if (hasInitialized.current) return;
     const container = containerRef.current;
@@ -175,7 +185,7 @@ export function Office() {
 
   return (
     <>
-      <div className={`flex gap-0 h-[calc(100vh-4rem)] ${selectedAgent ? "" : ""}`}>
+      <div className="flex gap-0 h-[calc(100vh-4rem)]">
       <div
         ref={containerRef}
         className={`flex-1 min-w-0 overflow-hidden relative bg-muted/20 border border-border rounded-lg ${selectedAgent ? "rounded-r-none border-r-0" : ""}`}

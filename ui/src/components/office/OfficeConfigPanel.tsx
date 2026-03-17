@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { OfficeConfig, OfficeArea, OfficeMovementRule } from "@paperclipai/shared";
 import { DEFAULT_OFFICE_CONFIG, AGENT_STATUSES, AGENT_ROLES } from "@paperclipai/shared";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -15,6 +15,11 @@ interface OfficeConfigPanelProps {
 
 export function OfficeConfigPanel({ open, onOpenChange, config, onSave }: OfficeConfigPanelProps) {
   const [draft, setDraft] = useState<OfficeConfig>(config);
+
+  // Reset draft when panel opens (so cancelled edits don't persist)
+  useEffect(() => {
+    if (open) setDraft(config);
+  }, [open, config]);
 
   const updateArea = (id: string, patch: Partial<OfficeArea>) => {
     setDraft((prev) => ({
