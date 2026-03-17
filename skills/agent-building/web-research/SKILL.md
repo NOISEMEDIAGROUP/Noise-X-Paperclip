@@ -93,9 +93,7 @@ For large tasks, spawn a subagent with restricted tools (WebSearch + WebFetch on
 |---|---|
 | "One source is enough for this" | One source is never enough for a factual claim. Medium confidence = 2 sources. High = 3. |
 | "I'll verify later" | You won't. The source-log hook forces verification at fetch time, not later. |
-| "Claude's training data is current enough" | Training data has a cutoff. Anything recent = hallucinated confidence. |
 | "The source cited sounds right" | "Sounds right" is exactly how hallucinated URLs end up in reports. Check source-log.md. |
-| "This is just exploratory, no report needed" | Exploratory research without a report becomes hallucinated memory next session. |
 | "WebSearch results are good enough" | WebSearch returns snippets. You need WebFetch to verify the actual page content. |
 
 ---
