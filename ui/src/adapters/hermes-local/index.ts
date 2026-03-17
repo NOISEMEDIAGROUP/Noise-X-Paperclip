@@ -4,21 +4,15 @@ import { parseHermesStdoutLine, buildHermesConfig as upstreamBuildHermesConfig }
 import { HermesLocalConfigFields } from "./config-fields";
 
 /**
- * Override the upstream buildHermesConfig to support "hermes default" model behavior.
- * When model is empty/falsy, we intentionally omit it from the config so the
- * server-side adapter can skip passing -m to hermes (letting hermes use its
- * own ~/.hermes/config.yaml default).
- *
- * NOTE: This requires the hermes-paperclip-adapter server-side execute logic
- * to skip the -m flag when config.model is undefined. Until that package is
- * updated, empty model will fall back to the adapter's hardcoded DEFAULT_MODEL.
+ * Wrap upstream buildHermesConfig to handle auto-detect and provider mapping.
+ * When model is empty/falsy, omit it so the server adapter uses auto-detection
+ * from ~/.hermes/config.yaml instead of falling back to DEFAULT_MODEL.
  */
 function buildHermesConfig(values: CreateConfigValues): Record<string, unknown> {
   const config = upstreamBuildHermesConfig(values);
-  // If model was empty in the UI form, the upstream set it to its DEFAULT_MODEL.
-  // We detect this and remove it so the server adapter knows to skip -m flag.
-  const modelWasExplicitlySet = values.model && values.model.trim().length > 0;
-  if (!modelWasExplicitlySet) {
+  // upstreamBuildHermesConfig guards against empty model already — only delete
+  // if the upstream still set a model despite no explicit user selection.
+  if (!values.model || values.model.trim().length === 0) {
     delete config.model;
   }
   // Handle provider from `args` field (CreateConfigValues convention)

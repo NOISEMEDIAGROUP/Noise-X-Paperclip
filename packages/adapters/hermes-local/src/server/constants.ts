@@ -32,6 +32,7 @@ export const VALID_PROVIDERS = [
   "auto",
   "openrouter",
   "nous",
+  "anthropic",
   "openai-codex",
   "zai",
   "kimi-coding",

@@ -39,6 +39,7 @@ import {
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
+import { execFileSync } from "node:child_process";
 
 // ---------------------------------------------------------------------------
 // Config helpers
@@ -125,11 +126,26 @@ interface DetectedHermesConfig {
 function detectHermesHome(hermesCmd?: string): string {
   try {
     if (hermesCmd && hermesCmd !== HERMES_CLI) {
+      // Build search paths: well-known locations + resolved $PATH location
       const cmdPaths = [
         resolve("/usr/local/bin", hermesCmd),
         resolve(homedir(), ".local", "bin", hermesCmd),
         resolve(homedir(), "bin", hermesCmd),
       ];
+
+      // Also resolve from $PATH via `which`
+      try {
+        const whichResult = execFileSync("which", [hermesCmd], {
+          encoding: "utf8",
+          timeout: 2000,
+        }).trim();
+        if (whichResult && !cmdPaths.includes(whichResult)) {
+          cmdPaths.push(whichResult);
+        }
+      } catch {
+        // `which` failed — command not in PATH, continue with known paths
+      }
+
       for (const cmdPath of cmdPaths) {
         if (existsSync(cmdPath)) {
           const script = readFileSync(cmdPath, "utf8");
@@ -137,7 +153,7 @@ function detectHermesHome(hermesCmd?: string): string {
           if (match?.[1]) {
             return match[1]
               .replace(/\$HOME/g, homedir())
-              .replace(/~/, homedir());
+              .replace(/~/g, homedir());
           }
         }
       }

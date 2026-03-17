@@ -10,12 +10,16 @@ import { HERMES_CLI } from "./constants.js";
 
 /**
  * Test that Hermes CLI is available and can be invoked.
+ * Uses the configured hermesCommand if set, otherwise falls back to default.
  */
 export async function testEnvironment(ctx: AdapterEnvironmentTestContext): Promise<AdapterEnvironmentTestResult> {
   const checks: AdapterEnvironmentCheck[] = [];
-  
+  const hermesCmd = typeof ctx.config?.hermesCommand === "string" && ctx.config.hermesCommand
+    ? ctx.config.hermesCommand
+    : HERMES_CLI;
+
   const versionCheck = await new Promise<AdapterEnvironmentCheck>((resolve) => {
-    const proc = spawn(HERMES_CLI, ["--version"], {
+    const proc = spawn(hermesCmd, ["--version"], {
       timeout: 5000,
     });
 
