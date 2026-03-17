@@ -781,7 +781,28 @@ export function issueService(db: Db) {
           values.cancelledAt = new Date();
         }
 
-        const [issue] = await tx.insert(issues).values(values).returning();
+        let issue: typeof issues.$inferSelect;
+        try {
+          [issue] = await tx.insert(issues).values(values).returning();
+        } catch (err) {
+          // Handle duplicate key from concurrent issue creation (#1078).
+          // Resync counter from the actual max issue_number and retry once.
+          const message = err instanceof Error ? err.message : String(err);
+          if (message.includes("duplicate key") || message.includes("unique constraint")) {
+            const [resynced] = await tx
+              .update(companies)
+              .set({
+                issueCounter: sql`GREATEST(${companies.issueCounter}, COALESCE((SELECT MAX(${issues.issueNumber}) FROM ${issues} WHERE ${issues.companyId} = ${companyId}), 0)) + 1`,
+              })
+              .where(eq(companies.id, companyId))
+              .returning({ issueCounter: companies.issueCounter, issuePrefix: companies.issuePrefix });
+            values.issueNumber = resynced.issueCounter;
+            values.identifier = `${resynced.issuePrefix}-${resynced.issueCounter}`;
+            [issue] = await tx.insert(issues).values(values).returning();
+          } else {
+            throw err;
+          }
+        }
         if (inputLabelIds) {
           await syncIssueLabels(issue.id, companyId, inputLabelIds, tx);
         }

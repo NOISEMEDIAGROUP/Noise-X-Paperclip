@@ -247,8 +247,20 @@ export async function startServer(): Promise<StartedServer> {
     | { mode: "external-postgres"; connectionString: string }
     | { mode: "embedded-postgres"; dataDir: string; port: number };
   if (config.databaseUrl) {
-    migrationSummary = await ensureMigrations(config.databaseUrl, "PostgreSQL");
-  
+    try {
+      migrationSummary = await ensureMigrations(config.databaseUrl, "PostgreSQL");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("does not exist") && message.includes("role")) {
+        throw new Error(
+          `PostgreSQL role not found. Create it first:\n` +
+          `  CREATE ROLE paperclip WITH PASSWORD 'paperclip' LOGIN CREATEDB;\n` +
+          `Or set DATABASE_URL with a valid role. Original error: ${message}`,
+        );
+      }
+      throw err;
+    }
+
     db = createDb(config.databaseUrl);
     logger.info("Using external PostgreSQL via DATABASE_URL/config");
     activeDatabaseConnectionString = config.databaseUrl;
