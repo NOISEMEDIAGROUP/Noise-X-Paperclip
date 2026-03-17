@@ -22,15 +22,19 @@ const mockSecretService = vi.hoisted(() => ({
   normalizeAdapterConfigForPersistence: vi.fn(),
 }));
 const mockLogActivity = vi.hoisted(() => vi.fn());
+const mockBudgetService = vi.hoisted(() => ({}));
+const mockWorkspaceOperationService = vi.hoisted(() => ({}));
 
 vi.mock("../services/index.js", () => ({
   agentService: () => mockAgentService,
   accessService: () => mockAccessService,
   approvalService: () => mockApprovalService,
+  budgetService: () => mockBudgetService,
   heartbeatService: () => mockHeartbeatService,
   issueApprovalService: () => mockIssueApprovalService,
   issueService: () => mockIssueService,
   secretService: () => mockSecretService,
+  workspaceOperationService: () => mockWorkspaceOperationService,
   logActivity: mockLogActivity,
 }));
 

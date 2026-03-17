@@ -22,7 +22,6 @@ import {
   approvalComments,
   approvals,
   activityLog,
-  assets,
   companySecrets,
   joinRequests,
   invites,
