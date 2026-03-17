@@ -124,8 +124,10 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
       )
     : [];
   const configuredCwd = asString(config.cwd, "");
+  const useConfiguredInsteadOfAgentHome = workspaceSource === "agent_home" && configuredCwd.length > 0;
+  const effectiveWorkspaceCwd = useConfiguredInsteadOfAgentHome ? "" : workspaceCwd;
   let cwd: string;
-  if (workspaceCwd && (workspaceSource !== "agent_home" || !configuredCwd)) {
+  if (effectiveWorkspaceCwd) {
     cwd = workspaceCwd;
   } else if (configuredCwd) {
     try {
