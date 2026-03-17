@@ -5,14 +5,7 @@ description: Use when authoring AGENTS.md files, configuring agent-specific beha
 
 # AGENTS.md for Claude Code
 
-AGENTS.md is the declarative manifest for a Claude Code agent — its identity, workflow routing, and tool access in one version-controlled file.
-
-| Component | Purpose | Lives In |
-|---|---|---|
-| CLAUDE.md | Project context, shared rules, conventions | repo root or `~/.claude/` |
-| AGENTS.md | Agent identity, role, workflow routing, tool access | `agents/[role]/AGENTS.md` |
-| Hooks | Event-driven automation | `.claude/settings.json` |
-| Skills | Reusable capabilities the agent invokes | `~/.claude/skills/` |
+AGENTS.md is the declarative manifest for a Claude Code agent — identity, routing, and tool access in one version-controlled file. **Mental model:** CLAUDE.md answers "how does this project work?" AGENTS.md answers "who am I and what do I do?"
 
 ## Quick Setup
 
@@ -21,10 +14,6 @@ AGENTS.md is the declarative manifest for a Claude Code agent — its identity, 
 3. **Declare** tool access scoped to this agent's actual role
 
 Bootstrap any agent type in under 10 minutes using the copy-paste templates in `references/06-templates.md`.
-
-## What is AGENTS.md
-
-AGENTS.md is the agent's declarative manifest — identity, routing, and permission boundaries in one file, version-controlled alongside the code. CLAUDE.md answers "how does this project work?" AGENTS.md answers "who am I and what do I do?"
 
 ## The Split Rule: CLAUDE.md vs AGENTS.md
 
