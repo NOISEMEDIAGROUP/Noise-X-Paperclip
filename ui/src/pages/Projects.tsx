@@ -10,8 +10,22 @@ import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { formatDate, projectUrl } from "../lib/utils";
+import {
+  getWorkspaceDisplayTarget,
+  getWorkspaceExecutionWarning,
+  getWorkspaceHealthLabel,
+  getWorkspaceHealthTone,
+} from "../lib/workspace-health";
+import { cn } from "../lib/utils";
 import { Button } from "@/components/ui/button";
-import { Hexagon, Plus } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { AlertCircle, Hexagon, Plus } from "lucide-react";
+
+function workspaceHealthBadgeClassName(tone: "healthy" | "warning" | "muted") {
+  if (tone === "healthy") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+  if (tone === "warning") return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  return "border-border bg-muted text-muted-foreground";
+}
 
 export function Projects() {
   const { selectedCompanyId } = useCompany();
@@ -62,7 +76,31 @@ export function Projects() {
             <EntityRow
               key={project.id}
               title={project.name}
-              subtitle={project.description ?? undefined}
+              subtitle={(
+                <div className="space-y-1">
+                  {project.description ? <p className="truncate">{project.description}</p> : null}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-mono text-[11px] text-muted-foreground/90">
+                      {getWorkspaceDisplayTarget(project.primaryWorkspace)}
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px]",
+                        workspaceHealthBadgeClassName(getWorkspaceHealthTone(project.primaryWorkspace)),
+                      )}
+                    >
+                      {getWorkspaceHealthLabel(project.primaryWorkspace)}
+                    </Badge>
+                    {getWorkspaceExecutionWarning(project.primaryWorkspace) ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 dark:text-amber-300">
+                        <AlertCircle className="h-3 w-3" />
+                        Needs attention
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              )}
               to={projectUrl(project)}
               trailing={
                 <div className="flex items-center gap-3">
