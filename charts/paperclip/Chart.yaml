@@ -1,0 +1,20 @@
+apiVersion: v2
+name: paperclip
+description: A Helm chart for deploying Paperclip — an AI agent management platform
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - paperclip
+  - ai
+  - agents
+home: https://github.com/paperclipai/paperclip
+sources:
+  - https://github.com/paperclipai/paperclip
+maintainers:
+  - name: paperclipai
+dependencies:
+  - name: postgresql
+    version: ">=16.0.0"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled

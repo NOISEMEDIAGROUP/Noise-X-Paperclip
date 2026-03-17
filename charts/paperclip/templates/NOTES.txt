@@ -1,0 +1,26 @@
+Paperclip has been deployed!
+
+1. Access the application:
+{{- if .Values.ingress.enabled }}
+  {{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+  {{- end }}
+{{- else }}
+  kubectl port-forward svc/{{ include "paperclip.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+  Then open http://localhost:{{ .Values.service.port }}
+{{- end }}
+
+{{- if not .Values.secrets.betterAuthSecret }}
+
+WARNING: secrets.betterAuthSecret is not set!
+  Authenticated mode requires a BETTER_AUTH_SECRET. Generate one with:
+    openssl rand -hex 32
+  Then set it via --set secrets.betterAuthSecret=<value> or in your values file.
+{{- end }}
+
+2. Storage mode: {{ .Values.paperclip.storage.provider }}
+{{- if and (eq .Values.paperclip.storage.provider "local_disk") .Values.persistence.enabled }}
+   Data is persisted to a {{ .Values.persistence.size }} PVC.
+{{- end }}
+
+3. Scaling: {{ if .Values.autoscaling.enabled }}HPA enabled ({{ .Values.autoscaling.minReplicas }}-{{ .Values.autoscaling.maxReplicas }} replicas){{ else }}Fixed at {{ .Values.replicaCount }} replica(s). Enable HPA with autoscaling.enabled=true{{ end }}
