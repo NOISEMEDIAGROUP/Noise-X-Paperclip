@@ -3283,7 +3283,7 @@ export function heartbeatService(db: Db) {
         .where(
           and(
             eq(heartbeatRuns.agentId, agentId),
-            inArray(heartbeatRuns.status, ["running", "cancelling"]),
+            inArray(heartbeatRuns.status, LIVE_HEARTBEAT_RUN_STATUSES as unknown as string[]),
           ),
         )
         .orderBy(desc(heartbeatRuns.startedAt))

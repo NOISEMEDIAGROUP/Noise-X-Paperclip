@@ -171,7 +171,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
         .where(
           and(
             eq(heartbeatRuns.agentId, issue.assigneeAgentId),
-            inArray(heartbeatRuns.status, ["queued", "running", "cancelling"]),
+            inArray(heartbeatRuns.status, LIVE_HEARTBEAT_RUN_STATUSES as unknown as string[]),
             sql`${heartbeatRuns.contextSnapshot} ->> 'issueId' = ${issue.id}`,
           ),
         )

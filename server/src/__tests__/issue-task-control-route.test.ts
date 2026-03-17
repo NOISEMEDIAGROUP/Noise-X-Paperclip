@@ -844,3 +844,71 @@ describe("PATCH /issues/:id task control", () => {
     );
   });
 });
+
+describe("POST /issues/:id/comments interrupt fallback", () => {
+  beforeEach(() => {
+    mockAccessService.hasPermission.mockReset().mockResolvedValue(false);
+    mockAccessService.canUser.mockReset().mockResolvedValue(false);
+    mockAgentService.getById.mockReset();
+    mockAgentService.getChainOfCommand.mockReset();
+    mockHeartbeatService.getRun.mockReset().mockResolvedValue(null);
+    mockHeartbeatService.getActiveRunForAgent.mockReset().mockResolvedValue({
+      id: "run-queued-comment",
+      companyId: "company-1",
+      agentId: "agent-subordinate",
+      status: "queued",
+      contextSnapshot: { issueId: "issue-1" },
+    });
+    mockHeartbeatService.requestRunCancellation.mockReset().mockResolvedValue({
+      runId: "run-queued-comment",
+      companyId: "company-1",
+      agentId: "agent-subordinate",
+      requestedStatus: "cancelling",
+    });
+    mockHeartbeatService.dispatchRunCancellation.mockReset().mockResolvedValue({
+      id: "run-queued-comment",
+      companyId: "company-1",
+      agentId: "agent-subordinate",
+      status: "cancelled",
+    });
+    mockHeartbeatService.cancelRun.mockReset();
+    mockHeartbeatService.wakeup.mockReset().mockResolvedValue(null);
+    mockIssueService.getById.mockReset().mockResolvedValue({
+      ...baseIssue,
+      executionRunId: null,
+    });
+    mockIssueService.getByIdentifier.mockReset().mockResolvedValue(null);
+    mockIssueService.update.mockReset();
+    mockIssueService.addComment.mockReset().mockResolvedValue({
+      id: "comment-1",
+      body: "please stop",
+    });
+    mockIssueService.findMentionedAgents.mockReset().mockResolvedValue([]);
+    mockIssueService.assertCheckoutOwner.mockReset().mockResolvedValue({});
+    mockLogActivity.mockReset().mockResolvedValue(undefined);
+    mockLogger.warn.mockReset();
+  });
+
+  it("interrupts a queued active run when comment interrupt falls back to getActiveRunForAgent", async () => {
+    const res = await request(
+      createApp({
+        type: "board",
+        userId: "user-1",
+        source: "local_implicit",
+        isInstanceAdmin: true,
+      }),
+    )
+      .post("/api/issues/issue-1/comments")
+      .send({ body: "please stop", interrupt: true });
+
+    expect(res.status).toBe(201);
+    expect(mockHeartbeatService.getActiveRunForAgent).toHaveBeenCalledWith("agent-subordinate");
+    expect(mockHeartbeatService.requestRunCancellation).toHaveBeenCalledWith(
+      "run-queued-comment",
+      expect.objectContaining({ error: "Cancelled by control plane" }),
+    );
+    expect(mockHeartbeatService.dispatchRunCancellation).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: "run-queued-comment", requestedStatus: "cancelling" }),
+    );
+  });
+});
