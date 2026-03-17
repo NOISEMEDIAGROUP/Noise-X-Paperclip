@@ -320,6 +320,35 @@ describe("PATCH /issues/:id task control", () => {
     );
   });
 
+  it("still returns 403 when denial logging fails for a missing-permission rejection", async () => {
+    mockAgentService.getById.mockResolvedValue({
+      id: "agent-manager",
+      companyId: "company-1",
+      role: "manager",
+      permissions: { canCreateAgents: false, canManageTasks: false },
+    });
+    mockLogActivity.mockRejectedValueOnce(new Error("activity db unavailable"));
+
+    const res = await request(
+      createApp({
+        type: "agent",
+        agentId: "agent-manager",
+        companyId: "company-1",
+        runId: "run-manager",
+        source: "agent_key",
+      }),
+    )
+      .patch("/api/issues/issue-1")
+      .send({ assigneeAgentId: "00000000-0000-4000-8000-000000000002" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe("Missing permission: tasks:assign");
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ issueId: "issue-1", logErr: expect.any(Error) }),
+      "failed to log task control denial",
+    );
+  });
+
   it("rejects reassignment attempts outside the acting agent's chain of command", async () => {
     mockAgentService.getById.mockResolvedValue({
       id: "agent-manager",
@@ -356,6 +385,36 @@ describe("PATCH /issues/:id task control", () => {
           requestedStatus: "cancelled",
         }),
       }),
+    );
+  });
+
+  it("still returns 403 when denial logging fails for an out-of-chain rejection", async () => {
+    mockAgentService.getById.mockResolvedValue({
+      id: "agent-manager",
+      companyId: "company-1",
+      role: "manager",
+      permissions: { canCreateAgents: false, canManageTasks: true },
+    });
+    mockAgentService.getChainOfCommand.mockResolvedValue([{ id: "agent-ceo", name: "CEO", role: "ceo", title: null }]);
+    mockLogActivity.mockRejectedValueOnce(new Error("activity db unavailable"));
+
+    const res = await request(
+      createApp({
+        type: "agent",
+        agentId: "agent-manager",
+        companyId: "company-1",
+        runId: "run-manager",
+        source: "agent_key",
+      }),
+    )
+      .patch("/api/issues/issue-1")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe("Only an ancestor manager can cancel, complete, or reassign another agent's issue");
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ issueId: "issue-1", logErr: expect.any(Error) }),
+      "failed to log task control denial",
     );
   });
 
@@ -602,5 +661,60 @@ describe("PATCH /issues/:id task control", () => {
       expect.anything(),
       expect.objectContaining({ action: "issue.task_control_denied" }),
     );
+  });
+});
+
+describe("POST /issues/:id/comments interrupt fallback", () => {
+  beforeEach(() => {
+    mockAccessService.hasPermission.mockReset().mockResolvedValue(false);
+    mockAccessService.canUser.mockReset().mockResolvedValue(false);
+    mockAgentService.getById.mockReset();
+    mockAgentService.getChainOfCommand.mockReset();
+    mockHeartbeatService.getRun.mockReset().mockResolvedValue(null);
+    mockHeartbeatService.getActiveRunForAgent.mockReset().mockResolvedValue({
+      id: "run-queued-comment",
+      companyId: "company-1",
+      agentId: "agent-subordinate",
+      status: "queued",
+      contextSnapshot: { issueId: "issue-1" },
+    });
+    mockHeartbeatService.cancelRun.mockReset().mockResolvedValue({
+      id: "run-queued-comment",
+      companyId: "company-1",
+      agentId: "agent-subordinate",
+      status: "cancelled",
+    });
+    mockHeartbeatService.wakeup.mockReset().mockResolvedValue(null);
+    mockIssueService.getById.mockReset().mockResolvedValue({
+      ...baseIssue,
+      executionRunId: null,
+    });
+    mockIssueService.getByIdentifier.mockReset().mockResolvedValue(null);
+    mockIssueService.update.mockReset();
+    mockIssueService.addComment.mockReset().mockResolvedValue({
+      id: "comment-1",
+      body: "please stop",
+    });
+    mockIssueService.findMentionedAgents.mockReset().mockResolvedValue([]);
+    mockIssueService.assertCheckoutOwner.mockReset().mockResolvedValue({});
+    mockLogActivity.mockReset().mockResolvedValue(undefined);
+    mockLogger.warn.mockReset();
+  });
+
+  it("interrupts a queued active run when comment interrupt falls back to getActiveRunForAgent", async () => {
+    const res = await request(
+      createApp({
+        type: "board",
+        userId: "user-1",
+        source: "local_implicit",
+        isInstanceAdmin: true,
+      }),
+    )
+      .post("/api/issues/issue-1/comments")
+      .send({ body: "please stop", interrupt: true });
+
+    expect(res.status).toBe(201);
+    expect(mockHeartbeatService.getActiveRunForAgent).toHaveBeenCalledWith("agent-subordinate");
+    expect(mockHeartbeatService.cancelRun).toHaveBeenCalledWith("run-queued-comment");
   });
 });

@@ -3168,10 +3168,10 @@ export function heartbeatService(db: Db) {
         .where(
           and(
             eq(heartbeatRuns.agentId, agentId),
-            eq(heartbeatRuns.status, "running"),
+            inArray(heartbeatRuns.status, ["queued", "running"]),
           ),
         )
-        .orderBy(desc(heartbeatRuns.startedAt))
+        .orderBy(desc(heartbeatRuns.startedAt), desc(heartbeatRuns.createdAt))
         .limit(1);
       return run ?? null;
     },

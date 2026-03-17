@@ -177,6 +177,25 @@ export function issueRoutes(db: Db, storage: StorageService) {
     });
   }
 
+  async function logDeniedTaskControlAttemptSafely(
+    req: Request,
+    issue: {
+      id: string;
+      companyId: string;
+      assigneeAgentId: string | null;
+      assigneeUserId: string | null;
+      status: string;
+      identifier: string | null;
+    },
+    details: Record<string, unknown>,
+  ) {
+    try {
+      await logDeniedTaskControlAttempt(req, issue, details);
+    } catch (logErr) {
+      logger.warn({ logErr, issueId: issue.id }, "failed to log task control denial");
+    }
+  }
+
   function isManagedTerminalStatusTransition(requestedStatus: string | undefined, currentStatus: string) {
     return (
       (requestedStatus === "cancelled" || requestedStatus === "done") &&
@@ -225,7 +244,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       (allowedByGrant || canManageTasksLegacy(actorAgent));
 
     if (!hasTaskManagementPermission) {
-      await logDeniedTaskControlAttempt(req, issue, {
+      await logDeniedTaskControlAttemptSafely(req, issue, {
         source: "issue.update",
         reason: "missing_permission",
         managedAgentId,
@@ -238,7 +257,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
 
     const chainOfCommand = await agentsSvc.getChainOfCommand(managedAgentId);
     if (!chainOfCommand.some((manager) => manager.id === actorAgentId)) {
-      await logDeniedTaskControlAttempt(req, issue, {
+      await logDeniedTaskControlAttemptSafely(req, issue, {
         source: "issue.update",
         reason: "not_in_chain_of_command",
         managedAgentId,
@@ -1313,7 +1332,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
         : null;
 
       if (
-        (!runToInterrupt || runToInterrupt.status !== "running") &&
+        (!runToInterrupt || (runToInterrupt.status !== "running" && runToInterrupt.status !== "queued")) &&
         currentIssue.assigneeAgentId
       ) {
         const activeRun = await heartbeat.getActiveRunForAgent(currentIssue.assigneeAgentId);
@@ -1324,12 +1343,16 @@ export function issueRoutes(db: Db, storage: StorageService) {
             typeof (activeRun.contextSnapshot as Record<string, unknown>).issueId === "string"
             ? ((activeRun.contextSnapshot as Record<string, unknown>).issueId as string)
             : null;
-        if (activeRun && activeRun.status === "running" && activeIssueId === currentIssue.id) {
+        if (
+          activeRun &&
+          (activeRun.status === "running" || activeRun.status === "queued") &&
+          activeIssueId === currentIssue.id
+        ) {
           runToInterrupt = activeRun;
         }
       }
 
-      if (runToInterrupt && runToInterrupt.status === "running") {
+      if (runToInterrupt && (runToInterrupt.status === "running" || runToInterrupt.status === "queued")) {
         const cancelled = await heartbeat.cancelRun(runToInterrupt.id);
         if (cancelled) {
           interruptedRunId = cancelled.id;
