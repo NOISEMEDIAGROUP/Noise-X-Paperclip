@@ -375,6 +375,14 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
     removeWorkspace.mutate(workspace.id);
   };
 
+  const setPrimaryWorkspace = (workspace: Project["workspaces"][number]) => {
+    if (workspace.isPrimary) return;
+    updateWorkspace.mutate({
+      workspaceId: workspace.id,
+      data: { isPrimary: true },
+    });
+  };
+
   return (
     <div>
       <div className="space-y-1 pb-4">
@@ -552,6 +560,24 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
                         <Badge variant="outline" className="text-[10px]">
                           GitHub linked
                         </Badge>
+                      ) : null}
+                      {!workspace.isPrimary ? (
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          className="ml-auto h-5 px-1.5 text-[10px]"
+                          disabled={updateWorkspace.isPending}
+                          onClick={() => setPrimaryWorkspace(workspace)}
+                        >
+                          {updateWorkspace.isPending ? (
+                            <>
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              Saving
+                            </>
+                          ) : (
+                            "Make primary"
+                          )}
+                        </Button>
                       ) : null}
                     </div>
                     {workspace.cwd && workspace.cwd !== REPO_ONLY_CWD_SENTINEL ? (
