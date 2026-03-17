@@ -35,9 +35,7 @@ How to write patterns that fire reliably → `references/03-workflow-routing.md`
 
 ## Tool Access Design
 
-Scope tools to the agent's actual role. A researcher doesn't need deploy permissions. A reviewer shouldn't write to production.
-
-**The principle:** start with nothing. Add only what the role explicitly requires.
+Scope tools to the agent's actual role — start with nothing, add only what the role explicitly requires. A researcher doesn't need deploy permissions. A reviewer shouldn't write to production.
 
 Tool scoping patterns by agent type → `references/04-tool-access.md`
 
