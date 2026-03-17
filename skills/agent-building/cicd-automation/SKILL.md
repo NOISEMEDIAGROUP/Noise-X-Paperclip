@@ -107,8 +107,6 @@ Exits non-zero if any check fails — wire as a required merge step.
 
 ## CLAUDE.md Configuration
 
-Add to project CLAUDE.md:
-
 ```
 ## Quality Gates (NON-NEGOTIABLE)
 - Never run `git commit` directly — the Stop hook runs tests first. If tests fail, fix them.
