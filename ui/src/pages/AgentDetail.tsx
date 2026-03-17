@@ -28,6 +28,7 @@ import { ScrollToBottom } from "../components/ScrollToBottom";
 import { formatCents, formatDate, relativeTime, formatTokens } from "../lib/utils";
 import { cn } from "../lib/utils";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/tabs";
 import {
   Popover,
@@ -54,6 +55,7 @@ import {
   ChevronRight,
   ChevronDown,
   ArrowLeft,
+  AlertCircle,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { AgentIcon, AgentIconPicker } from "../components/AgentIconPicker";
@@ -226,6 +228,17 @@ function asNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) : [];
+}
+
+function workspaceSourceLabel(value: string | null) {
+  if (value === "project_primary") return "Project workspace";
+  if (value === "task_session") return "Saved session";
+  if (value === "agent_home") return "Agent home fallback";
+  return "Execution workspace";
 }
 
 export function AgentDetail() {
@@ -1403,6 +1416,16 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: Heartb
   const sessionChanged = run.sessionIdBefore && run.sessionIdAfter && run.sessionIdBefore !== run.sessionIdAfter;
   const sessionId = run.sessionIdAfter || run.sessionIdBefore;
   const hasNonZeroExit = run.exitCode !== null && run.exitCode !== 0;
+  const workspaceSnapshot = asRecord(asRecord(run.contextSnapshot)?.paperclipWorkspace);
+  const workspaceSource = asNonEmptyString(workspaceSnapshot?.source);
+  const workspaceMode = asNonEmptyString(workspaceSnapshot?.mode);
+  const workspaceStrategy = asNonEmptyString(workspaceSnapshot?.strategy);
+  const workspaceCwd = asNonEmptyString(workspaceSnapshot?.cwd);
+  const workspaceWorktreePath = asNonEmptyString(workspaceSnapshot?.worktreePath);
+  const workspaceRepoUrl = asNonEmptyString(workspaceSnapshot?.repoUrl);
+  const workspaceBranchName = asNonEmptyString(workspaceSnapshot?.branchName);
+  const workspaceWarnings = asStringArray(workspaceSnapshot?.warnings);
+  const workspaceDisplayTarget = workspaceWorktreePath ?? workspaceCwd ?? workspaceRepoUrl;
 
   return (
     <div className="space-y-4 min-w-0">
@@ -1619,6 +1642,50 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: Heartb
           </div>
         )}
       </div>
+
+      {workspaceSnapshot && (
+        <div className="border border-border rounded-lg p-4 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Execution workspace</span>
+            <Badge variant="outline" className="text-[10px]">
+              {workspaceSourceLabel(workspaceSource)}
+            </Badge>
+            {workspaceMode === "isolated" ? (
+              <Badge variant="outline" className="text-[10px]">
+                Isolated
+              </Badge>
+            ) : null}
+            {workspaceStrategy && workspaceStrategy !== "project_primary" ? (
+              <Badge variant="outline" className="text-[10px]">
+                {workspaceStrategy}
+              </Badge>
+            ) : null}
+          </div>
+          {workspaceDisplayTarget ? (
+            <div className="font-mono text-xs break-all">{workspaceDisplayTarget}</div>
+          ) : (
+            <div className="text-xs text-muted-foreground">No execution workspace target recorded for this run.</div>
+          )}
+          {workspaceBranchName ? (
+            <div className="text-xs text-muted-foreground">
+              Branch: <span className="font-mono">{workspaceBranchName}</span>
+            </div>
+          ) : null}
+          {workspaceWarnings.length > 0 ? (
+            <div className="space-y-2">
+              {workspaceWarnings.map((warning, index) => (
+                <div
+                  key={`${warning}-${index}`}
+                  className="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-2 py-1.5 text-[11px] text-amber-800 dark:text-amber-200"
+                >
+                  <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+                  <span>{warning}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {/* Issues touched by this run */}
       {touchedIssues && touchedIssues.length > 0 && (
