@@ -72,17 +72,3 @@ Four ready-to-copy templates (Researcher, Builder, Reviewer, Orchestrator) → `
 | "This template is too much structure for a simple agent" | Simple agents still need identity blocks. Undefined behavior is agent drift. Structure is what keeps "simple" simple. |
 | "I already have CLAUDE.md, that's enough" | CLAUDE.md can't express per-agent identity or least-privilege access. Works until you have 3+ agents with conflicting rules. |
 
----
-
-## Reference Index
-
-| File | Contents |
-|------|----------|
-| `references/01-split-rule.md` | Decision table: 20 examples of CLAUDE.md vs AGENTS.md |
-| `references/02-core-structure.md` | Full annotated AGENTS.md template with identity block |
-| `references/03-workflow-routing.md` | Routing table deep dive, 5 trigger types, reliable patterns |
-| `references/04-tool-access.md` | Tool scoping by agent role, least privilege, permission anti-patterns |
-| `references/05-composability.md` | Skills invocation, agent coordination, orchestrator composition |
-| `references/06-templates.md` | 4 ready-to-copy templates: researcher, builder, reviewer, orchestrator |
-| `references/test-cases.md` | Test scenarios (trigger + no-fire + output) |
-| `references/test-log.md` | Execution results by iteration |
