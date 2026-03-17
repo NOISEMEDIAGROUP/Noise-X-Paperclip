@@ -65,7 +65,7 @@ function parseJsonOrFile(input: string | undefined): Record<string, unknown> | u
 function parseBudgetCents(budget: string | undefined): number | undefined {
   if (!budget) return undefined;
   const cents = Math.round(parseFloat(budget) * 100);
-  if (isNaN(cents) || cents < 0) {
+  if (isNaN(cents) || cents <= 0) {
     throw new Error("Budget must be a positive number (in dollars)");
   }
   return cents;
@@ -280,14 +280,17 @@ export function registerAgentCommands(program: Command): void {
           const ctx = resolveCommandContext(opts);
           
           // First get the agent to show its name in the confirmation
-          const agent = await ctx.api.get<Agent>(`/api/agents/${agentId}`);
+          const existingAgent = await ctx.api.get<Agent>(`/api/agents/${agentId}`);
           
-          if (!agent) {
+          if (!existingAgent) {
             throw new Error(`Agent not found: ${agentId}`);
           }
           
           if (!opts.yes) {
-            const confirmed = await confirmDelete(agent.name);
+            if (ctx.json) {
+              throw new Error("Pass --yes to confirm deletion in non-interactive (--json) mode.");
+            }
+            const confirmed = await confirmDelete(existingAgent.name);
             if (!confirmed) {
               console.log("Deletion cancelled.");
               return;
@@ -297,9 +300,9 @@ export function registerAgentCommands(program: Command): void {
           await ctx.api.delete(`/api/agents/${agentId}`);
           
           if (ctx.json) {
-            printOutput({ ok: true, deleted: { id: agent.id, name: agent.name } }, { json: true });
+            printOutput({ ok: true, deleted: { id: existingAgent.id, name: existingAgent.name } }, { json: true });
           } else {
-            console.log(`Agent "${agent.name}" (${agent.id}) deleted successfully.`);
+            console.log(`Agent "${existingAgent.name}" (${existingAgent.id}) deleted successfully.`);
           }
         } catch (err) {
           handleCommandError(err);
