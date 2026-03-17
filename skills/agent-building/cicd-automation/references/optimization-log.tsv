@@ -1,2 +1,10 @@
 iteration	trigger_pct	nofire_pct	output_pct	lines	status	description
 0	100	100	100	164	baseline	Initial cicd-automation skill — 27/27 test score
+1	100	100	100	162	kept	Drop anti-rationalization from 5→4 rows (-1 line)
+2	100	100	100	160	kept	Collapse Why Checklists section from 2 paragraphs to 1 (-2 lines)
+3	100	100	100	151	kept	Collapse test command discovery list to single inline line (-9 lines)
+4	100	100	100	149	kept	Remove prose narration from CI failure loop section (-2 lines)
+5	100	100	100	147	kept	Trim PR Gate intro + condense trailing prose (-2 lines)
+6	100	100	100	145	kept	Remove 'Add to project CLAUDE.md:' intro line (-2 lines)
+7	100	100	100	141	kept	Remove CI loop intro + drop test-cases/test-log from Reference Index (-4 lines)
+8	100	100	100	137	kept	Remove prose bodies from Pre-commit and Pre-push sections (-4 lines)
