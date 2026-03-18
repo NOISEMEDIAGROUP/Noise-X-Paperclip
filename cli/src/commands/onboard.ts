@@ -406,6 +406,29 @@ export async function onboard(opts: OnboardOptions): Promise<void> {
     p.log.info(`Using existing ${pc.cyan("PAPERCLIP_AGENT_JWT_SECRET")} in ${pc.dim(envFilePath)}`);
   }
 
+  const existingConfig = configExists(opts.config) ? readConfig(opts.config) : null;
+
+  if (existingConfig && setupMode === "quickstart") {
+    database = { ...database, ...(existingConfig.database ?? {}) };
+    logging = { ...logging, ...(existingConfig.logging ?? {}) };
+    server = { ...server, ...(existingConfig.server ?? {}) };
+    auth = { ...auth, ...(existingConfig.auth ?? {}) };
+    storage = {
+      ...storage,
+      ...(existingConfig.storage ?? {}),
+      localDisk: { ...storage.localDisk, ...(existingConfig.storage?.localDisk ?? {}) },
+      s3: { ...storage.s3, ...(existingConfig.storage?.s3 ?? {}) },
+    };
+    secrets = {
+      ...secrets,
+      ...(existingConfig.secrets ?? {}),
+      localEncrypted: { ...secrets.localEncrypted, ...(existingConfig.secrets?.localEncrypted ?? {}) },
+    };
+    if (!llm && existingConfig.llm) {
+      llm = existingConfig.llm;
+    }
+  }
+
   const config: PaperclipConfig = {
     $meta: {
       version: 1,
