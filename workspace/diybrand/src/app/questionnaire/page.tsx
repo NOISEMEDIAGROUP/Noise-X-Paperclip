@@ -4,6 +4,9 @@ import { BrandWizard } from "@/components/BrandWizard";
 export const metadata: Metadata = {
   title: "Brand Questionnaire — diybrand.app",
   description: "Tell us about your business and we'll create your brand identity.",
+  alternates: {
+    canonical: "/questionnaire",
+  },
 };
 
 export default function QuestionnairePage() {

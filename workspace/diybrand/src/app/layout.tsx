@@ -23,6 +23,43 @@ export const metadata: Metadata = {
       "Answer a short questionnaire and let AI create your complete brand identity — logo, colors, fonts, and guidelines — ready to use.",
   },
   metadataBase: new URL("https://diybrand.app"),
+  alternates: {
+    canonical: "/",
+  },
+};
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      name: "diybrand.app",
+      url: "https://diybrand.app",
+      description:
+        "Answer a short questionnaire and let AI create your complete brand identity — logo, colors, fonts, and guidelines — ready to use.",
+    },
+    {
+      "@type": "Organization",
+      name: "diybrand.app",
+      url: "https://diybrand.app",
+      description:
+        "AI-powered brand identity generator. Build your brand in minutes, not months.",
+    },
+    {
+      "@type": "SoftwareApplication",
+      name: "diybrand.app",
+      applicationCategory: "DesignApplication",
+      operatingSystem: "Web",
+      description:
+        "AI-powered brand kit generator — logo, colors, fonts, and guidelines.",
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "USD",
+        description: "Free during early access",
+      },
+    },
+  ],
 };
 
 export default function RootLayout({
@@ -32,6 +69,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      </head>
       <body className={inter.className}>{children}</body>
     </html>
   );
