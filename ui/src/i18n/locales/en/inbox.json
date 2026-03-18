@@ -43,7 +43,20 @@
     "runFailed": "{{source}} run failed {{timeAgo}}",
     "openRun": "Open run",
     "runExitedWithError": "Run exited with an error.",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "agentFallback": "Agent {{id}}"
+  },
+  "approval": {
+    "requestedBy": "requested by {{name}}",
+    "updatedTimeAgo": "updated {{timeAgo}}"
+  },
+  "issue": {
+    "commentedTimeAgo": "commented {{timeAgo}}",
+    "updatedTimeAgo": "updated {{timeAgo}}"
+  },
+  "placeholders": {
+    "category": "Category",
+    "approvalStatus": "Approval status"
   },
   "joinRequest": {
     "humanJoinRequest": "Human join request",

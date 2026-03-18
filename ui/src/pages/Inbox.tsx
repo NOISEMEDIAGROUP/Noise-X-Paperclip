@@ -68,21 +68,14 @@ type SectionKey =
   | "failed_runs"
   | "alerts";
 
-const RUN_SOURCE_LABELS: Record<string, string> = {
-  timer: "Scheduled",
-  assignment: "Assignment",
-  on_demand: "Manual",
-  automation: "Automation",
-};
-
 function firstNonEmptyLine(value: string | null | undefined): string | null {
   if (!value) return null;
   const line = value.split("\n").map((chunk) => chunk.trim()).find(Boolean);
   return line ?? null;
 }
 
-function runFailureMessage(run: HeartbeatRun): string {
-  return firstNonEmptyLine(run.error) ?? firstNonEmptyLine(run.stderrExcerpt) ?? "Run exited with an error.";
+function runFailureMessage(run: HeartbeatRun, fallback: string): string {
+  return firstNonEmptyLine(run.error) ?? firstNonEmptyLine(run.stderrExcerpt) ?? fallback;
 }
 
 function approvalStatusLabel(status: Approval["status"]): string {
@@ -120,8 +113,14 @@ function FailedRunCard({
   const navigate = useNavigate();
   const issueId = readIssueIdFromRun(run);
   const issue = issueId ? issueById.get(issueId) ?? null : null;
-  const sourceLabel = RUN_SOURCE_LABELS[run.invocationSource] ?? "Manual";
-  const displayError = runFailureMessage(run);
+  const runSourceLabels: Record<string, string> = {
+    timer: t("runSources.timer"),
+    assignment: t("runSources.assignment"),
+    on_demand: t("runSources.on_demand"),
+    automation: t("runSources.automation"),
+  };
+  const sourceLabel = runSourceLabels[run.invocationSource] ?? t("runSources.on_demand");
+  const displayError = runFailureMessage(run, t("failedRun.runExitedWithError"));
 
   const retryRun = useMutation({
     mutationFn: async () => {
@@ -188,7 +187,7 @@ function FailedRunCard({
               {linkedAgentName ? (
                 <Identity name={linkedAgentName} size="sm" />
               ) : (
-                <span className="text-sm font-medium">Agent {run.agentId.slice(0, 8)}</span>
+                <span className="text-sm font-medium">{t("failedRun.agentFallback", { id: run.agentId.slice(0, 8) })}</span>
               )}
               <StatusBadge status={run.status} />
             </div>
@@ -233,7 +232,7 @@ function FailedRunCard({
 
         {retryRun.isError && (
           <div className="text-xs text-destructive">
-            {retryRun.error instanceof Error ? retryRun.error.message : "Failed to retry run"}
+            {retryRun.error instanceof Error ? retryRun.error.message : t("common:errors.failedToRetryRun")}
           </div>
         )}
       </div>
@@ -254,6 +253,7 @@ function ApprovalInboxRow({
   onReject: () => void;
   isPending: boolean;
 }) {
+  const { t } = useTranslation(["inbox", "common"]);
   const Icon = typeIcon[approval.type] ?? defaultTypeIcon;
   const label = typeLabel[approval.type] ?? approval.type;
   const showResolutionButtons =
@@ -278,8 +278,8 @@ function ApprovalInboxRow({
             </span>
             <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
               <span className="capitalize">{approvalStatusLabel(approval.status)}</span>
-              {requesterName ? <span>requested by {requesterName}</span> : null}
-              <span>updated {timeAgo(approval.updatedAt)}</span>
+              {requesterName ? <span>{t("approval.requestedBy", { name: requesterName })}</span> : null}
+              <span>{t("approval.updatedTimeAgo", { timeAgo: timeAgo(approval.updatedAt) })}</span>
             </span>
           </span>
         </Link>
@@ -291,7 +291,7 @@ function ApprovalInboxRow({
               onClick={onApprove}
               disabled={isPending}
             >
-              Approve
+              {t("common:buttons.approve")}
             </Button>
             <Button
               variant="destructive"
@@ -300,7 +300,7 @@ function ApprovalInboxRow({
               onClick={onReject}
               disabled={isPending}
             >
-              Reject
+              {t("common:buttons.reject")}
             </Button>
           </div>
         ) : null}
@@ -313,7 +313,7 @@ function ApprovalInboxRow({
             onClick={onApprove}
             disabled={isPending}
           >
-            Approve
+            {t("common:buttons.approve")}
           </Button>
           <Button
             variant="destructive"
@@ -322,7 +322,7 @@ function ApprovalInboxRow({
             onClick={onReject}
             disabled={isPending}
           >
-            Reject
+            {t("common:buttons.reject")}
           </Button>
         </div>
       ) : null}
@@ -684,7 +684,7 @@ export function Inbox() {
               onValueChange={(value) => setAllCategoryFilter(value as InboxCategoryFilter)}
             >
               <SelectTrigger className="h-8 w-[170px] text-xs">
-                <SelectValue placeholder="Category" />
+                <SelectValue placeholder={t("placeholders.category")} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="everything">{t("categories.allCategories")}</SelectItem>
@@ -702,7 +702,7 @@ export function Inbox() {
                 onValueChange={(value) => setAllApprovalFilter(value as InboxApprovalFilter)}
               >
                 <SelectTrigger className="h-8 w-[170px] text-xs">
-                  <SelectValue placeholder="Approval status" />
+                  <SelectValue placeholder={t("placeholders.approvalStatus")} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("approvalFilters.allStatuses")}</SelectItem>
@@ -780,7 +780,7 @@ export function Inbox() {
                               <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
                             </span>
                             <span className="hidden text-[11px] font-medium text-blue-600 dark:text-blue-400 sm:inline">
-                              Live
+                              {t("common:labels.live")}
                             </span>
                           </span>
                         )}
@@ -788,15 +788,15 @@ export function Inbox() {
                     )}
                     mobileMeta={
                       issue.lastExternalCommentAt
-                        ? `commented ${timeAgo(issue.lastExternalCommentAt)}`
-                        : `updated ${timeAgo(issue.updatedAt)}`
+                        ? t("issue.commentedTimeAgo", { timeAgo: timeAgo(issue.lastExternalCommentAt) })
+                        : t("issue.updatedTimeAgo", { timeAgo: timeAgo(issue.updatedAt) })
                     }
                     unreadState={isUnread ? "visible" : isFading ? "fading" : "hidden"}
                     onMarkRead={() => markReadMutation.mutate(issue.id)}
                     trailingMeta={
                       issue.lastExternalCommentAt
-                        ? `commented ${timeAgo(issue.lastExternalCommentAt)}`
-                        : `updated ${timeAgo(issue.updatedAt)}`
+                        ? t("issue.commentedTimeAgo", { timeAgo: timeAgo(issue.lastExternalCommentAt) })
+                        : t("issue.updatedTimeAgo", { timeAgo: timeAgo(issue.updatedAt) })
                     }
                   />
                 );

@@ -53,7 +53,7 @@ export function AuthPage() {
       navigate(nextPath, { replace: true });
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "Authentication failed");
+      setError(err instanceof Error ? err.message : t("common:errors.authenticationFailed"));
     },
   });
 
@@ -95,7 +95,7 @@ export function AuthPage() {
               event.preventDefault();
               if (mutation.isPending) return;
               if (!canSubmit) {
-                setError("Please fill in all required fields.");
+                setError(t("errors.requiredFields"));
                 return;
               }
               mutation.mutate();
