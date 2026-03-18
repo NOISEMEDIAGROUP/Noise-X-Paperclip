@@ -70,7 +70,6 @@ test.describe("Issue visibility toggle", () => {
       await expect(page.getByRole("button", { name: "Hide this Issue" })).toBeVisible();
     } finally {
       if (companyId) {
-        await page.close();
         const companyDeleteRes = await page.request.delete(`${baseUrl}/api/companies/${companyId}`);
         expect(companyDeleteRes.ok()).toBe(true);
       }
