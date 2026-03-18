@@ -2,6 +2,11 @@
 
 This document covers the deployment, monitoring, and infrastructure management for DIYBrand.
 
+> **Quick Links**:
+> - [VERCEL-SETUP.md](./VERCEL-SETUP.md) — Domain, SSL, and Vercel project configuration
+> - [GitHub Actions Workflows](./.github/workflows/) — CI/CD pipeline definitions
+> - [Sentry Configuration](#error-tracking-sentry) — Error tracking setup
+
 ## Overview
 
 DIYBrand uses:
