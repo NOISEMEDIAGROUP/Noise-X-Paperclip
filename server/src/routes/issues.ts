@@ -1273,9 +1273,14 @@ export function issueRoutes(db: Db, storage: StorageService) {
       }
     }
 
+    // Fix: allow non-agent callers (e.g. Hermes via curl) to attribute comments to
+    // an agent by passing agentId in the request body. When agentId is provided,
+    // clear userId so the comment doesn't appear as a board-user comment, which
+    // would suppress unread-badge notifications for the board user.
+    const bodyAgentId = req.body.agentId as string | undefined;
     const comment = await svc.addComment(id, req.body.body, {
-      agentId: actor.agentId ?? undefined,
-      userId: actor.actorType === "user" ? actor.actorId : undefined,
+      agentId: bodyAgentId ?? actor.agentId ?? undefined,
+      userId: bodyAgentId ? undefined : (actor.actorType === "user" ? actor.actorId : undefined),
     });
 
     await logActivity(db, {
@@ -1302,7 +1307,11 @@ export function issueRoutes(db: Db, storage: StorageService) {
       const wakeups = new Map<string, Parameters<typeof heartbeat.wakeup>[1]>();
       const assigneeId = currentIssue.assigneeAgentId;
       const actorIsAgent = actor.actorType === "agent";
-      const selfComment = actorIsAgent && actor.actorId === assigneeId;
+      // Fix: also treat as self-comment when req.body.agentId matches the assignee.
+      // This prevents wakeOnDemand loops when a Hermes agent posts a comment via curl
+      // (which authenticates as local-board, not as an agent).
+      const selfComment = (actorIsAgent && actor.actorId === assigneeId) ||
+        (bodyAgentId != null && bodyAgentId === assigneeId);
       const skipWake = selfComment || isClosed;
       if (assigneeId && (reopened || !skipWake)) {
         if (reopened) {
