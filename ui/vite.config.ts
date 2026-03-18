@@ -12,6 +12,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    allowedHosts: ["dell-paperclip.lan"],
     proxy: {
       "/api": {
         target: "http://localhost:3100",

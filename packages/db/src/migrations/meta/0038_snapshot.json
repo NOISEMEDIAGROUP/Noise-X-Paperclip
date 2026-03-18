@@ -1,5 +1,5 @@
 {
-  "id": "84eaecc3-cd1c-4068-8c1d-3c1ca2f65108",
+  "id": "79fa5ccf-8c3a-43e4-b0dc-de9cbfb09b32",
   "prevId": "53b16771-42c3-41c7-af85-0bfbb9f9013b",
   "version": "7",
   "dialect": "postgresql",
@@ -2626,6 +2626,15 @@
           "notNull": true,
           "default": true
         },
+<<<<<<< HEAD
+=======
+        "max_parallel_runs": {
+          "name": "max_parallel_runs",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+>>>>>>> df5610f (feat: per company parallel agent limit settings option)
         "brand_color": {
           "name": "brand_color",
           "type": "text",
@@ -3921,6 +3930,7 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+<<<<<<< HEAD
     "public.execution_workspaces": {
       "name": "execution_workspaces",
       "schema": "",
@@ -4269,6 +4279,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+=======
+>>>>>>> df5610f (feat: per company parallel agent limit settings option)
     "public.finance_events": {
       "name": "finance_events",
       "schema": "",
@@ -6473,6 +6485,7 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+<<<<<<< HEAD
     "public.issue_work_products": {
       "name": "issue_work_products",
       "schema": "",
@@ -6794,6 +6807,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+=======
+>>>>>>> df5610f (feat: per company parallel agent limit settings option)
     "public.issues": {
       "name": "issues",
       "schema": "",
@@ -6817,12 +6832,15 @@
           "primaryKey": false,
           "notNull": false
         },
+<<<<<<< HEAD
         "project_workspace_id": {
           "name": "project_workspace_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
+=======
+>>>>>>> df5610f (feat: per company parallel agent limit settings option)
         "goal_id": {
           "name": "goal_id",
           "type": "uuid",
@@ -6940,6 +6958,7 @@
           "primaryKey": false,
           "notNull": false
         },
+<<<<<<< HEAD
         "execution_workspace_id": {
           "name": "execution_workspace_id",
           "type": "uuid",
@@ -6952,6 +6971,8 @@
           "primaryKey": false,
           "notNull": false
         },
+=======
+>>>>>>> df5610f (feat: per company parallel agent limit settings option)
         "execution_workspace_settings": {
           "name": "execution_workspace_settings",
           "type": "jsonb",
@@ -7115,6 +7136,7 @@
           "method": "btree",
           "with": {}
         },
+<<<<<<< HEAD
         "issues_company_project_workspace_idx": {
           "name": "issues_company_project_workspace_idx",
           "columns": [
@@ -7157,6 +7179,8 @@
           "method": "btree",
           "with": {}
         },
+=======
+>>>>>>> df5610f (feat: per company parallel agent limit settings option)
         "issues_identifier_idx": {
           "name": "issues_identifier_idx",
           "columns": [
@@ -7200,6 +7224,7 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+<<<<<<< HEAD
         "issues_project_workspace_id_project_workspaces_id_fk": {
           "name": "issues_project_workspace_id_project_workspaces_id_fk",
           "tableFrom": "issues",
@@ -7213,6 +7238,8 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
+=======
+>>>>>>> df5610f (feat: per company parallel agent limit settings option)
         "issues_goal_id_goals_id_fk": {
           "name": "issues_goal_id_goals_id_fk",
           "tableFrom": "issues",
@@ -7290,6 +7317,7 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+<<<<<<< HEAD
         },
         "issues_execution_workspace_id_execution_workspaces_id_fk": {
           "name": "issues_execution_workspace_id_execution_workspaces_id_fk",
@@ -7303,6 +7331,8 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
+=======
+>>>>>>> df5610f (feat: per company parallel agent limit settings option)
         }
       },
       "compositePrimaryKeys": {},
@@ -9148,6 +9178,7 @@
           "primaryKey": false,
           "notNull": true
         },
+<<<<<<< HEAD
         "source_type": {
           "name": "source_type",
           "type": "text",
@@ -9155,6 +9186,8 @@
           "notNull": true,
           "default": "'local_path'"
         },
+=======
+>>>>>>> df5610f (feat: per company parallel agent limit settings option)
         "cwd": {
           "name": "cwd",
           "type": "text",
@@ -9173,6 +9206,7 @@
           "primaryKey": false,
           "notNull": false
         },
+<<<<<<< HEAD
         "default_ref": {
           "name": "default_ref",
           "type": "text",
@@ -9216,6 +9250,8 @@
           "primaryKey": false,
           "notNull": false
         },
+=======
+>>>>>>> df5610f (feat: per company parallel agent limit settings option)
         "metadata": {
           "name": "metadata",
           "type": "jsonb",
@@ -9286,6 +9322,7 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+<<<<<<< HEAD
         },
         "project_workspaces_project_source_type_idx": {
           "name": "project_workspaces_project_source_type_idx",
@@ -9355,6 +9392,8 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+=======
+>>>>>>> df5610f (feat: per company parallel agent limit settings option)
         }
       },
       "foreignKeys": {
@@ -9582,12 +9621,15 @@
           "primaryKey": false,
           "notNull": false
         },
+<<<<<<< HEAD
         "execution_workspace_id": {
           "name": "execution_workspace_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
+=======
+>>>>>>> df5610f (feat: per company parallel agent limit settings option)
         "issue_id": {
           "name": "issue_id",
           "type": "uuid",
@@ -9754,6 +9796,7 @@
           "method": "btree",
           "with": {}
         },
+<<<<<<< HEAD
         "workspace_runtime_services_company_execution_workspace_status_idx": {
           "name": "workspace_runtime_services_company_execution_workspace_status_idx",
           "columns": [
@@ -9781,6 +9824,8 @@
           "method": "btree",
           "with": {}
         },
+=======
+>>>>>>> df5610f (feat: per company parallel agent limit settings option)
         "workspace_runtime_services_company_project_status_idx": {
           "name": "workspace_runtime_services_company_project_status_idx",
           "columns": [
@@ -9885,6 +9930,7 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
+<<<<<<< HEAD
         "workspace_runtime_services_execution_workspace_id_execution_workspaces_id_fk": {
           "name": "workspace_runtime_services_execution_workspace_id_execution_workspaces_id_fk",
           "tableFrom": "workspace_runtime_services",
@@ -9898,6 +9944,8 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
+=======
+>>>>>>> df5610f (feat: per company parallel agent limit settings option)
         "workspace_runtime_services_issue_id_issues_id_fk": {
           "name": "workspace_runtime_services_issue_id_issues_id_fk",
           "tableFrom": "workspace_runtime_services",
