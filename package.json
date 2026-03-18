@@ -46,5 +46,11 @@
   "engines": {
     "node": ">=20"
   },
-  "packageManager": "pnpm@9.15.4"
+  "packageManager": "pnpm@9.15.4",
+  "pnpm": {
+    "overrides": {
+      "embedded-postgres": "18.1.0-beta.15",
+      "@embedded-postgres/darwin-arm64": "18.1.0-beta.15"
+    }
+  }
 }
