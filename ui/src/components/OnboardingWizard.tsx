@@ -30,6 +30,7 @@ import {
 } from "@paperclipai/adapter-codex-local";
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "@paperclipai/adapter-cursor-local";
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "@paperclipai/adapter-gemini-local";
+import { OnboardingChat } from "./OnboardingChat";
 import { AsciiArtAnimation } from "./AsciiArtAnimation";
 import { ChoosePathButton } from "./PathInstructionsModal";
 import { HintIcon } from "./agent-config-primitives";
@@ -50,10 +51,14 @@ import {
   Loader2,
   FolderOpen,
   ChevronDown,
-  X
+  X,
+  Plus,
+  Pencil,
+  Trash2,
+  MessageSquare
 } from "lucide-react";
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3 | 4 | 5 | 6;
 type AdapterType =
   | "claude_local"
   | "codex_local"
@@ -65,13 +70,277 @@ type AdapterType =
   | "http"
   | "openclaw_gateway";
 
-const DEFAULT_TASK_DESCRIPTION = `Setup yourself as the CEO. Use the ceo persona found here: 
+const MISSION_PROMPT_CHIPS = [
+  "Build a SaaS product",
+  "Scale a content business",
+  "Launch a marketplace"
+];
+
+function buildMissionFromQuestionnaire(q1: string, q2: string, q3: string, q4: string): string {
+  const parts: string[] = [];
+  if (q1.trim()) parts.push(q1.trim());
+  if (q2.trim()) parts.push(`We serve ${q2.trim().toLowerCase()}.`);
+  if (q3.trim()) parts.push(`Our biggest challenge is ${q3.trim().toLowerCase()}.`);
+  if (q4.trim()) parts.push(`Success looks like ${q4.trim().toLowerCase()}.`);
+  return parts.join(" ");
+}
+
+interface HiringRole {
+  id: string;
+  name: string;
+  summary: string;
+  expertise: string;
+  priorities: string;
+  boundaries: string;
+  tools: string;
+  communication: string;
+  collaboration: string;
+  enabled: boolean;
+  editing: boolean;
+}
+
+function nextRoleId(): string {
+  return crypto.randomUUID();
+}
+
+const EMPTY_ROLE: Omit<HiringRole, "id"> = {
+  name: "", summary: "", expertise: "", priorities: "",
+  boundaries: "", tools: "", communication: "", collaboration: "",
+  enabled: true, editing: true,
+};
+
+function cleanMd(s: string): string {
+  return s
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/^\s*[-*]\s+/, "")
+    .trim();
+}
+
+/**
+ * Map a bullet label (e.g. "Why:", "Responsibilities:") to a structured field.
+ */
+function classifyBullet(label: string): keyof HiringRole | null {
+  const l = label.toLowerCase();
+  if (/^why|^purpose|^overview/.test(l)) return "summary";
+  if (/^responsibilit|^expertise|^duties|^scope|^what they do/.test(l)) return "expertise";
+  if (/^priorit|^focus|^goals|^kpi|^metric/.test(l)) return "priorities";
+  if (/^boundar|^limit|^should not|^don.?t|^avoid|^out of scope/.test(l)) return "boundaries";
+  if (/^tool|^permission|^access|^tech|^stack/.test(l)) return "tools";
+  if (/^communic|^tone|^style|^voice/.test(l)) return "communication";
+  if (/^collaborat|^escalat|^report|^works with|^interact|^coordinat/.test(l)) return "collaboration";
+  if (/^recommend|^profile|^ideal|^skills|^qualif/.test(l)) return "expertise";
+  return null;
+}
+
+/**
+ * Parse a markdown hiring plan into structured roles.
+ * Handles two document formats:
+ *   Format A: "## Role N: Name" with ### sub-sections (Priorities, Boundaries, etc.)
+ *   Format B: "### N. Name" with **Label:** bullets
+ * Fallback: comment-style bullet/table patterns.
+ */
+function parseHiringPlan(markdown: string): HiringRole[] {
+  const roles: HiringRole[] = [];
+  const seen = new Set<string>();
+
+  // Find role headings: any ## or ### heading with a numbered prefix
+  // like "### 1. Content Marketing Officer" or "## Role 2: CTO"
+  const rolePattern = /^(?:role\s*\d+[:.]\s*|\d+[.)]\s*)/i;
+  const roleHeadingRegex = /^#{2,3}\s+(.+)$/gm;
+  let match: RegExpExecArray | null;
+
+  // First pass: find all role heading positions (start of line, end of heading)
+  const rolePositions: Array<{ title: string; lineStart: number; contentStart: number }> = [];
+  while ((match = roleHeadingRegex.exec(markdown)) !== null) {
+    if (rolePattern.test(match[1].trim())) {
+      rolePositions.push({
+        title: match[1].trim(),
+        lineStart: match.index,
+        contentStart: match.index + match[0].length,
+      });
+    }
+  }
+
+  // Extract body for each role (from heading end to the next role heading start)
+  const sections: Array<{ title: string; body: string }> = [];
+  for (let i = 0; i < rolePositions.length; i++) {
+    const end = i + 1 < rolePositions.length
+      ? rolePositions[i + 1].lineStart
+      : markdown.length;
+    sections.push({
+      title: rolePositions[i].title,
+      body: markdown.slice(rolePositions[i].contentStart, end),
+    });
+  }
+
+  for (const section of sections) {
+    if (!rolePattern.test(section.title)) continue;
+
+    let name = section.title
+      .replace(/^role\s*\d*[:.]\s*/i, "")
+      .replace(/^\d+[.)]\s*/, "")
+      .replace(/\*\*/g, "")
+      .trim();
+
+    if (name.length < 3) continue;
+    if (seen.has(name.toLowerCase())) continue;
+
+    // Parse content: **Label:** bullets and ### sub-sections
+    const fields: Record<string, string[]> = {};
+    let currentField: string | null = null;
+    const bodyLines = section.body.split("\n");
+
+    for (let i = 0; i < bodyLines.length; i++) {
+      const raw = bodyLines[i];
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+
+      // ### sub-section heading (e.g. "### Priorities")
+      const subHeadingMatch = trimmed.match(/^###\s+(.+)/);
+      if (subHeadingMatch) {
+        const label = subHeadingMatch[1].trim();
+        const field = classifyBullet(label);
+        currentField = (field && field !== "id" && field !== "name" && field !== "enabled" && field !== "editing")
+          ? field : "expertise";
+        continue;
+      }
+
+      // **Label:** inline (e.g. "**Why:** text")
+      const boldLabelMatch = trimmed.match(/^\*\*([^*:]+)[*:]*\*\*[:\s]*(.*)/);
+      const bulletLabelMatch = !boldLabelMatch && trimmed.match(/^\s*[-*]\s+\*\*([^*:]+)[*:]*\*\*[:\s]*(.*)/);
+      const labelMatch = boldLabelMatch ?? bulletLabelMatch;
+
+      if (labelMatch) {
+        const label = labelMatch[1]!.trim();
+        const value = cleanMd(labelMatch[2] ?? "");
+        const field = classifyBullet(label);
+        currentField = (field && field !== "id" && field !== "name" && field !== "enabled" && field !== "editing")
+          ? field : "expertise";
+        if (!fields[currentField]) fields[currentField] = [];
+        if (value) fields[currentField].push(value);
+        continue;
+      }
+
+      // Regular content line under current field
+      if (currentField) {
+        const cleaned = cleanMd(trimmed);
+        if (cleaned) {
+          if (!fields[currentField]) fields[currentField] = [];
+          fields[currentField].push(cleaned);
+        }
+      }
+    }
+
+    const join = (arr?: string[]) => (arr ?? []).join("\n");
+
+    // If no summary, use first line of expertise
+    let summary = join(fields.summary);
+    let expertise = join(fields.expertise);
+    if (!summary && expertise) {
+      const lines = expertise.split("\n");
+      summary = lines[0];
+      expertise = lines.slice(1).join("\n");
+    }
+
+    seen.add(name.toLowerCase());
+    roles.push({
+      id: nextRoleId(),
+      name,
+      summary,
+      expertise,
+      priorities: join(fields.priorities),
+      boundaries: join(fields.boundaries),
+      tools: join(fields.tools),
+      communication: join(fields.communication),
+      collaboration: join(fields.collaboration),
+      enabled: true,
+      editing: false,
+    });
+  }
+
+  // Fallback: parse "N. **Role Name**" with indented bullets
+  if (roles.length === 0) {
+    const lines = markdown.split("\n");
+    let currentRole: HiringRole | null = null;
+
+    for (const line of lines) {
+      // Match numbered bold role: "1. **Content Strategist / CMO**"
+      const roleMatch = line.match(/^\s*(\d+)[.)]\s+\*\*([^*]+)\*\*/);
+      if (roleMatch) {
+        const name = roleMatch[2].trim();
+        const skip = /^(phase|month|step|update|note|question|summary|timeline|priority|plan|total|budget|immediate|hire)/i;
+        if (skip.test(name) || name.length < 3) continue;
+        if (seen.has(name.toLowerCase())) continue;
+
+        if (currentRole) roles.push(currentRole);
+        seen.add(name.toLowerCase());
+        currentRole = {
+          id: nextRoleId(), name, summary: "", expertise: "",
+          priorities: "", boundaries: "", tools: "",
+          communication: "", collaboration: "",
+          enabled: true, editing: false,
+        };
+        continue;
+      }
+
+      // Indented bullets under the current role
+      if (currentRole && /^\s{2,}[-*]/.test(line)) {
+        const cleaned = cleanMd(line);
+        if (!cleaned) continue;
+
+        // Check for labeled bullet: "*Why first:*", "**Tools:**", etc.
+        const labelMatch = cleaned.match(/^\*?([^:*]+)\*?:\s*(.*)/);
+        if (labelMatch) {
+          const field = classifyBullet(labelMatch[1].trim());
+          if (field && typeof currentRole[field] === "string") {
+            const val = labelMatch[2].trim();
+            const prev = currentRole[field] as string;
+            (currentRole as unknown as Record<string, unknown>)[field] = prev
+              ? `${prev}\n${val}` : val;
+            continue;
+          }
+        }
+        // Default: add to expertise
+        currentRole.expertise = currentRole.expertise
+          ? `${currentRole.expertise}\n${cleaned}` : cleaned;
+      }
+    }
+    if (currentRole) roles.push(currentRole);
+
+    // If summary is empty, use the first line of expertise as the summary
+    for (const role of roles) {
+      if (!role.summary && role.expertise) {
+        const firstLine = role.expertise.split("\n")[0];
+        if (firstLine) {
+          role.summary = firstLine;
+          role.expertise = role.expertise.split("\n").slice(1).join("\n");
+        }
+      }
+    }
+  }
+
+  return roles;
+}
+
+const DEFAULT_TASK_DESCRIPTION = `Setup yourself as the CEO. Use the ceo persona found here:
 
 https://github.com/paperclipai/companies/blob/main/default/ceo/AGENTS.md
 
 Ensure you have a folder agents/ceo and then download this AGENTS.md, and sibling HEARTBEAT.md, SOUL.md, and TOOLS.md. and set that AGENTS.md as the path to your agents instruction file
 
 After that, hire yourself a Founding Engineer agent and then plan the roadmap and tasks for your new company.`;
+
+const ONBOARDING_STORAGE_KEY = "paperclip-onboarding-state";
+
+function loadSavedState(): Record<string, unknown> | null {
+  try {
+    const raw = localStorage.getItem(ONBOARDING_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
 
 export function OnboardingWizard() {
   const { onboardingOpen, onboardingOptions, closeOnboarding } = useDialog();
@@ -82,24 +351,34 @@ export function OnboardingWizard() {
   const initialStep = onboardingOptions.initialStep ?? 1;
   const existingCompanyId = onboardingOptions.companyId;
 
-  const [step, setStep] = useState<Step>(initialStep);
+  // Restore saved state from localStorage (read once on mount)
+  const saved = useMemo(loadSavedState, []);
+
+  const [step, setStep] = useState<Step>((saved?.step as Step) ?? initialStep);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modelOpen, setModelOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
 
   // Step 1
-  const [companyName, setCompanyName] = useState("");
-  const [companyGoal, setCompanyGoal] = useState("");
+  const [companyName, setCompanyName] = useState((saved?.companyName as string) ?? "");
+  const [companyGoal, setCompanyGoal] = useState((saved?.companyGoal as string) ?? "");
+  const [missionPath, setMissionPath] = useState<"direct" | "questionnaire" | null>((saved?.missionPath as "direct" | "questionnaire" | null) ?? null);
+  const [missionConfirmed, setMissionConfirmed] = useState((saved?.missionConfirmed as boolean) ?? false);
+  // Questionnaire answers
+  const [q1, setQ1] = useState((saved?.q1 as string) ?? ""); // What do you do?
+  const [q2, setQ2] = useState((saved?.q2 as string) ?? ""); // Who do you serve?
+  const [q3, setQ3] = useState((saved?.q3 as string) ?? ""); // Biggest bottleneck?
+  const [q4, setQ4] = useState((saved?.q4 as string) ?? ""); // What would success look like?
 
   // Step 2
-  const [agentName, setAgentName] = useState("CEO");
-  const [adapterType, setAdapterType] = useState<AdapterType>("claude_local");
-  const [cwd, setCwd] = useState("");
-  const [model, setModel] = useState("");
-  const [command, setCommand] = useState("");
-  const [args, setArgs] = useState("");
-  const [url, setUrl] = useState("");
+  const [agentName, setAgentName] = useState((saved?.agentName as string) ?? "CEO");
+  const [adapterType, setAdapterType] = useState<AdapterType>((saved?.adapterType as AdapterType) ?? "claude_local");
+  const [cwd, setCwd] = useState((saved?.cwd as string) ?? "");
+  const [model, setModel] = useState((saved?.model as string) ?? "");
+  const [command, setCommand] = useState((saved?.command as string) ?? "");
+  const [args, setArgs] = useState((saved?.args as string) ?? "");
+  const [url, setUrl] = useState((saved?.url as string) ?? "");
   const [adapterEnvResult, setAdapterEnvResult] =
     useState<AdapterEnvironmentTestResult | null>(null);
   const [adapterEnvError, setAdapterEnvError] = useState<string | null>(null);
@@ -124,25 +403,34 @@ export function OnboardingWizard() {
     el.style.height = el.scrollHeight + "px";
   }, []);
 
+  // Planning task + hiring plan
+  const [planningTaskId, setPlanningTaskId] = useState<string | null>((saved?.planningTaskId as string) ?? null);
+  const [planContent, setPlanContent] = useState<string | null>((saved?.planContent as string) ?? null);
+  const [hiringRoles, setHiringRoles] = useState<HiringRole[]>((saved?.hiringRoles as HiringRole[]) ?? []);
+  const [showRawPlan, setShowRawPlan] = useState(false);
+
   // Created entity IDs — pre-populate from existing company when skipping step 1
   const [createdCompanyId, setCreatedCompanyId] = useState<string | null>(
-    existingCompanyId ?? null
+    existingCompanyId ?? (saved?.createdCompanyId as string) ?? null
   );
   const [createdCompanyPrefix, setCreatedCompanyPrefix] = useState<
     string | null
-  >(null);
-  const [createdAgentId, setCreatedAgentId] = useState<string | null>(null);
+  >((saved?.createdCompanyPrefix as string) ?? null);
+  const [createdAgentId, setCreatedAgentId] = useState<string | null>((saved?.createdAgentId as string) ?? null);
   const [createdIssueRef, setCreatedIssueRef] = useState<string | null>(null);
 
-  // Sync step and company when onboarding opens with options.
-  // Keep this independent from company-list refreshes so Step 1 completion
-  // doesn't get reset after creating a company.
+  // Sync step and company when onboarding opens with explicit options.
+  // Only override saved state when onboardingOptions explicitly provides values.
   useEffect(() => {
     if (!onboardingOpen) return;
-    const cId = onboardingOptions.companyId ?? null;
-    setStep(onboardingOptions.initialStep ?? 1);
-    setCreatedCompanyId(cId);
-    setCreatedCompanyPrefix(null);
+    // If explicit options are provided, they take precedence over saved state
+    if (onboardingOptions.initialStep) {
+      setStep(onboardingOptions.initialStep);
+    }
+    if (onboardingOptions.companyId) {
+      setCreatedCompanyId(onboardingOptions.companyId);
+      setCreatedCompanyPrefix(null);
+    }
   }, [
     onboardingOpen,
     onboardingOptions.companyId,
@@ -156,10 +444,27 @@ export function OnboardingWizard() {
     if (company) setCreatedCompanyPrefix(company.issuePrefix);
   }, [onboardingOpen, createdCompanyId, createdCompanyPrefix, companies]);
 
+  // Persist wizard state to localStorage on every change
+  useEffect(() => {
+    if (!onboardingOpen) return;
+    const state = {
+      step, companyName, companyGoal, missionPath, missionConfirmed,
+      q1, q2, q3, q4, agentName, adapterType, cwd, model, command, args, url,
+      createdCompanyId, createdCompanyPrefix, createdAgentId,
+      planningTaskId, planContent, hiringRoles,
+    };
+    localStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(state));
+  }, [
+    onboardingOpen, step, companyName, companyGoal, missionPath, missionConfirmed,
+    q1, q2, q3, q4, agentName, adapterType, cwd, model, command, args, url,
+    createdCompanyId, createdCompanyPrefix, createdAgentId,
+    planningTaskId, planContent, hiringRoles,
+  ]);
+
   // Resize textarea when step 3 is shown or description changes
   useEffect(() => {
-    if (step === 3) autoResizeTextarea();
-  }, [step, taskDescription, autoResizeTextarea]);
+    // Auto-resize removed — task description textarea no longer used in onboarding
+  }, [step, autoResizeTextarea]);
 
   const {
     data: adapterModels,
@@ -171,7 +476,7 @@ export function OnboardingWizard() {
       ? queryKeys.agents.adapterModels(createdCompanyId, adapterType)
       : ["agents", "none", "adapter-models", adapterType],
     queryFn: () => agentsApi.adapterModels(createdCompanyId!, adapterType),
-    enabled: Boolean(createdCompanyId) && onboardingOpen && step === 2
+    enabled: Boolean(createdCompanyId) && onboardingOpen && step === 3
   });
   const isLocalAdapter =
     adapterType === "claude_local" ||
@@ -192,7 +497,7 @@ export function OnboardingWizard() {
       : "claude");
 
   useEffect(() => {
-    if (step !== 2) return;
+    if (step !== 3) return;
     setAdapterEnvResult(null);
     setAdapterEnvError(null);
   }, [step, adapterType, cwd, model, command, args, url]);
@@ -244,11 +549,22 @@ export function OnboardingWizard() {
   }, [filteredModels, adapterType]);
 
   function reset() {
+    localStorage.removeItem(ONBOARDING_STORAGE_KEY);
     setStep(1);
     setLoading(false);
     setError(null);
     setCompanyName("");
     setCompanyGoal("");
+    setMissionPath(null);
+    setMissionConfirmed(false);
+    setQ1("");
+    setQ2("");
+    setQ3("");
+    setQ4("");
+    setPlanningTaskId(null);
+    setPlanContent(null);
+    setHiringRoles([]);
+    setShowRawPlan(false);
     setAgentName("CEO");
     setAdapterType("claude_local");
     setCwd("");
@@ -351,20 +667,18 @@ export function OnboardingWizard() {
       setSelectedCompanyId(company.id);
       queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
 
-      if (companyGoal.trim()) {
-        const parsedGoal = parseOnboardingGoalInput(companyGoal);
-        await goalsApi.create(company.id, {
-          title: parsedGoal.title,
-          ...(parsedGoal.description
-            ? { description: parsedGoal.description }
-            : {}),
-          level: "company",
-          status: "active"
-        });
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.goals.list(company.id)
-        });
-      }
+      const parsedGoal = parseOnboardingGoalInput(companyGoal);
+      await goalsApi.create(company.id, {
+        title: parsedGoal.title,
+        ...(parsedGoal.description
+          ? { description: parsedGoal.description }
+          : {}),
+        level: "company",
+        status: "active"
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.goals.list(company.id)
+      });
 
       setStep(2);
     } catch (err) {
@@ -436,7 +750,39 @@ export function OnboardingWizard() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.agents.list(createdCompanyId)
       });
-      setStep(3);
+
+      // Create the planning task unassigned — the CEO only gets assigned
+      // when the user sends their first message (user controls initiation)
+      const planningIssue = await issuesApi.create(createdCompanyId, {
+        title: "Build hiring plan with CEO",
+        description: `Company mission: ${companyGoal}
+
+Collaborate with the board to create a hiring plan for the company.
+
+IMPORTANT: When writing the hiring plan document, use this exact format for EACH role. Use ## headings for each role (e.g. "## 1. Role Name") and ### sub-headings for each section within the role:
+
+## 1. Role Name
+### Summary
+One-line description of this role.
+### Expertise & Responsibilities
+What this agent does, detailed responsibilities.
+### Priorities
+Ordered list of what matters most.
+### Boundaries
+What this role should NOT do.
+### Tools & Permissions
+What tools and access this role needs.
+### Communication
+Tone, style, and interaction guidelines.
+### Collaboration & Escalation
+Who this role works with, escalation paths.
+
+Follow this structure for every role in the plan.`,
+        status: "backlog"
+      });
+      setPlanningTaskId(planningIssue.id);
+
+      setStep(4);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create agent");
     } finally {
@@ -504,45 +850,57 @@ export function OnboardingWizard() {
     setLoading(true);
     setError(null);
     try {
-      let issueRef = createdIssueRef;
-      if (!issueRef) {
-        const issue = await issuesApi.create(createdCompanyId, {
-          title: taskTitle.trim(),
-          ...(taskDescription.trim()
-            ? { description: taskDescription.trim() }
-            : {}),
+      // Create a hire task for each approved role
+      const approvedRoles = hiringRoles.filter(
+        (r) => r.enabled && r.name.trim()
+      );
+      for (const role of approvedRoles) {
+        const roleSpec = [
+          role.summary && `**Summary:** ${role.summary}`,
+          role.expertise && `**Expertise & Responsibilities:**\n${role.expertise}`,
+          role.priorities && `**Priorities:**\n${role.priorities}`,
+          role.boundaries && `**Boundaries:**\n${role.boundaries}`,
+          role.tools && `**Tools & Permissions:**\n${role.tools}`,
+          role.communication && `**Communication:**\n${role.communication}`,
+          role.collaboration && `**Collaboration:**\n${role.collaboration}`,
+        ].filter(Boolean).join("\n\n");
+        await issuesApi.create(createdCompanyId, {
+          title: `Hire: ${role.name}`,
+          description: `Hire a ${role.name} for the company.\n\n${roleSpec}`,
           assigneeAgentId: createdAgentId,
           status: "todo"
         });
-        issueRef = issue.identifier ?? issue.id;
-        setCreatedIssueRef(issueRef);
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.issues.list(createdCompanyId)
-        });
       }
 
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.issues.list(createdCompanyId)
+      });
+
       setSelectedCompanyId(createdCompanyId);
-      reset();
-      closeOnboarding();
-      navigate(
-        createdCompanyPrefix
-          ? `/${createdCompanyPrefix}/issues/${issueRef}`
-          : `/issues/${issueRef}`
-      );
+      setStep(6); // → orientation screen
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create task");
+      setError(err instanceof Error ? err.message : "Failed to create hire tasks");
     } finally {
       setLoading(false);
     }
   }
 
+  function handleFinishOnboarding() {
+    const prefix = createdCompanyPrefix;
+    reset(); // clears localStorage
+    closeOnboarding();
+    navigate(prefix ? `/${prefix}/dashboard` : `/dashboard`);
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      if (step === 1 && companyName.trim()) handleStep1Next();
-      else if (step === 2 && agentName.trim()) handleStep2Next();
-      else if (step === 3 && taskTitle.trim()) handleStep3Next();
-      else if (step === 4) handleLaunch();
+      if (step === 1 && companyName.trim() && companyGoal.trim()) handleStep1Next();
+      else if (step === 2) setStep(3);
+      else if (step === 3 && agentName.trim()) handleStep2Next();
+      else if (step === 4) setStep(5);
+      else if (step === 5) setStep(6);
+      else if (step === 6) handleLaunch();
     }
   }
 
@@ -582,10 +940,11 @@ export function OnboardingWizard() {
               <div className="flex items-center gap-0 mb-8 border-b border-border">
                 {(
                   [
-                    { step: 1 as Step, label: "Company", icon: Building2 },
-                    { step: 2 as Step, label: "Agent", icon: Bot },
-                    { step: 3 as Step, label: "Task", icon: ListTodo },
-                    { step: 4 as Step, label: "Launch", icon: Rocket }
+                    { step: 1 as Step, label: "Mission", icon: Building2 },
+                    { step: 2 as Step, label: "Launch", icon: Rocket },
+                    { step: 3 as Step, label: "CEO", icon: Bot },
+                    { step: 4 as Step, label: "Plan", icon: Sparkles },
+                    { step: 5 as Step, label: "Review", icon: ListTodo },
                   ] as const
                 ).map(({ step: s, label, icon: Icon }) => (
                   <button
@@ -593,7 +952,7 @@ export function OnboardingWizard() {
                     type="button"
                     onClick={() => setStep(s)}
                     className={cn(
-                      "flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors cursor-pointer",
+                      "flex items-center gap-1.5 px-2 py-2 text-xs font-medium border-b-2 -mb-px transition-colors cursor-pointer",
                       s === step
                         ? "border-foreground text-foreground"
                         : "border-transparent text-muted-foreground hover:text-foreground/70 hover:border-border"
@@ -613,9 +972,10 @@ export function OnboardingWizard() {
                       <Building2 className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <div>
-                      <h3 className="font-medium">Name your company</h3>
+                      <h3 className="font-medium">Define your mission</h3>
                       <p className="text-xs text-muted-foreground">
-                        This is the organization your agents will work for.
+                        Your mission drives everything — your CEO, your hires,
+                        and the work your company will do.
                       </p>
                     </div>
                   </div>
@@ -638,37 +998,219 @@ export function OnboardingWizard() {
                       autoFocus
                     />
                   </div>
-                  <div className="group">
-                    <label
-                      className={cn(
-                        "text-xs mb-1 block transition-colors",
-                        companyGoal.trim()
-                          ? "text-foreground"
-                          : "text-muted-foreground group-focus-within:text-foreground"
+
+                  {/* Mission path selector */}
+                  {!missionPath && (
+                    <div className="space-y-3">
+                      <label className="text-xs text-foreground block">
+                        How would you like to define your mission?
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          className="flex flex-col items-center gap-1.5 rounded-md border border-border p-3 text-xs hover:bg-accent/50 transition-colors"
+                          onClick={() => setMissionPath("direct")}
+                        >
+                          <Sparkles className="h-4 w-4" />
+                          <span className="font-medium">I know my mission</span>
+                          <span className="text-muted-foreground text-[10px]">
+                            Type it directly
+                          </span>
+                        </button>
+                        <button
+                          className="flex flex-col items-center gap-1.5 rounded-md border border-border p-3 text-xs hover:bg-accent/50 transition-colors"
+                          onClick={() => setMissionPath("questionnaire")}
+                        >
+                          <ListTodo className="h-4 w-4" />
+                          <span className="font-medium">Help me figure it out</span>
+                          <span className="text-muted-foreground text-[10px]">
+                            Answer a few questions
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Direct mission input */}
+                  {missionPath === "direct" && (
+                    <div className="space-y-3">
+                      <div className="group">
+                        <label
+                          className={cn(
+                            "text-xs mb-1 block transition-colors",
+                            companyGoal.trim()
+                              ? "text-foreground"
+                              : "text-muted-foreground group-focus-within:text-foreground"
+                          )}
+                        >
+                          Mission
+                        </label>
+                        <textarea
+                          className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50 resize-none min-h-[60px]"
+                          placeholder="What is this company trying to achieve?"
+                          value={companyGoal}
+                          onChange={(e) => setCompanyGoal(e.target.value)}
+                          autoFocus
+                        />
+                      </div>
+                      {/* Prompt chips for inspiration */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {MISSION_PROMPT_CHIPS.map((chip) => (
+                          <button
+                            key={chip}
+                            className={cn(
+                              "rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+                              companyGoal === chip
+                                ? "border-foreground bg-accent text-foreground"
+                                : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/50"
+                            )}
+                            onClick={() => setCompanyGoal(chip)}
+                          >
+                            {chip}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={() => setMissionPath(null)}
+                      >
+                        ← Choose a different path
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Questionnaire path */}
+                  {missionPath === "questionnaire" && !missionConfirmed && (
+                    <div className="space-y-3">
+                      <div className="group">
+                        <label className="text-xs text-muted-foreground mb-1 block">
+                          What does your company do?
+                        </label>
+                        <input
+                          className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+                          placeholder="e.g. We create educational YouTube content about AI"
+                          value={q1}
+                          onChange={(e) => setQ1(e.target.value)}
+                          autoFocus
+                        />
+                      </div>
+                      <div className="group">
+                        <label className="text-xs text-muted-foreground mb-1 block">
+                          Who do you serve?
+                        </label>
+                        <input
+                          className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+                          placeholder="e.g. Non-technical professionals curious about AI tools"
+                          value={q2}
+                          onChange={(e) => setQ2(e.target.value)}
+                        />
+                      </div>
+                      <div className="group">
+                        <label className="text-xs text-muted-foreground mb-1 block">
+                          What's your biggest bottleneck right now?
+                        </label>
+                        <input
+                          className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+                          placeholder="e.g. Can't produce content fast enough across multiple channels"
+                          value={q3}
+                          onChange={(e) => setQ3(e.target.value)}
+                        />
+                      </div>
+                      <div className="group">
+                        <label className="text-xs text-muted-foreground mb-1 block">
+                          What would success look like in 6 months?
+                        </label>
+                        <input
+                          className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+                          placeholder="e.g. Publishing daily content across 4 platforms with a team of AI agents"
+                          value={q4}
+                          onChange={(e) => setQ4(e.target.value)}
+                        />
+                      </div>
+                      {q1.trim() && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setCompanyGoal(buildMissionFromQuestionnaire(q1, q2, q3, q4));
+                            setMissionConfirmed(true);
+                          }}
+                        >
+                          Generate my mission
+                        </Button>
                       )}
-                    >
-                      Mission / goal (optional)
-                    </label>
-                    <textarea
-                      className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50 resize-none min-h-[60px]"
-                      placeholder="What is this company trying to achieve?"
-                      value={companyGoal}
-                      onChange={(e) => setCompanyGoal(e.target.value)}
-                    />
-                  </div>
+                      <button
+                        className="text-[11px] text-muted-foreground hover:text-foreground transition-colors block"
+                        onClick={() => setMissionPath(null)}
+                      >
+                        ← Choose a different path
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Questionnaire result — editable mission */}
+                  {missionPath === "questionnaire" && missionConfirmed && (
+                    <div className="space-y-3">
+                      <div className="group">
+                        <label className="text-xs text-foreground mb-1 block">
+                          Here's your draft mission — edit it however you like:
+                        </label>
+                        <textarea
+                          className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50 resize-none min-h-[80px]"
+                          value={companyGoal}
+                          onChange={(e) => setCompanyGoal(e.target.value)}
+                          autoFocus
+                        />
+                      </div>
+                      <button
+                        className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={() => { setMissionConfirmed(false); setCompanyGoal(""); }}
+                      >
+                        ← Back to questions
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Confirm mission note */}
+                  {companyGoal.trim() && companyName.trim() && (
+                    <p className="text-[11px] text-muted-foreground italic">
+                      You can always change your mission later in settings.
+                    </p>
+                  )}
                 </div>
               )}
 
+              {/* Step 2: Launch celebration */}
               {step === 2 && (
+                <div className="space-y-6 text-center py-4">
+                  <div className="text-5xl">🚀</div>
+                  <div>
+                    <h3 className="text-xl font-semibold">{companyName} is live!</h3>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Your company has been created with the mission:
+                    </p>
+                    <p className="text-sm font-medium mt-1 italic">
+                      "{companyGoal}"
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Next, let's bring your CEO to life.
+                  </p>
+                </div>
+              )}
+
+              {/* Step 3: Create your CEO (was step 2) */}
+              {step === 3 && (
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 mb-1">
                     <div className="bg-muted/50 p-2">
                       <Bot className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <div>
-                      <h3 className="font-medium">Create your first agent</h3>
+                      <h3 className="font-medium">Bring your CEO to life</h3>
                       <p className="text-xs text-muted-foreground">
-                        Choose how this agent will run tasks.
+                        Give your CEO a heartbeat. They'll lead{" "}
+                        <span className="font-medium text-foreground">{companyName}</span>{" "}
+                        toward its mission.
                       </p>
                     </div>
                   </div>
@@ -1129,93 +1671,212 @@ export function OnboardingWizard() {
                 </div>
               )}
 
-              {step === 3 && (
-                <div className="space-y-5">
+              {/* Step 4: Chat with CEO */}
+              {step === 4 && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="bg-muted/50 p-2">
+                      <Sparkles className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium">Chat with your CEO</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Work with your CEO to build a hiring plan for{" "}
+                        <span className="font-medium text-foreground">{companyName}</span>.
+                      </p>
+                    </div>
+                  </div>
+                  {planningTaskId ? (
+                    <OnboardingChat
+                      taskId={planningTaskId}
+                      agentId={createdAgentId!}
+                      agentName={agentName}
+                      companyName={companyName}
+                      companyGoal={companyGoal}
+                      onPlanDetected={(md) => setPlanContent(md)}
+                      onReviewPlan={async () => {
+                        // Always fetch the latest plan document for the richest content
+                        try {
+                          const doc = await issuesApi.getDocument(planningTaskId!, "plan");
+                          if (doc.body) {
+                            setPlanContent(doc.body);
+                            setHiringRoles(parseHiringPlan(doc.body));
+                          } else if (planContent) {
+                            setHiringRoles(parseHiringPlan(planContent));
+                          }
+                        } catch {
+                          if (planContent) {
+                            setHiringRoles(parseHiringPlan(planContent));
+                          }
+                        }
+                        setStep(5);
+                      }}
+                    />
+                  ) : (
+                    <div className="rounded-md border border-border p-4 min-h-[200px] flex items-center justify-center">
+                      <p className="text-sm text-muted-foreground">
+                        No planning task found. Go back and create your CEO first.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Step 5: Review hiring plan */}
+              {step === 5 && (
+                <div className="space-y-4">
                   <div className="flex items-center gap-3 mb-1">
                     <div className="bg-muted/50 p-2">
                       <ListTodo className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <div>
-                      <h3 className="font-medium">Give it something to do</h3>
+                      <h3 className="font-medium">Review your hiring plan</h3>
                       <p className="text-xs text-muted-foreground">
-                        Give your agent a small task to start with — a bug fix,
-                        a research question, writing a script.
+                        Select which roles to hire. Edit, add, or remove roles
+                        before approving.
                       </p>
                     </div>
                   </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground mb-1 block">
-                      Task title
-                    </label>
-                    <input
-                      className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
-                      placeholder="e.g. Research competitor pricing"
-                      value={taskTitle}
-                      onChange={(e) => setTaskTitle(e.target.value)}
-                      autoFocus
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground mb-1 block">
-                      Description (optional)
-                    </label>
-                    <textarea
-                      ref={textareaRef}
-                      className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50 resize-none min-h-[120px] max-h-[300px] overflow-y-auto"
-                      placeholder="Add more detail about what the agent should do..."
-                      value={taskDescription}
-                      onChange={(e) => setTaskDescription(e.target.value)}
-                    />
-                  </div>
+
+                  {hiringRoles.length === 0 ? (
+                    <div className="rounded-md border border-dashed border-border p-4 text-center">
+                      <p className="text-sm text-muted-foreground mb-2">
+                        No roles parsed from the hiring plan yet.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setHiringRoles([{ ...EMPTY_ROLE, id: nextRoleId() }])
+                        }
+                      >
+                        <Plus className="h-3.5 w-3.5 mr-1" />
+                        Add a role manually
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {hiringRoles.map((role) => (
+                        <RoleCard
+                          key={role.id}
+                          role={role}
+                          onChange={(updated) =>
+                            setHiringRoles((prev) =>
+                              prev.map((r) => (r.id === role.id ? updated : r))
+                            )
+                          }
+                          onDelete={() =>
+                            setHiringRoles((prev) =>
+                              prev.filter((r) => r.id !== role.id)
+                            )
+                          }
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add role button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setHiringRoles((prev) => [
+                        ...prev,
+                        { ...EMPTY_ROLE, id: nextRoleId() },
+                      ])
+                    }
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    Add role
+                  </Button>
+
+                  {/* Revise with CEO */}
+                  {planningTaskId && (
+                    <button
+                      className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => setStep(4)}
+                    >
+                      <MessageSquare className="h-3 w-3" />
+                      Revise with CEO
+                    </button>
+                  )}
+
+                  {/* Collapsible raw plan */}
+                  {planContent && (
+                    <div>
+                      <button
+                        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={() => setShowRawPlan((v) => !v)}
+                      >
+                        <ChevronDown
+                          className={cn(
+                            "h-3 w-3 transition-transform",
+                            showRawPlan ? "rotate-0" : "-rotate-90"
+                          )}
+                        />
+                        View raw plan
+                      </button>
+                      {showRawPlan && (
+                        <div className="mt-2 rounded-md border border-border p-3 text-xs bg-muted/30 max-h-[200px] overflow-y-auto">
+                          <pre className="whitespace-pre-wrap">{planContent}</pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
-              {step === 4 && (
-                <div className="space-y-5">
-                  <div className="flex items-center gap-3 mb-1">
-                    <div className="bg-muted/50 p-2">
-                      <Rocket className="h-5 w-5 text-muted-foreground" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium">Ready to launch</h3>
-                      <p className="text-xs text-muted-foreground">
-                        Everything is set up. Launching now will create the
-                        starter task, wake the agent, and open the issue.
-                      </p>
-                    </div>
+              {/* Step 6: Welcome & orientation */}
+              {step === 6 && (
+                <div className="space-y-6 py-2">
+                  <div className="text-center">
+                    <div className="text-4xl mb-3">🎉</div>
+                    <h3 className="text-lg font-semibold">
+                      {companyName} is ready to go!
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Your CEO is now hiring{" "}
+                      {hiringRoles.filter((r) => r.enabled && r.name.trim()).length} roles.
+                      Here's what to expect on your dashboard:
+                    </p>
                   </div>
-                  <div className="border border-border divide-y divide-border">
-                    <div className="flex items-center gap-3 px-3 py-2.5">
-                      <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {companyName}
-                        </p>
-                        <p className="text-xs text-muted-foreground">Company</p>
-                      </div>
-                      <Check className="h-4 w-4 text-green-500 shrink-0" />
-                    </div>
-                    <div className="flex items-center gap-3 px-3 py-2.5">
-                      <Bot className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {agentName}
-                        </p>
+
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3 rounded-md border border-border px-3 py-2.5">
+                      <ListTodo className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">Tasks</p>
                         <p className="text-xs text-muted-foreground">
-                          {getUIAdapter(adapterType).label}
+                          Your CEO has hire tasks queued up. Watch them progress from todo → in progress → done.
                         </p>
                       </div>
-                      <Check className="h-4 w-4 text-green-500 shrink-0" />
                     </div>
-                    <div className="flex items-center gap-3 px-3 py-2.5">
-                      <ListTodo className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {taskTitle}
+                    <div className="flex items-start gap-3 rounded-md border border-border px-3 py-2.5">
+                      <Bot className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">Agents</p>
+                        <p className="text-xs text-muted-foreground">
+                          New agents will appear here as your CEO completes each hire. You may need to approve them.
                         </p>
-                        <p className="text-xs text-muted-foreground">Task</p>
                       </div>
-                      <Check className="h-4 w-4 text-green-500 shrink-0" />
+                    </div>
+                    <div className="flex items-start gap-3 rounded-md border border-border px-3 py-2.5">
+                      <Check className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">Approvals</p>
+                        <p className="text-xs text-muted-foreground">
+                          Check your inbox for pending approvals. Your CEO may need your sign-off before agents can start working.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 rounded-md border border-border px-3 py-2.5">
+                      <Building2 className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">Dashboard</p>
+                        <p className="text-xs text-muted-foreground">
+                          Your command center — see agent activity, costs, and overall company health at a glance.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1244,10 +1905,10 @@ export function OnboardingWizard() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {step === 1 && (
+                  {step === 1 && missionPath && (missionPath !== "questionnaire" || missionConfirmed) && (
                     <Button
                       size="sm"
-                      disabled={!companyName.trim() || loading}
+                      disabled={!companyName.trim() || !companyGoal.trim() || loading}
                       onClick={handleStep1Next}
                     >
                       {loading ? (
@@ -1255,10 +1916,19 @@ export function OnboardingWizard() {
                       ) : (
                         <ArrowRight className="h-3.5 w-3.5 mr-1" />
                       )}
-                      {loading ? "Creating..." : "Next"}
+                      {loading ? "Creating..." : "Confirm mission"}
                     </Button>
                   )}
                   {step === 2 && (
+                    <Button
+                      size="sm"
+                      onClick={() => setStep(3)}
+                    >
+                      <ArrowRight className="h-3.5 w-3.5 mr-1" />
+                      Hire your CEO
+                    </Button>
+                  )}
+                  {step === 3 && (
                     <Button
                       size="sm"
                       disabled={
@@ -1271,31 +1941,36 @@ export function OnboardingWizard() {
                       ) : (
                         <ArrowRight className="h-3.5 w-3.5 mr-1" />
                       )}
-                      {loading ? "Creating..." : "Next"}
+                      {loading ? "Bringing to life..." : "Give it a heartbeat"}
                     </Button>
                   )}
-                  {step === 3 && (
+                  {step === 4 && !planContent && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setStep(5)}
+                    >
+                      Skip chat
+                    </Button>
+                  )}
+                  {step === 5 && (
                     <Button
                       size="sm"
-                      disabled={!taskTitle.trim() || loading}
-                      onClick={handleStep3Next}
+                      disabled={!hiringRoles.some((r) => r.enabled && r.name.trim()) || loading}
+                      onClick={handleLaunch}
                     >
                       {loading ? (
                         <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
                       ) : (
-                        <ArrowRight className="h-3.5 w-3.5 mr-1" />
+                        <Check className="h-3.5 w-3.5 mr-1" />
                       )}
-                      {loading ? "Creating..." : "Next"}
+                      {loading ? "Creating hires..." : "Approve & hire"}
                     </Button>
                   )}
-                  {step === 4 && (
-                    <Button size="sm" disabled={loading} onClick={handleLaunch}>
-                      {loading ? (
-                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                      ) : (
-                        <ArrowRight className="h-3.5 w-3.5 mr-1" />
-                      )}
-                      {loading ? "Creating..." : "Create & Open Issue"}
+                  {step === 6 && (
+                    <Button size="sm" onClick={handleFinishOnboarding}>
+                      <Rocket className="h-3.5 w-3.5 mr-1" />
+                      Go to dashboard
                     </Button>
                   )}
                 </div>
@@ -1315,6 +1990,124 @@ export function OnboardingWizard() {
         </div>
       </DialogPortal>
     </Dialog>
+  );
+}
+
+const ROLE_FIELDS: Array<{ key: keyof HiringRole; label: string; placeholder: string }> = [
+  { key: "summary", label: "Summary", placeholder: "One-line description of this role" },
+  { key: "expertise", label: "Expertise & Responsibilities", placeholder: "What this agent does, its skills, and detailed responsibilities" },
+  { key: "priorities", label: "Priorities", placeholder: "What this role focuses on first, in order of importance" },
+  { key: "boundaries", label: "Boundaries", placeholder: "What this role should NOT do, out-of-scope areas" },
+  { key: "tools", label: "Tools & Permissions", placeholder: "What tools, systems, or access this role needs" },
+  { key: "communication", label: "Communication", placeholder: "Tone, style, and interaction guidelines" },
+  { key: "collaboration", label: "Collaboration & Escalation", placeholder: "Who this role works with, escalation paths" },
+];
+
+function RoleCard({
+  role,
+  onChange,
+  onDelete,
+}: {
+  role: HiringRole;
+  onChange: (updated: HiringRole) => void;
+  onDelete: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const update = (field: keyof HiringRole, value: string) =>
+    onChange({ ...role, [field]: value });
+
+  if (role.editing) {
+    return (
+      <div
+        className={cn(
+          "rounded-md border px-3 py-3 transition-colors space-y-3",
+          role.enabled ? "border-border bg-background" : "border-border/50 bg-muted/30 opacity-60"
+        )}
+      >
+        <input
+          className="w-full rounded border border-border bg-transparent px-2 py-1.5 text-sm font-medium outline-none focus:ring-1 focus:ring-ring"
+          placeholder="Role name"
+          value={role.name}
+          onChange={(e) => update("name", e.target.value)}
+          autoFocus
+        />
+        {ROLE_FIELDS.map(({ key, label, placeholder }) => (
+          <div key={key}>
+            <label className="text-[11px] text-muted-foreground mb-0.5 block font-medium">
+              {label}
+            </label>
+            <textarea
+              className="w-full rounded border border-border bg-transparent px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-ring resize-y min-h-[60px] max-h-[200px]"
+              placeholder={placeholder}
+              value={(role[key] as string) || ""}
+              onChange={(e) => update(key, e.target.value)}
+            />
+          </div>
+        ))}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => onChange({ ...role, editing: false })}
+        >
+          <Check className="h-3 w-3 mr-1" />
+          Done
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "rounded-md border px-3 py-2.5 transition-colors",
+        role.enabled ? "border-border bg-background" : "border-border/50 bg-muted/30 opacity-60"
+      )}
+    >
+      <div className="flex items-start gap-2.5">
+        <input
+          type="checkbox"
+          checked={role.enabled}
+          onChange={(e) => onChange({ ...role, enabled: e.target.checked })}
+          className="mt-1 shrink-0"
+        />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium">{role.name || "Untitled role"}</p>
+          {role.summary && (
+            <p className="text-xs text-muted-foreground mt-0.5">{role.summary}</p>
+          )}
+          {expanded && (
+            <div className="mt-2 space-y-1.5">
+              {ROLE_FIELDS.filter(({ key }) => key !== "summary" && (role[key] as string)?.trim()).map(({ key, label }) => (
+                <div key={key}>
+                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+                  <p className="text-xs text-muted-foreground whitespace-pre-line">{role[key] as string}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors mt-1"
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded ? "Show less" : "Show more"}
+          </button>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => onChange({ ...role, editing: true })}
+          >
+            <Pencil className="h-3 w-3" />
+          </button>
+          <button
+            className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+            onClick={onDelete}
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
