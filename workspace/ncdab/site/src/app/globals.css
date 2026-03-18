@@ -1,42 +1,76 @@
 @import "tailwindcss";
 
 @theme {
-  /* Construction industry color palette */
-  --color-primary-50: #eff6ff;
-  --color-primary-100: #dbeafe;
-  --color-primary-200: #bfdbfe;
-  --color-primary-300: #93c5fd;
-  --color-primary-400: #60a5fa;
-  --color-primary-500: #1e56a0;
-  --color-primary-600: #1a4b8c;
-  --color-primary-700: #153d73;
-  --color-primary-800: #0f2e59;
-  --color-primary-900: #0a1f40;
-  --color-primary-950: #061326;
+  /* Dark navy / charcoal — professional, techy */
+  --color-primary-50: #e8eaf0;
+  --color-primary-100: #c5c9d8;
+  --color-primary-200: #9da3bd;
+  --color-primary-300: #747da1;
+  --color-primary-400: #56608c;
+  --color-primary-500: #374477;
+  --color-primary-600: #2f3b6a;
+  --color-primary-700: #243058;
+  --color-primary-800: #1a2546;
+  --color-primary-900: #0F172A;
+  --color-primary-950: #080d1a;
 
-  /* Steel grays */
-  --color-steel-50: #f8f9fa;
-  --color-steel-100: #f1f3f5;
-  --color-steel-200: #e9ecef;
-  --color-steel-300: #dee2e6;
-  --color-steel-400: #adb5bd;
-  --color-steel-500: #6c757d;
-  --color-steel-600: #495057;
-  --color-steel-700: #343a40;
-  --color-steel-800: #212529;
-  --color-steel-900: #191c1f;
+  /* Neutral grays — clean, modern */
+  --color-steel-50: #f8f9fb;
+  --color-steel-100: #f1f3f6;
+  --color-steel-200: #e2e5eb;
+  --color-steel-300: #cdd1da;
+  --color-steel-400: #9ca3b0;
+  --color-steel-500: #6b7280;
+  --color-steel-600: #4b5563;
+  --color-steel-700: #374151;
+  --color-steel-800: #1f2937;
+  --color-steel-900: #111827;
 
-  /* Safety orange accents */
-  --color-accent-50: #fff7ed;
-  --color-accent-100: #ffedd5;
-  --color-accent-200: #fed7aa;
-  --color-accent-300: #fdba74;
-  --color-accent-400: #fb923c;
-  --color-accent-500: #f97316;
-  --color-accent-600: #ea580c;
-  --color-accent-700: #c2410c;
-  --color-accent-800: #9a3412;
-  --color-accent-900: #7c2d12;
+  /* Electric cyan accent — futuristic */
+  --color-accent-50: #ecfeff;
+  --color-accent-100: #cffafe;
+  --color-accent-200: #a5f3fc;
+  --color-accent-300: #67e8f9;
+  --color-accent-400: #22d3ee;
+  --color-accent-500: #06b6d4;
+  --color-accent-600: #0891b2;
+  --color-accent-700: #0e7490;
+  --color-accent-800: #155e75;
+  --color-accent-900: #164e63;
+
+  /* Warm oak / wood tones — Scandinavian warmth */
+  --color-warm-50: #fdf8f3;
+  --color-warm-100: #f9edd9;
+  --color-warm-200: #f2d9b0;
+  --color-warm-300: #e8c07e;
+  --color-warm-400: #d4a05c;
+  --color-warm-500: #c4956a;
+  --color-warm-600: #a87b4f;
+  --color-warm-700: #8c6340;
+  --color-warm-800: #704e33;
+  --color-warm-900: #5a3e2a;
 
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
+
+/* Fade-in animation for scroll reveals */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.7s ease-out both;
+}
+
+/* Staggered delays for children */
+.stagger-1 { animation-delay: 0.1s; }
+.stagger-2 { animation-delay: 0.2s; }
+.stagger-3 { animation-delay: 0.3s; }
+.stagger-4 { animation-delay: 0.4s; }

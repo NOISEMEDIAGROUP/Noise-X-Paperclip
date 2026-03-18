@@ -52,7 +52,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="sv">
-      <body className="font-sans antialiased bg-white text-steel-800">
+      <body className="font-sans antialiased bg-primary-900 text-steel-800">
         <OrganizationJsonLd />
         <div className="flex min-h-screen flex-col">
           <Header />
