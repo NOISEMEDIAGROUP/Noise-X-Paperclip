@@ -88,7 +88,8 @@
     "cursor": "Cursor",
     "cursorDesc": "Local Cursor agent",
     "openClawGateway": "OpenClaw Gateway",
-    "openClawGatewayDesc": "Configure OpenClaw within the App"
+    "openClawGatewayDesc": "Invoke OpenClaw via gateway protocol",
+    "openClawGatewayDisabledLabel": "Configure OpenClaw within the App"
   },
   "envTest": {
     "passed": "Passed",

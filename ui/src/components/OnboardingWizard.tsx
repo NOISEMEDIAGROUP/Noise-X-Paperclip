@@ -819,7 +819,7 @@ export function OnboardingWizard() {
                             icon: Bot,
                             desc: t("adapterOptions.openClawGatewayDesc"),
                             comingSoon: true,
-                            disabledLabel: t("adapterOptions.openClawGatewayDesc")
+                            disabledLabel: t("adapterOptions.openClawGatewayDisabledLabel")
                           }
                         ].map((opt) => (
                           <button
