@@ -19,21 +19,13 @@ import {
 } from "@paperclipai/adapter-utils/server-utils";
 import { isKiloCodeUnknownSessionError, parseKiloCodeJsonl } from "./parse.js";
 import { ensureKiloCodeModelConfiguredAndAvailable } from "./models.js";
+import { firstNonEmptyLine } from "./utils.js";
 
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const PAPERCLIP_SKILLS_CANDIDATES = [
   path.resolve(__moduleDir, "../../skills"),
   path.resolve(__moduleDir, "../../../../../skills"),
 ];
-
-function firstNonEmptyLine(text: string): string {
-  return (
-    text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find(Boolean) ?? ""
-  );
-}
 
 function parseModelProvider(model: string | null): string | null {
   if (!model) return null;

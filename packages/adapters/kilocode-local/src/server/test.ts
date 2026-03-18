@@ -14,20 +14,12 @@ import {
 } from "@paperclipai/adapter-utils/server-utils";
 import { discoverKiloCodeModels, ensureKiloCodeModelConfiguredAndAvailable } from "./models.js";
 import { parseKiloCodeJsonl } from "./parse.js";
+import { firstNonEmptyLine, normalizeEnv } from "./utils.js";
 
 function summarizeStatus(checks: AdapterEnvironmentCheck[]): AdapterEnvironmentTestResult["status"] {
   if (checks.some((check) => check.level === "error")) return "fail";
   if (checks.some((check) => check.level === "warn")) return "warn";
   return "pass";
-}
-
-function firstNonEmptyLine(text: string): string {
-  return (
-    text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find(Boolean) ?? ""
-  );
 }
 
 function summarizeProbeDetail(stdout: string, stderr: string, parsedError: string | null): string | null {
@@ -36,15 +28,6 @@ function summarizeProbeDetail(stdout: string, stderr: string, parsedError: strin
   const clean = raw.replace(/\s+/g, " ").trim();
   const max = 240;
   return clean.length > max ? `${clean.slice(0, max - 1)}...` : clean;
-}
-
-function normalizeEnv(input: unknown): Record<string, string> {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) return {};
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
-    if (typeof value === "string") env[key] = value;
-  }
-  return env;
 }
 
 const KILOCODE_AUTH_REQUIRED_RE =

@@ -6,6 +6,7 @@ import {
   ensurePathInEnv,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
+import { firstNonEmptyLine, normalizeEnv } from "./utils.js";
 
 const MODELS_CACHE_TTL_MS = 60_000;
 const MODELS_DISCOVERY_TIMEOUT_MS = 20_000;
@@ -41,15 +42,6 @@ function sortModels(models: AdapterModel[]): AdapterModel[] {
   );
 }
 
-function firstNonEmptyLine(text: string): string {
-  return (
-    text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find(Boolean) ?? ""
-  );
-}
-
 function parseModelsOutput(stdout: string): AdapterModel[] {
   const parsed: AdapterModel[] = [];
   for (const raw of stdout.split(/\r?\n/)) {
@@ -63,17 +55,6 @@ function parseModelsOutput(stdout: string): AdapterModel[] {
     parsed.push({ id: `${provider}/${model}`, label: `${provider}/${model}` });
   }
   return dedupeModels(parsed);
-}
-
-function normalizeEnv(input: unknown): Record<string, string> {
-  const envInput = typeof input === "object" && input !== null && !Array.isArray(input)
-    ? (input as Record<string, unknown>)
-    : {};
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(envInput)) {
-    if (typeof value === "string") env[key] = value;
-  }
-  return env;
 }
 
 function isVolatileEnvKey(key: string): boolean {
