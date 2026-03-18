@@ -13,7 +13,9 @@ import { and, eq, isNull, desc } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   agentApiKeys,
+  agents as agentsTable,
   authUsers,
+  companyMemberships,
   invites,
   joinRequests
 } from "@paperclipai/db";
@@ -2629,6 +2631,111 @@ export function accessRoutes(
       });
     }
   );
+
+  router.get("/companies/:companyId/human-members", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    await assertCompanyAccess(req, companyId);
+    const members = await db
+      .select({
+        id: companyMemberships.principalId,
+        name: authUsers.name,
+        email: authUsers.email,
+        membershipRole: companyMemberships.membershipRole,
+        jobTitle: companyMemberships.jobTitle,
+        supervisorUserId: companyMemberships.supervisorUserId,
+        supervisorAgentId: companyMemberships.supervisorAgentId,
+        hourlyRateCents: companyMemberships.hourlyRateCents,
+      })
+      .from(companyMemberships)
+      .innerJoin(authUsers, eq(authUsers.id, companyMemberships.principalId))
+      .where(
+        and(
+          eq(companyMemberships.companyId, companyId),
+          eq(companyMemberships.principalType, "user"),
+          eq(companyMemberships.status, "active"),
+        )
+      );
+    res.json(members);
+  });
+
+  router.get("/companies/:companyId/human-member-config", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    await assertCompanyAccess(req, companyId);
+    const canManageMembers =
+      isLocalImplicit(req) ||
+      (req.actor.type === "board" &&
+        (await access.canUser(companyId, req.actor.userId ?? null, "users:manage_permissions")));
+    res.json({ canManageMembers });
+  });
+
+  router.patch("/companies/:companyId/human-members/:userId", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    const userId = req.params.userId as string;
+    await assertCompanyPermission(req, companyId, "users:manage_permissions");
+    const { jobTitle, supervisorUserId, supervisorAgentId, hourlyRateCents } = req.body as {
+      jobTitle?: string | null;
+      supervisorUserId?: string | null;
+      supervisorAgentId?: string | null;
+      hourlyRateCents?: number | null;
+    };
+
+    if (supervisorUserId != null && supervisorUserId === userId) {
+      throw badRequest("A user cannot be their own supervisor");
+    }
+
+    if (supervisorUserId != null) {
+      const supervisorMembership = await db
+        .select({ id: companyMemberships.id })
+        .from(companyMemberships)
+        .where(
+          and(
+            eq(companyMemberships.companyId, companyId),
+            eq(companyMemberships.principalType, "user"),
+            eq(companyMemberships.principalId, supervisorUserId),
+            eq(companyMemberships.status, "active"),
+          ),
+        )
+        .then((rows) => rows[0] ?? null);
+      if (!supervisorMembership) throw badRequest("Supervisor user is not an active member of this company");
+    }
+
+    if (supervisorAgentId != null) {
+      const supervisorAgent = await db
+        .select({ id: agentsTable.id })
+        .from(agentsTable)
+        .where(and(eq(agentsTable.id, supervisorAgentId), eq(agentsTable.companyId, companyId)))
+        .then((rows) => rows[0] ?? null);
+      if (!supervisorAgent) throw badRequest("Supervisor agent does not belong to this company");
+    }
+
+    const updated = await db
+      .update(companyMemberships)
+      .set({
+        jobTitle: jobTitle ?? null,
+        supervisorUserId: supervisorUserId ?? null,
+        supervisorAgentId: supervisorAgentId ?? null,
+        hourlyRateCents: typeof hourlyRateCents === "number" ? hourlyRateCents : null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(companyMemberships.companyId, companyId),
+          eq(companyMemberships.principalType, "user"),
+          eq(companyMemberships.principalId, userId),
+          eq(companyMemberships.status, "active"),
+        )
+      )
+      .returning({
+        id: companyMemberships.principalId,
+        jobTitle: companyMemberships.jobTitle,
+        supervisorUserId: companyMemberships.supervisorUserId,
+        supervisorAgentId: companyMemberships.supervisorAgentId,
+        hourlyRateCents: companyMemberships.hourlyRateCents,
+      })
+      .then((rows) => rows[0] ?? null);
+    if (!updated) throw notFound("Member not found");
+    res.json(updated);
+  });
 
   router.get("/companies/:companyId/members", async (req, res) => {
     const companyId = req.params.companyId as string;
