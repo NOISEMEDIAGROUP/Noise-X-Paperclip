@@ -708,19 +708,9 @@ export async function applyPendingMigrations(url: string): Promise<void> {
           continue;
         }
 
-        await runInTransaction(sql, async () => {
-          for (const statement of splitMigrationStatements(migrationContent)) {
-            await sql.unsafe(statement);
-          }
-          await recordMigrationHistoryEntry(
-            sql,
-            qualifiedTable,
-            columnNames,
-            migrationFile,
-            hash,
-            folderMillisByFileName.get(migrationFile) ?? Date.now(),
-          );
-        });
+        // Cannot confirm this migration is already applied via schema inspection.
+        // Stop automatic reconciliation to avoid re-running non-idempotent DDL.
+        break;
       }
     } finally {
       await sql.end();
