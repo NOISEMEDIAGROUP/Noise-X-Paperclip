@@ -1,0 +1,216 @@
+"use client";
+
+import { useState, useCallback } from "react";
+import { StepProgress } from "./StepProgress";
+import { StepBusinessBasics } from "./steps/StepBusinessBasics";
+import { StepTargetAudience } from "./steps/StepTargetAudience";
+import { StepBrandPersonality } from "./steps/StepBrandPersonality";
+import { StepInspiration } from "./steps/StepInspiration";
+import { StepReview } from "./steps/StepReview";
+
+export type QuestionnaireData = {
+  id?: string;
+  businessName: string;
+  industry: string;
+  businessDescription: string;
+  targetAudience: string;
+  brandPersonality: string[];
+  competitors: string;
+  visualPreferences: string;
+};
+
+const INITIAL_DATA: QuestionnaireData = {
+  businessName: "",
+  industry: "",
+  businessDescription: "",
+  targetAudience: "",
+  brandPersonality: [],
+  competitors: "",
+  visualPreferences: "",
+};
+
+const STEP_LABELS = [
+  "Business basics",
+  "Target audience",
+  "Personality",
+  "Inspiration",
+  "Review",
+];
+
+export function BrandWizard() {
+  const [step, setStep] = useState(1);
+  const [data, setData] = useState<QuestionnaireData>(INITIAL_DATA);
+  const [saving, setSaving] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const updateData = useCallback((partial: Partial<QuestionnaireData>) => {
+    setData((prev) => ({ ...prev, ...partial }));
+  }, []);
+
+  const saveProgress = useCallback(
+    async (nextStep: number, complete = false) => {
+      setSaving(true);
+      try {
+        const method = data.id ? "PUT" : "POST";
+        const body = {
+          ...(data.id ? { id: data.id } : {}),
+          businessName: data.businessName || null,
+          industry: data.industry || null,
+          businessDescription: data.businessDescription || null,
+          targetAudience: data.targetAudience || null,
+          brandPersonality: data.brandPersonality.length > 0 ? data.brandPersonality : null,
+          competitors: data.competitors || null,
+          visualPreferences: data.visualPreferences || null,
+          currentStep: nextStep,
+          ...(complete ? { completedAt: new Date().toISOString() } : {}),
+        };
+
+        const res = await fetch("/api/questionnaire", {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) throw new Error("Save failed");
+
+        const saved = await res.json();
+        if (!data.id && saved.id) {
+          setData((prev) => ({ ...prev, id: saved.id }));
+        }
+      } catch {
+        // Silently continue — user can still navigate
+      } finally {
+        setSaving(false);
+      }
+    },
+    [data]
+  );
+
+  const validateStep = useCallback(
+    (s: number): boolean => {
+      const errs: Record<string, string> = {};
+
+      if (s === 1) {
+        if (!data.businessName.trim()) errs.businessName = "Business name is required";
+        if (!data.industry.trim()) errs.industry = "Industry is required";
+        if (!data.businessDescription.trim())
+          errs.businessDescription = "A brief description is required";
+      }
+
+      if (s === 2) {
+        if (!data.targetAudience.trim())
+          errs.targetAudience = "Please describe your target audience";
+      }
+
+      if (s === 3) {
+        if (data.brandPersonality.length < 3)
+          errs.brandPersonality = "Select at least 3 adjectives";
+        if (data.brandPersonality.length > 5)
+          errs.brandPersonality = "Select at most 5 adjectives";
+      }
+
+      setErrors(errs);
+      return Object.keys(errs).length === 0;
+    },
+    [data]
+  );
+
+  const goNext = useCallback(async () => {
+    if (!validateStep(step)) return;
+    const nextStep = step + 1;
+    await saveProgress(nextStep);
+    setStep(nextStep);
+    setErrors({});
+  }, [step, validateStep, saveProgress]);
+
+  const goBack = useCallback(() => {
+    setStep((s) => Math.max(1, s - 1));
+    setErrors({});
+  }, []);
+
+  const handleSubmit = useCallback(async () => {
+    if (!validateStep(step)) return;
+    await saveProgress(5, true);
+    setSubmitted(true);
+  }, [step, validateStep, saveProgress]);
+
+  if (submitted) {
+    return (
+      <div className="rounded-xl bg-white p-8 text-center shadow-sm ring-1 ring-gray-200 sm:p-12">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
+          <svg className="h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+        </div>
+        <h2 className="mt-6 text-2xl font-bold">You&apos;re all set!</h2>
+        <p className="mt-3 text-gray-600">
+          We&apos;ve saved your brand questionnaire. We&apos;ll use your answers to generate
+          your complete brand identity. Stay tuned!
+        </p>
+        <a
+          href="/"
+          className="mt-8 inline-block rounded-lg bg-violet-600 px-6 py-3 text-sm font-semibold text-white hover:bg-violet-700"
+        >
+          Back to home
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200 sm:p-8">
+      <StepProgress currentStep={step} labels={STEP_LABELS} />
+
+      <div className="mt-8">
+        {step === 1 && (
+          <StepBusinessBasics data={data} updateData={updateData} errors={errors} />
+        )}
+        {step === 2 && (
+          <StepTargetAudience data={data} updateData={updateData} errors={errors} />
+        )}
+        {step === 3 && (
+          <StepBrandPersonality data={data} updateData={updateData} errors={errors} />
+        )}
+        {step === 4 && (
+          <StepInspiration data={data} updateData={updateData} />
+        )}
+        {step === 5 && <StepReview data={data} />}
+      </div>
+
+      <div className="mt-8 flex items-center justify-between border-t border-gray-100 pt-6">
+        {step > 1 ? (
+          <button
+            type="button"
+            onClick={goBack}
+            className="rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Back
+          </button>
+        ) : (
+          <div />
+        )}
+
+        {step < 5 ? (
+          <button
+            type="button"
+            onClick={goNext}
+            disabled={saving}
+            className="rounded-lg bg-violet-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Continue"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={saving}
+            className="rounded-lg bg-violet-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+          >
+            {saving ? "Submitting..." : "Submit"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
