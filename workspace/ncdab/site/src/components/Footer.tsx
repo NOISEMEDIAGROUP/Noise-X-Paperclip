@@ -8,6 +8,7 @@ const services = [
 ];
 
 const company = [
+  { name: "Projekt", href: "/projekt" },
   { name: "Om oss", href: "/om-oss" },
   { name: "Kontakt", href: "/kontakt" },
 ];
