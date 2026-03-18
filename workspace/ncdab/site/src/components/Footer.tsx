@@ -11,6 +11,7 @@ const company = [
   { name: "Projekt", href: "/projekt" },
   { name: "Om oss", href: "/om-oss" },
   { name: "Kontakt", href: "/kontakt" },
+  { name: "Begär offert", href: "/offertforfragan" },
 ];
 
 export default function Footer() {

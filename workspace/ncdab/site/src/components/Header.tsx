@@ -80,10 +80,10 @@ export default function Header() {
 
         <div className="hidden lg:flex lg:flex-1 lg:justify-end">
           <Link
-            href="/kontakt"
-            className="rounded-md bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-600 transition-colors"
+            href="/offertforfragan"
+            className="rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-accent-600 transition-colors"
           >
-            Kontakta oss
+            Begär offert
           </Link>
         </div>
       </nav>
@@ -103,11 +103,11 @@ export default function Header() {
               </Link>
             ))}
             <Link
-              href="/kontakt"
-              className="block rounded-lg bg-primary-500 px-3 py-2 text-center text-base font-semibold text-white mt-2"
+              href="/offertforfragan"
+              className="block rounded-lg bg-accent-500 px-3 py-2 text-center text-base font-semibold text-white mt-2"
               onClick={() => setMobileMenuOpen(false)}
             >
-              Kontakta oss
+              Begär offert
             </Link>
           </div>
         </div>
