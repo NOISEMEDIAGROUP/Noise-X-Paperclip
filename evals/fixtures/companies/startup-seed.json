@@ -1,0 +1,9 @@
+{
+  "id": "eval-company-001",
+  "name": "Eval Startup Inc",
+  "plan": "starter",
+  "agents": [
+    { "id": "eval-agent-ceo", "name": "CEO", "role": "ceo", "status": "active" },
+    { "id": "eval-agent-eng", "name": "Engineer", "role": "engineer", "status": "active" }
+  ]
+}

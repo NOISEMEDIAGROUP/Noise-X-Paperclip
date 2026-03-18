@@ -2030,6 +2030,7 @@ export function heartbeatService(db: Db) {
           startedAt,
           sessionIdBefore: runtimeForAdapter.sessionDisplayId ?? runtimeForAdapter.sessionId,
           contextSnapshot: context,
+          promptChars: JSON.stringify(context).length,
           updatedAt: new Date(),
         })
         .where(eq(heartbeatRuns.id, run.id))
@@ -2351,6 +2352,9 @@ export function heartbeatService(db: Db) {
         logBytes: logSummary?.bytes,
         logSha256: logSummary?.sha256,
         logCompressed: logSummary?.compressed ?? false,
+        sessionReused: !!previousSessionParams,
+        taskSessionReused: !!taskSessionForRun,
+        normalizedInputTokens: normalizedUsage?.inputTokens ?? null,
       });
 
       await setWakeupStatus(run.wakeupRequestId, outcome === "succeeded" ? "completed" : status, {

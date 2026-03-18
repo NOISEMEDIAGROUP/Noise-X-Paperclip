@@ -1,0 +1,8 @@
+{
+  "id": "eval-issue-001",
+  "title": "Implement user authentication",
+  "body": "Add JWT-based authentication to the API. Requirements:\n- Login endpoint\n- Token refresh\n- Role-based access control",
+  "status": "todo",
+  "assigneeAgentId": "eval-agent-eng",
+  "companyId": "eval-company-001"
+}

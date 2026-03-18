@@ -9,6 +9,13 @@ export interface AgentPermissions {
   canCreateAgents: boolean;
 }
 
+export interface CircuitBreakerConfig {
+  enabled: boolean;
+  maxConsecutiveFailures: number;
+  maxConsecutiveNoProgress: number;
+  cooldownMinutes: number;
+}
+
 export interface Agent {
   id: string;
   companyId: string;
