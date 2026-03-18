@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 type FontInfo = {
   family: string;
@@ -40,35 +40,41 @@ export function StepTypography({ questionnaireId, onComplete }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fontsLoaded, setFontsLoaded] = useState(false);
+  const generateCalled = useRef(false);
+
+  const generate = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/generate/typography", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionnaireId }),
+      });
+      if (!res.ok) throw new Error("Failed to generate typography pairs");
+      const data = await res.json();
+      setPairs(data.pairs);
+
+      // Load Google Fonts
+      if (data.pairs.length > 0) {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = googleFontsUrl(data.pairs);
+        link.onload = () => setFontsLoaded(true);
+        document.head.appendChild(link);
+      }
+    } catch {
+      setError("Could not generate typography pairs. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, [questionnaireId]);
 
   useEffect(() => {
-    async function generate() {
-      try {
-        const res = await fetch("/api/generate/typography", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ questionnaireId }),
-        });
-        if (!res.ok) throw new Error("Failed to generate typography pairs");
-        const data = await res.json();
-        setPairs(data.pairs);
-
-        // Load Google Fonts
-        if (data.pairs.length > 0) {
-          const link = document.createElement("link");
-          link.rel = "stylesheet";
-          link.href = googleFontsUrl(data.pairs);
-          link.onload = () => setFontsLoaded(true);
-          document.head.appendChild(link);
-        }
-      } catch {
-        setError("Could not generate typography pairs. Please try again.");
-      } finally {
-        setLoading(false);
-      }
-    }
+    if (generateCalled.current) return;
+    generateCalled.current = true;
     generate();
-  }, [questionnaireId]);
+  }, [generate]);
 
   const handleSelect = useCallback(
     async (typographyId: string) => {
@@ -103,6 +109,16 @@ export function StepTypography({ questionnaireId, onComplete }: Props) {
     return (
       <div className="rounded-lg bg-red-50 p-6 text-center" role="alert">
         <p className="text-sm text-red-700">{error}</p>
+        <button
+          type="button"
+          onClick={() => {
+            generateCalled.current = false;
+            generate();
+          }}
+          className="mt-4 rounded-lg bg-violet-600 px-5 py-2 text-sm font-semibold text-white hover:bg-violet-700"
+        >
+          Retry
+        </button>
       </div>
     );
   }

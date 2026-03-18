@@ -126,6 +126,7 @@ export async function generateLogos(
   });
 
   const results: LogoConcept[] = [];
+  const PER_CALL_TIMEOUT_MS = 30_000; // 30s per concept
 
   // Generate logos sequentially to respect rate limits
   for (const concept of CONCEPT_VARIANTS) {
@@ -139,7 +140,12 @@ export async function generateLogos(
     );
 
     try {
-      const result = await model.generateContent(prompt);
+      const result = await Promise.race([
+        model.generateContent(prompt),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Gemini API timeout")), PER_CALL_TIMEOUT_MS)
+        ),
+      ]);
       const response = result.response;
 
       // Extract image from response parts

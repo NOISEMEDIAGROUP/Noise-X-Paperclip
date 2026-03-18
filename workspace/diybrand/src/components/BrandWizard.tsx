@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { StepProgress } from "./StepProgress";
 import { StepBusinessBasics } from "./steps/StepBusinessBasics";
 import { StepTargetAudience } from "./steps/StepTargetAudience";
@@ -45,11 +45,86 @@ const STEP_LABELS = [
   "Export",
 ];
 
+const STORAGE_KEY = "diybrand_questionnaire_id";
+
+function saveSessionId(id: string) {
+  try {
+    localStorage.setItem(STORAGE_KEY, id);
+  } catch {
+    // localStorage unavailable (SSR, private mode, quota)
+  }
+}
+
+function loadSessionId(): string | null {
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function clearSessionId() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // noop
+  }
+}
+
 export function BrandWizard() {
   const [step, setStep] = useState(1);
   const [data, setData] = useState<QuestionnaireData>(INITIAL_DATA);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [recovering, setRecovering] = useState(true);
+  const recoveryAttempted = useRef(false);
+
+  // Session recovery: load questionnaire from localStorage on mount
+  useEffect(() => {
+    if (recoveryAttempted.current) return;
+    recoveryAttempted.current = true;
+
+    const savedId = loadSessionId();
+    if (!savedId) {
+      setRecovering(false);
+      return;
+    }
+
+    fetch(`/api/questionnaire?id=${encodeURIComponent(savedId)}`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Not found");
+        return res.json();
+      })
+      .then((row) => {
+        // Don't recover completed questionnaires
+        if (row.completedAt) {
+          clearSessionId();
+          setRecovering(false);
+          return;
+        }
+
+        setData({
+          id: row.id,
+          businessName: row.businessName ?? "",
+          industry: row.industry ?? "",
+          businessDescription: row.businessDescription ?? "",
+          targetAudience: row.targetAudience ?? "",
+          brandPersonality: (row.brandPersonality as string[]) ?? [],
+          competitors: row.competitors ?? "",
+          visualPreferences: row.visualPreferences ?? "",
+        });
+        // Resume at saved step, but cap at step 5 for questionnaire steps
+        // (generation steps 6+ need re-entry through the flow)
+        const resumeStep = Math.min(row.currentStep ?? 1, 9);
+        setStep(resumeStep);
+        setRecovering(false);
+      })
+      .catch(() => {
+        // Stale or invalid session — clear and start fresh
+        clearSessionId();
+        setRecovering(false);
+      });
+  }, []);
 
   const updateData = useCallback((partial: Partial<QuestionnaireData>) => {
     setData((prev) => ({ ...prev, ...partial }));
@@ -84,6 +159,7 @@ export function BrandWizard() {
         const saved = await res.json();
         if (!data.id && saved.id) {
           setData((prev) => ({ ...prev, id: saved.id }));
+          saveSessionId(saved.id);
         }
       } catch {
         // Silently continue — user can still navigate
@@ -93,6 +169,11 @@ export function BrandWizard() {
     },
     [data]
   );
+
+  // Persist questionnaireId to localStorage whenever it changes
+  useEffect(() => {
+    if (data.id) saveSessionId(data.id);
+  }, [data.id]);
 
   const validateStep = useCallback(
     (s: number): boolean => {
@@ -141,6 +222,17 @@ export function BrandWizard() {
     await saveProgress(6);
     setStep(6);
   }, [step, validateStep, saveProgress]);
+
+  if (recovering) {
+    return (
+      <div className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200 sm:p-8">
+        <div className="flex flex-col items-center justify-center py-12" role="status" aria-busy="true">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" aria-hidden="true" />
+          <p className="mt-3 text-sm text-gray-500">Restoring your session...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200 sm:p-8">

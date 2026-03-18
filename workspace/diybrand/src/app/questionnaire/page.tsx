@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { BrandWizard } from "@/components/BrandWizard";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 export const metadata: Metadata = {
   title: "Brand Questionnaire — diybrand.app",
@@ -22,7 +23,9 @@ export default function QuestionnairePage() {
           </p>
         </div>
         <div className="mt-10">
-          <BrandWizard />
+          <ErrorBoundary>
+            <BrandWizard />
+          </ErrorBoundary>
         </div>
       </div>
     </main>

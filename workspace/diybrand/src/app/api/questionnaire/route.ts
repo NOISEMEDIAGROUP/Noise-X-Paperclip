@@ -3,6 +3,29 @@ import { db } from "@/db";
 import { brandQuestionnaire } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
+export async function GET(request: NextRequest) {
+  try {
+    const id = request.nextUrl.searchParams.get("id");
+    if (!id) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
+    }
+
+    const [row] = await db
+      .select()
+      .from(brandQuestionnaire)
+      .where(eq(brandQuestionnaire.id, id))
+      .limit(1);
+
+    if (!row) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(row);
+  } catch {
+    return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();

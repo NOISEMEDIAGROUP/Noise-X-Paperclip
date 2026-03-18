@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 type LogoOption = {
   id: string;
@@ -14,39 +14,75 @@ type Props = {
   onComplete: () => void;
 };
 
+const GENERATION_TIMEOUT_MS = 120_000; // 2 minutes
+
 export function StepLogo({ questionnaireId, onComplete }: Props) {
   const [logos, setLogos] = useState<LogoOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [timedOut, setTimedOut] = useState(false);
+  const generateCalled = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    async function generate() {
-      try {
-        const res = await fetch("/api/generate/logo", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ questionnaireId }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || "Failed to generate logos");
-        }
-        const data = await res.json();
-        setLogos(data.logos);
-      } catch (err) {
+  const generate = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setTimedOut(false);
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    const timeout = setTimeout(() => {
+      controller.abort();
+      setTimedOut(true);
+    }, GENERATION_TIMEOUT_MS);
+
+    try {
+      const res = await fetch("/api/generate/logo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionnaireId }),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to generate logos");
+      }
+      const data = await res.json();
+      setLogos(data.logos);
+    } catch (err) {
+      if (controller.signal.aborted) {
+        setError("Logo generation is taking too long. Please try again.");
+        setTimedOut(true);
+      } else {
         setError(
           err instanceof Error
             ? err.message
             : "Could not generate logos. Please try again."
         );
-      } finally {
-        setLoading(false);
       }
+    } finally {
+      clearTimeout(timeout);
+      setLoading(false);
     }
-    generate();
   }, [questionnaireId]);
+
+  useEffect(() => {
+    if (generateCalled.current) return;
+    generateCalled.current = true;
+    generate();
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, [generate]);
+
+  const handleRetry = useCallback(() => {
+    generateCalled.current = false;
+    generate();
+  }, [generate]);
 
   const handleSelect = useCallback(
     async (logoId: string) => {
@@ -87,6 +123,18 @@ export function StepLogo({ questionnaireId, onComplete }: Props) {
     return (
       <div className="rounded-lg bg-red-50 p-6 text-center" role="alert">
         <p className="text-sm text-red-700">{error}</p>
+        {timedOut && (
+          <p className="mt-1 text-xs text-red-500">
+            The AI took too long to respond. This can happen during peak hours.
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={handleRetry}
+          className="mt-4 rounded-lg bg-violet-600 px-5 py-2 text-sm font-semibold text-white hover:bg-violet-700"
+        >
+          Retry
+        </button>
       </div>
     );
   }
