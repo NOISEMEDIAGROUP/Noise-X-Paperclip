@@ -53,31 +53,34 @@ const startLocksByAgent = new Map<string, Promise<void>>();
 const REPO_ONLY_CWD_SENTINEL = "/__paperclip_repo_only__";
 const CHAT_HISTORY_LIMIT = 40;
 
+// Use octet_length() (byte-safe) instead of left()/substring() (character-based)
+// to guard truncation of text fields extracted from JSONB. left() parses UTF-8
+// character boundaries and throws error 22021 on corrupted byte sequences, even
+// when the raw ->> extraction itself succeeds.
+function safeLeft(expr: ReturnType<typeof sql>, maxOctets: number) {
+  return sql`
+    CASE
+      WHEN ${expr} IS NULL THEN NULL
+      WHEN octet_length(${expr}) <= ${maxOctets} THEN ${expr}
+      ELSE NULL
+    END
+  `;
+}
+
+const _rj = heartbeatRuns.resultJson;
 const summarizedHeartbeatRunResultJson = sql<Record<string, unknown> | null>`
   CASE
-    WHEN ${heartbeatRuns.resultJson} IS NULL THEN NULL
+    WHEN ${_rj} IS NULL THEN NULL
     ELSE NULLIF(
       jsonb_strip_nulls(
         jsonb_build_object(
-          'summary', CASE
-            WHEN ${heartbeatRuns.resultJson} ->> 'summary' IS NULL THEN NULL
-            ELSE left(${heartbeatRuns.resultJson} ->> 'summary', 500)
-          END,
-          'result', CASE
-            WHEN ${heartbeatRuns.resultJson} ->> 'result' IS NULL THEN NULL
-            ELSE left(${heartbeatRuns.resultJson} ->> 'result', 500)
-          END,
-          'message', CASE
-            WHEN ${heartbeatRuns.resultJson} ->> 'message' IS NULL THEN NULL
-            ELSE left(${heartbeatRuns.resultJson} ->> 'message', 500)
-          END,
-          'error', CASE
-            WHEN ${heartbeatRuns.resultJson} ->> 'error' IS NULL THEN NULL
-            ELSE left(${heartbeatRuns.resultJson} ->> 'error', 500)
-          END,
-          'total_cost_usd', ${heartbeatRuns.resultJson} -> 'total_cost_usd',
-          'cost_usd', ${heartbeatRuns.resultJson} -> 'cost_usd',
-          'costUsd', ${heartbeatRuns.resultJson} -> 'costUsd'
+          'summary', ${safeLeft(sql`${_rj} ->> 'summary'`, 2000)},
+          'result',  ${safeLeft(sql`${_rj} ->> 'result'`, 2000)},
+          'message', ${safeLeft(sql`${_rj} ->> 'message'`, 2000)},
+          'error',   ${safeLeft(sql`${_rj} ->> 'error'`, 2000)},
+          'total_cost_usd', ${_rj} -> 'total_cost_usd',
+          'cost_usd',       ${_rj} -> 'cost_usd',
+          'costUsd',        ${_rj} -> 'costUsd'
         )
       ),
       '{}'::jsonb
@@ -971,11 +974,11 @@ export function heartbeatService(db: Db) {
   }
 
   async function countRunningRunsForAgent(agentId: string) {
-    const [{ count }] = await db
+    const rows = await db
       .select({ count: sql<number>`count(*)` })
       .from(heartbeatRuns)
       .where(and(eq(heartbeatRuns.agentId, agentId), eq(heartbeatRuns.status, "running")));
-    return Number(count ?? 0);
+    return Number(rows[0]?.count ?? 0);
   }
 
   async function claimQueuedRun(run: typeof heartbeatRuns.$inferSelect) {
@@ -1309,17 +1312,19 @@ export function heartbeatService(db: Db) {
       historyText,
       promptText: hasResumableSession
         ? [
-            "This invocation is an interactive chat reply.",
-            "Reply directly to the latest user message.",
-            "Respect agent instructions and Paperclip operational rules.",
+            "IMPORTANT: This invocation is an INTERACTIVE CHAT reply — NOT a normal heartbeat.",
+            "DO NOT follow the Heartbeat Procedure automatically. Do NOT scan for assignments, do NOT checkout issues, do NOT call GET /api/companies/.../issues on your own.",
+            "Reply to the user's message, do any work they explicitly ask for, then EXIT.",
+            "If the user asks you to create issues, delegate tasks, post comments, or use any Paperclip API endpoint, do so — but only when the user requests it, not automatically.",
             "",
             "Latest user message:",
             latestUserMessage,
           ].join("\n")
         : [
-            "This invocation is an interactive chat reply.",
-            "Reply directly to the latest user message.",
-            "Respect agent instructions and Paperclip operational rules.",
+            "IMPORTANT: This invocation is an INTERACTIVE CHAT reply — NOT a normal heartbeat.",
+            "DO NOT follow the Heartbeat Procedure automatically. Do NOT scan for assignments, do NOT checkout issues, do NOT call GET /api/companies/.../issues on your own.",
+            "Reply to the user's message, do any work they explicitly ask for, then EXIT.",
+            "If the user asks you to create issues, delegate tasks, post comments, or use any Paperclip API endpoint, do so — but only when the user requests it, not automatically.",
             "",
             "Conversation history (oldest to newest):",
             historyText || "(no prior messages)",
