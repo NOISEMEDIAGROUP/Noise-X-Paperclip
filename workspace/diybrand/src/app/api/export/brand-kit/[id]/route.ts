@@ -9,6 +9,7 @@ import {
 } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import JSZip from "jszip";
+import { readLogo } from "@/lib/storage";
 
 export async function GET(
   req: NextRequest,
@@ -98,16 +99,27 @@ export async function GET(
   if (selectedLogos.length > 0) {
     const logoFolder = zip.folder("logos")!;
     for (const logo of selectedLogos) {
-      // imageData is a base64 data URI like "data:image/png;base64,..."
-      const match = logo.imageData.match(
-        /^data:image\/(\w+);base64,(.+)$/
-      );
-      if (!match) continue;
-
-      const ext = match[1];
-      const base64 = match[2];
+      const ext = logo.mimeType?.split("/")[1] || "png";
       const filename = `${logo.name.toLowerCase().replace(/\s+/g, "-")}.${ext}`;
-      logoFolder.file(filename, base64, { base64: true });
+
+      // Prefer file-based storage
+      if (logo.imagePath) {
+        const buffer = await readLogo(logo.imagePath);
+        if (buffer) {
+          logoFolder.file(filename, buffer);
+          continue;
+        }
+      }
+
+      // Fallback: decode legacy base64 data URI
+      if (logo.imageData) {
+        const match = logo.imageData.match(
+          /^data:image\/(\w+);base64,(.+)$/
+        );
+        if (match) {
+          logoFolder.file(filename, match[2], { base64: true });
+        }
+      }
     }
   }
 

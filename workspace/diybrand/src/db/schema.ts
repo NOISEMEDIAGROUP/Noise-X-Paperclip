@@ -64,7 +64,9 @@ export const brandLogos = pgTable("brand_logos", {
     .references(() => brandQuestionnaire.id),
   name: varchar("name", { length: 100 }).notNull(),
   variant: varchar("variant", { length: 50 }).notNull(), // "wordmark" | "icon"
-  imageData: text("image_data").notNull(), // base64 data URI
+  imageData: text("image_data"), // deprecated: base64 data URI (nullable for migration)
+  imagePath: varchar("image_path", { length: 500 }), // file path relative to uploads dir
+  mimeType: varchar("mime_type", { length: 100 }), // e.g. "image/png"
   prompt: text("prompt").notNull(),
   selected: boolean("selected").default(false).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

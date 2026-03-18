@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { brandQuestionnaire, brandPalette, brandLogos } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { generateLogos } from "@/lib/logo";
+import { saveLogo, deleteLogo } from "@/lib/storage";
 
 export async function POST(request: NextRequest) {
   try {
@@ -55,24 +56,44 @@ export async function POST(request: NextRequest) {
     // Generate logos via Gemini
     const concepts = await generateLogos(businessName, industry, personality, colors);
 
-    // Remove previously generated logos for this questionnaire
+    // Delete previously generated logo files and DB rows
+    const oldLogos = await db
+      .select({ imagePath: brandLogos.imagePath })
+      .from(brandLogos)
+      .where(eq(brandLogos.questionnaireId, questionnaireId));
+
+    for (const old of oldLogos) {
+      if (old.imagePath) {
+        await deleteLogo(old.imagePath);
+      }
+    }
+
     await db
       .delete(brandLogos)
       .where(eq(brandLogos.questionnaireId, questionnaireId));
 
-    // Persist new logos
+    // Persist new logos: save files first, then insert DB rows
+    const insertValues = [];
+    for (const c of concepts) {
+      // Generate a temporary ID for the filename
+      const tempId = crypto.randomUUID();
+      const imagePath = await saveLogo(tempId, c.imageBuffer, c.mimeType);
+
+      insertValues.push({
+        id: tempId,
+        questionnaireId,
+        name: c.name,
+        variant: c.variant,
+        imagePath,
+        mimeType: c.mimeType,
+        prompt: c.prompt,
+        selected: false,
+      });
+    }
+
     const rows = await db
       .insert(brandLogos)
-      .values(
-        concepts.map((c) => ({
-          questionnaireId,
-          name: c.name,
-          variant: c.variant,
-          imageData: c.imageData,
-          prompt: c.prompt,
-          selected: false,
-        }))
-      )
+      .values(insertValues)
       .returning();
 
     return NextResponse.json({
@@ -80,7 +101,7 @@ export async function POST(request: NextRequest) {
         id: r.id,
         name: r.name,
         variant: r.variant,
-        imageData: r.imageData,
+        imageUrl: `/api/logos/${r.id}/image`,
       })),
     });
   } catch (err) {

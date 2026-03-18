@@ -4,7 +4,8 @@ export type LogoConcept = {
   name: string;
   variant: "wordmark" | "icon";
   prompt: string;
-  imageData: string; // base64 data URI (image/png)
+  imageBuffer: Buffer;
+  mimeType: string;
 };
 
 const STYLE_MAP: Record<string, string> = {
@@ -151,7 +152,8 @@ export async function generateLogos(
             name: concept.name,
             variant: concept.variant,
             prompt,
-            imageData: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`,
+            imageBuffer: Buffer.from(part.inlineData.data, "base64"),
+            mimeType: part.inlineData.mimeType,
           });
           break; // One image per concept
         }

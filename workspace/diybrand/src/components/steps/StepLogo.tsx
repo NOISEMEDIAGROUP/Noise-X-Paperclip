@@ -6,7 +6,7 @@ type LogoOption = {
   id: string;
   name: string;
   variant: string;
-  imageData: string;
+  imageUrl: string;
 };
 
 type Props = {
@@ -136,7 +136,7 @@ export function StepLogo({ questionnaireId, onComplete }: Props) {
               {/* Logo image */}
               <div className="flex items-center justify-center rounded-lg bg-white p-4">
                 <img
-                  src={logo.imageData}
+                  src={logo.imageUrl}
                   alt={`${logo.name} logo concept`}
                   className="max-h-48 w-auto object-contain"
                 />
@@ -145,7 +145,7 @@ export function StepLogo({ questionnaireId, onComplete }: Props) {
               {/* Dark background preview */}
               <div className="mt-2 flex items-center justify-center rounded-lg bg-gray-900 p-4">
                 <img
-                  src={logo.imageData}
+                  src={logo.imageUrl}
                   alt={`${logo.name} on dark background`}
                   className="max-h-32 w-auto object-contain"
                   style={{ filter: "brightness(1.1)" }}
