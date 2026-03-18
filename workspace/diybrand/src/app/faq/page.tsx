@@ -25,7 +25,7 @@ const faqData: FAQItem[] = [
       },
       {
         q: 'Can I start for free?',
-        a: 'Yes. The early access pricing is $49 for a complete brand kit. We may offer a limited free tier in the future, but for now that\'s our standard rate.',
+        a: 'We offer two tiers: Basic ($19) for logo and colors, or Premium ($49) for the complete brand kit with social templates and guidelines. Early access pricing — these rates will increase after launch.',
       },
       {
         q: 'Is there a money-back guarantee?',
@@ -175,12 +175,12 @@ const faqData: FAQItem[] = [
     category: 'Pricing & Refunds',
     questions: [
       {
-        q: 'Why does diybrand cost $49?',
-        a: 'That covers AI generation, file processing, hosting, and support. It\'s a one-time fee with no subscriptions or recurring charges.',
+        q: 'Why does diybrand cost $19-$49?',
+        a: 'Basic ($19) covers AI generation and core files. Premium ($49) includes everything plus social templates and business card mockups. Both are one-time fees with no subscriptions.',
       },
       {
         q: 'Are there different pricing tiers?',
-        a: 'Right now, everyone gets the same complete brand kit for $49. We\'re exploring tiered options in the future.',
+        a: 'Yes. Basic ($19) includes logo files, colors, and typography. Premium ($49) adds social templates, business card mockups, and brand guidelines PDF. Most customers choose Premium.',
       },
       {
         q: 'Do you offer discounts for bulk orders or teams?',

@@ -2,7 +2,8 @@
 
 import { motion } from "framer-motion";
 
-const words = ["Your", "brand.", "Built", "by", "AI.", "In", "minutes."];
+const words = ["Professional", "brand", "identity", "in", "10", "minutes,", "not", "10", "weeks."];
+const highlightIndices = new Set([4, 5]); // "10 minutes," gets the gradient
 
 export function HeroHeadline() {
   return (
@@ -15,7 +16,7 @@ export function HeroHeadline() {
           transition={{ delay: 0.15 + i * 0.12, duration: 0.5, ease: "easeOut" }}
           className="mr-[0.3em] inline-block"
         >
-          {word === "AI." ? (
+          {highlightIndices.has(i) ? (
             <span className="gradient-text">{word}</span>
           ) : (
             word

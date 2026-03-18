@@ -15,22 +15,30 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "diybrand.app — Your brand. Built by AI. In minutes.",
+  title: "diybrand.app — AI brand kit in minutes. One-time payment.",
   description:
-    "Answer a short questionnaire and let AI create your complete brand identity — logo, colors, fonts, and guidelines — ready to use. No design skills needed.",
+    "Build a complete brand identity in minutes: logo, colors, fonts, guidelines. AI-powered, no design skills needed. Own everything. One-time payment, not monthly.",
   openGraph: {
-    title: "diybrand.app — Your brand. Built by AI. In minutes.",
+    title: "DIYBrand.app — One-Time AI Brand Kit (No Subscriptions, Own Everything)",
     description:
-      "Answer a short questionnaire and let AI create your complete brand identity — logo, colors, fonts, and guidelines — ready to use.",
+      "Answer a questionnaire. Get a professional brand kit instantly: logo, palette, typography, guidelines. Download and own all files. One-time payment — no monthly fees.",
     url: "https://diybrand.app",
     siteName: "diybrand.app",
     type: "website",
+    images: [
+      {
+        url: "https://diybrand.app/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "DIYBrand.app — AI-powered brand kit builder",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "diybrand.app — Your brand. Built by AI. In minutes.",
+    title: "DIYBrand.app — One-Time AI Brand Kit (No Subscriptions)",
     description:
-      "Answer a short questionnaire and let AI create your complete brand identity — logo, colors, fonts, and guidelines — ready to use.",
+      "Build a complete brand identity in minutes: logo, colors, fonts, guidelines. AI-powered, no design skills needed. Own everything. One-time payment, not monthly.",
   },
   metadataBase: new URL("https://diybrand.app"),
   alternates: {
@@ -46,14 +54,14 @@ const jsonLd = {
       name: "diybrand.app",
       url: "https://diybrand.app",
       description:
-        "Answer a short questionnaire and let AI create your complete brand identity — logo, colors, fonts, and guidelines — ready to use.",
+        "Build a complete brand identity in minutes: logo, colors, fonts, guidelines. AI-powered, no design skills needed. Own everything.",
     },
     {
       "@type": "Organization",
       name: "diybrand.app",
       url: "https://diybrand.app",
       description:
-        "AI-powered brand identity generator. Build your brand in minutes, not months.",
+        "AI-powered brand identity generator. Professional brand kit in minutes, not months.",
     },
     {
       "@type": "SoftwareApplication",
@@ -61,12 +69,12 @@ const jsonLd = {
       applicationCategory: "DesignApplication",
       operatingSystem: "Web",
       description:
-        "AI-powered brand kit generator — logo, colors, fonts, and guidelines.",
+        "AI-powered brand kit generator — logo, colors, fonts, and guidelines. One-time purchase.",
       offers: {
         "@type": "Offer",
-        price: "0",
+        price: "19",
         priceCurrency: "USD",
-        description: "Free during early access",
+        description: "One-time purchase. No subscriptions. All files owned by you.",
       },
     },
   ],
