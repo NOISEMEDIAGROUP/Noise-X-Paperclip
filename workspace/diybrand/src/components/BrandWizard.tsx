@@ -8,6 +8,7 @@ import { StepBrandPersonality } from "./steps/StepBrandPersonality";
 import { StepInspiration } from "./steps/StepInspiration";
 import { StepReview } from "./steps/StepReview";
 import { StepPalette } from "./steps/StepPalette";
+import { StepTypography } from "./steps/StepTypography";
 
 export type QuestionnaireData = {
   id?: string;
@@ -37,6 +38,7 @@ const STEP_LABELS = [
   "Inspiration",
   "Review",
   "Colors",
+  "Typography",
 ];
 
 export function BrandWizard() {
@@ -133,7 +135,7 @@ export function BrandWizard() {
 
   const handleSubmit = useCallback(async () => {
     if (!validateStep(step)) return;
-    await saveProgress(6, true);
+    await saveProgress(6);
     setStep(6);
   }, [step, validateStep, saveProgress]);
 
@@ -181,7 +183,19 @@ export function BrandWizard() {
         {step === 6 && data.id && (
           <StepPalette
             questionnaireId={data.id}
-            onComplete={() => setSubmitted(true)}
+            onComplete={() => {
+              saveProgress(7);
+              setStep(7);
+            }}
+          />
+        )}
+        {step === 7 && data.id && (
+          <StepTypography
+            questionnaireId={data.id}
+            onComplete={() => {
+              saveProgress(7, true);
+              setSubmitted(true);
+            }}
           />
         )}
       </div>

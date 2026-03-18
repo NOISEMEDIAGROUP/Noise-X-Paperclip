@@ -40,3 +40,19 @@ export const brandPalette = pgTable("brand_palette", {
   selected: boolean("selected").default(false).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const brandTypography = pgTable("brand_typography", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  questionnaireId: uuid("questionnaire_id")
+    .notNull()
+    .references(() => brandQuestionnaire.id),
+  name: varchar("name", { length: 100 }).notNull(),
+  headingFamily: varchar("heading_family", { length: 200 }).notNull(),
+  headingWeight: integer("heading_weight").notNull(),
+  headingCategory: varchar("heading_category", { length: 50 }).notNull(),
+  bodyFamily: varchar("body_family", { length: 200 }).notNull(),
+  bodyWeight: integer("body_weight").notNull(),
+  bodyCategory: varchar("body_category", { length: 50 }).notNull(),
+  selected: boolean("selected").default(false).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
