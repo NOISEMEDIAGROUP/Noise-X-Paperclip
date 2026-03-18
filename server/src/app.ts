@@ -261,7 +261,10 @@ export async function createApp(
           port: hmrPort,
           clientPort: hmrPort,
         },
-        allowedHosts: privateHostnameGateEnabled ? Array.from(privateHostnameAllowSet) : undefined,
+        // Always pass the explicit hostname allowlist through to Vite dev middleware.
+        // Otherwise local_trusted mode falls back to Vite's default host filter and
+        // rejects Tailscale/LAN hostnames even when Paperclip config allows them.
+        allowedHosts: Array.from(privateHostnameAllowSet),
       },
     });
 
