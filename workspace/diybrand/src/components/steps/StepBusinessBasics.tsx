@@ -36,12 +36,14 @@ export function StepBusinessBasics({ data, updateData, errors }: Props) {
           value={data.businessName}
           onChange={(e) => updateData({ businessName: e.target.value })}
           placeholder="e.g. Sunrise Coffee Co."
+          aria-invalid={!!errors.businessName}
+          aria-describedby={errors.businessName ? "businessName-error" : undefined}
           className={`mt-1.5 block w-full rounded-lg border px-3.5 py-2.5 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 ${
             errors.businessName ? "border-red-300" : "border-gray-300"
           }`}
         />
         {errors.businessName && (
-          <p className="mt-1 text-sm text-red-600">{errors.businessName}</p>
+          <p id="businessName-error" className="mt-1 text-sm text-red-600" role="alert">{errors.businessName}</p>
         )}
       </div>
 
@@ -53,6 +55,8 @@ export function StepBusinessBasics({ data, updateData, errors }: Props) {
           id="industry"
           value={data.industry}
           onChange={(e) => updateData({ industry: e.target.value })}
+          aria-invalid={!!errors.industry}
+          aria-describedby={errors.industry ? "industry-error" : undefined}
           className={`mt-1.5 block w-full rounded-lg border px-3.5 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-500 ${
             errors.industry ? "border-red-300" : "border-gray-300"
           } ${!data.industry ? "text-gray-400" : ""}`}
@@ -65,7 +69,7 @@ export function StepBusinessBasics({ data, updateData, errors }: Props) {
           ))}
         </select>
         {errors.industry && (
-          <p className="mt-1 text-sm text-red-600">{errors.industry}</p>
+          <p id="industry-error" className="mt-1 text-sm text-red-600" role="alert">{errors.industry}</p>
         )}
       </div>
 
@@ -79,12 +83,14 @@ export function StepBusinessBasics({ data, updateData, errors }: Props) {
           onChange={(e) => updateData({ businessDescription: e.target.value })}
           rows={3}
           placeholder="What do you do? What makes you different?"
+          aria-invalid={!!errors.businessDescription}
+          aria-describedby={errors.businessDescription ? "businessDescription-error" : undefined}
           className={`mt-1.5 block w-full rounded-lg border px-3.5 py-2.5 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 ${
             errors.businessDescription ? "border-red-300" : "border-gray-300"
           }`}
         />
         {errors.businessDescription && (
-          <p className="mt-1 text-sm text-red-600">{errors.businessDescription}</p>
+          <p id="businessDescription-error" className="mt-1 text-sm text-red-600" role="alert">{errors.businessDescription}</p>
         )}
       </div>
     </div>

@@ -47,7 +47,7 @@ const features = [
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-white text-gray-900">
+    <main id="main-content" className="min-h-screen bg-white text-gray-900">
       {/* Hero */}
       <section className="flex flex-col items-center justify-center px-6 pt-24 pb-20 text-center sm:pt-32 sm:pb-28">
         <p className="mb-4 inline-block rounded-full bg-violet-100 px-4 py-1.5 text-sm font-medium text-violet-700">

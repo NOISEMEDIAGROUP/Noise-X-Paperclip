@@ -27,12 +27,14 @@ export function StepTargetAudience({ data, updateData, errors }: Props) {
           onChange={(e) => updateData({ targetAudience: e.target.value })}
           rows={5}
           placeholder="e.g. Young professionals aged 25-35 who care about sustainability and are willing to pay a premium for ethically-sourced coffee. They're active on Instagram and value aesthetics and community."
+          aria-invalid={!!errors.targetAudience}
+          aria-describedby={errors.targetAudience ? "targetAudience-error" : undefined}
           className={`mt-1.5 block w-full rounded-lg border px-3.5 py-2.5 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 ${
             errors.targetAudience ? "border-red-300" : "border-gray-300"
           }`}
         />
         {errors.targetAudience && (
-          <p className="mt-1 text-sm text-red-600">{errors.targetAudience}</p>
+          <p id="targetAudience-error" className="mt-1 text-sm text-red-600" role="alert">{errors.targetAudience}</p>
         )}
       </div>
     </div>

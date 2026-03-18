@@ -92,8 +92,8 @@ export function StepTypography({ questionnaireId, onComplete }: Props) {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-16">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+      <div className="flex flex-col items-center justify-center py-16" role="status" aria-busy="true" aria-live="polite">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" aria-hidden="true" />
         <p className="mt-4 text-sm text-gray-500">Finding the perfect font pairs...</p>
       </div>
     );
@@ -101,11 +101,13 @@ export function StepTypography({ questionnaireId, onComplete }: Props) {
 
   if (error && pairs.length === 0) {
     return (
-      <div className="rounded-lg bg-red-50 p-6 text-center">
+      <div className="rounded-lg bg-red-50 p-6 text-center" role="alert">
         <p className="text-sm text-red-700">{error}</p>
       </div>
     );
   }
+
+  const selectedPair = pairs.find((p) => p.id === selectedId);
 
   return (
     <div className="space-y-6">
@@ -117,13 +119,16 @@ export function StepTypography({ questionnaireId, onComplete }: Props) {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-3" role="radiogroup" aria-label="Typography options">
         {pairs.map((pair) => {
           const isSelected = selectedId === pair.id;
           return (
             <button
               key={pair.id}
               type="button"
+              role="radio"
+              aria-checked={isSelected}
+              aria-label={`${pair.name}: ${pair.heading.family} heading with ${pair.body.family} body${isSelected ? " (selected)" : ""}`}
               onClick={() => handleSelect(pair.id)}
               className={`group rounded-xl border-2 p-5 text-left transition-all ${
                 isSelected
@@ -137,7 +142,7 @@ export function StepTypography({ questionnaireId, onComplete }: Props) {
                 </span>
                 {isSelected && (
                   <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
-                    Selected
+                    ✓ Selected
                   </span>
                 )}
               </div>
@@ -191,6 +196,14 @@ export function StepTypography({ questionnaireId, onComplete }: Props) {
           );
         })}
       </div>
+
+      <div aria-live="polite" className="sr-only">
+        {selectedPair ? `Selected typography: ${selectedPair.name}` : ""}
+      </div>
+
+      {error && pairs.length > 0 && (
+        <p className="text-sm text-red-600" role="alert">{error}</p>
+      )}
 
       {selectedId && (
         <div className="flex justify-end">

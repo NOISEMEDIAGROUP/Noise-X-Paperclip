@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 export default function QuestionnairePage() {
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main id="main-content" className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-2xl px-6 py-12 sm:py-20">
         <div className="text-center">
           <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">

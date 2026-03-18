@@ -7,7 +7,7 @@ export default function SuccessPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-screen items-center justify-center bg-gray-50">
+        <main id="main-content" className="flex min-h-screen items-center justify-center bg-gray-50">
           <div className="text-center">
             <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-violet-300 border-t-violet-600" />
             <p className="mt-4 text-sm text-gray-500">Loading...</p>
@@ -83,7 +83,7 @@ function SuccessContent() {
 
   if (state === "loading") {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-50">
+      <main id="main-content" className="flex min-h-screen items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-violet-300 border-t-violet-600" />
           <p className="mt-4 text-sm text-gray-500">
@@ -96,7 +96,7 @@ function SuccessContent() {
 
   if (state === "error") {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+      <main id="main-content" className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
         <div className="max-w-sm text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
             <svg
@@ -132,7 +132,7 @@ function SuccessContent() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+    <main id="main-content" className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
       <div className="max-w-md text-center">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
           <svg

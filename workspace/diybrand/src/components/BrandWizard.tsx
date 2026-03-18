@@ -146,7 +146,7 @@ export function BrandWizard() {
     <div className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200 sm:p-8">
       <StepProgress currentStep={step} labels={STEP_LABELS} />
 
-      <div className="mt-8">
+      <div className="mt-8" aria-live="polite" aria-atomic="true">
         {step === 1 && (
           <StepBusinessBasics data={data} updateData={updateData} errors={errors} />
         )}

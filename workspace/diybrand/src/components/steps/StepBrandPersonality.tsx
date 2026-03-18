@@ -48,7 +48,7 @@ export function StepBrandPersonality({ data, updateData, errors }: Props) {
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2.5">
+      <div className="flex flex-wrap gap-2.5" role="group" aria-label="Brand personality adjectives">
         {ADJECTIVES.map((adj) => {
           const selected = data.brandPersonality.includes(adj);
           return (
@@ -56,20 +56,21 @@ export function StepBrandPersonality({ data, updateData, errors }: Props) {
               key={adj}
               type="button"
               onClick={() => toggle(adj)}
+              aria-pressed={selected}
               className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
                 selected
                   ? "border-violet-600 bg-violet-600 text-white"
                   : "border-gray-300 bg-white text-gray-700 hover:border-violet-300 hover:bg-violet-50"
               }`}
             >
-              {adj}
+              {selected ? `✓ ${adj}` : adj}
             </button>
           );
         })}
       </div>
 
       {errors.brandPersonality && (
-        <p className="text-sm text-red-600">{errors.brandPersonality}</p>
+        <p className="text-sm text-red-600" role="alert">{errors.brandPersonality}</p>
       )}
 
       {data.brandPersonality.length > 0 && (

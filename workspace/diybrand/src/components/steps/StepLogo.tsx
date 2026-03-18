@@ -70,8 +70,8 @@ export function StepLogo({ questionnaireId, onComplete }: Props) {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-16">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+      <div className="flex flex-col items-center justify-center py-16" role="status" aria-busy="true" aria-live="polite">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" aria-hidden="true" />
         <p className="mt-4 text-sm text-gray-500">
           Generating your logo concepts...
         </p>
@@ -85,11 +85,13 @@ export function StepLogo({ questionnaireId, onComplete }: Props) {
 
   if (error && logos.length === 0) {
     return (
-      <div className="rounded-lg bg-red-50 p-6 text-center">
+      <div className="rounded-lg bg-red-50 p-6 text-center" role="alert">
         <p className="text-sm text-red-700">{error}</p>
       </div>
     );
   }
+
+  const selectedLogo = logos.find((l) => l.id === selectedId);
 
   return (
     <div className="space-y-6">
@@ -103,13 +105,16 @@ export function StepLogo({ questionnaireId, onComplete }: Props) {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2" role="radiogroup" aria-label="Logo options">
         {logos.map((logo) => {
           const isSelected = selectedId === logo.id;
           return (
             <button
               key={logo.id}
               type="button"
+              role="radio"
+              aria-checked={isSelected}
+              aria-label={`${logo.name} — ${logo.variant}${isSelected ? " (selected)" : ""}`}
               onClick={() => handleSelect(logo.id)}
               className={`group rounded-xl border-2 p-4 text-left transition-all ${
                 isSelected
@@ -128,7 +133,7 @@ export function StepLogo({ questionnaireId, onComplete }: Props) {
                 </div>
                 {isSelected && (
                   <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
-                    Selected
+                    ✓ Selected
                   </span>
                 )}
               </div>
@@ -155,6 +160,14 @@ export function StepLogo({ questionnaireId, onComplete }: Props) {
           );
         })}
       </div>
+
+      <div aria-live="polite" className="sr-only">
+        {selectedLogo ? `Selected logo: ${selectedLogo.name}` : ""}
+      </div>
+
+      {error && logos.length > 0 && (
+        <p className="text-sm text-red-600" role="alert">{error}</p>
+      )}
 
       {selectedId && (
         <div className="flex justify-end">
