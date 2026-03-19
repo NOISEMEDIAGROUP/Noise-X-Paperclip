@@ -435,10 +435,13 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   if (resolvedTaskId && (!resolvedTaskTitle || !resolvedTaskBody)) {
     try {
-      const apiBase =
+      let apiBase =
         cfgString(config.paperclipApiUrl) ||
         process.env.PAPERCLIP_API_URL ||
         "http://127.0.0.1:3100/api";
+      if (!apiBase.endsWith("/api")) {
+        apiBase = apiBase.replace(/\/+$/, "") + "/api";
+      }
       const issueResp = await fetch(`${apiBase}/issues/${resolvedTaskId}`);
       if (issueResp.ok) {
         const issue = (await issueResp.json()) as Record<string, unknown>;
