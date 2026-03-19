@@ -1277,6 +1277,14 @@ export function issueRoutes(db: Db, storage: StorageService) {
     // Only infer for non-browser requests (curl from Hermes agent, no Referer header)
     // to avoid misattributing user UI comments to agents.
     let resolvedAgentId: string | undefined = (req.body.agentId as string | undefined) ?? actor.agentId ?? undefined;
+    // Validate body agentId against the database: must exist and belong to the same company.
+    // Prevents impersonation (P0) and selfComment spoofing (P1).
+    if (resolvedAgentId && resolvedAgentId === req.body.agentId) {
+      const agentRecord = await agentsSvc.getById(resolvedAgentId);
+      if (!agentRecord || agentRecord.companyId !== currentIssue.companyId) {
+        resolvedAgentId = actor.agentId ?? undefined; // discard invalid, fall through to auto-inference
+      }
+    }
     if (!resolvedAgentId && currentIssue.assigneeAgentId && req.actor.source === "local_implicit" && !req.header("referer")) {
       const activeRun = await heartbeat.getActiveRunForAgent(currentIssue.assigneeAgentId);
       if (activeRun && activeRun.status === "running") {
