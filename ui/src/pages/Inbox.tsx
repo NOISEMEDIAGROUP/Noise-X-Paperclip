@@ -549,10 +549,12 @@ export function Inbox() {
 
   const markReadMutation = useMutation({
     mutationFn: (id: string) => issuesApi.markRead(id),
-    onMutate: (id) => {
+    onMutate: async (id) => {
       setFadingOutIssues((prev) => new Set(prev).add(id));
-      // Optimistic update: mark single issue as read in cache
+      // Cancel in-flight fetches so they don't overwrite our optimistic update
       const touchedKey = queryKeys.issues.listTouchedByMe(selectedCompanyId!);
+      await queryClient.cancelQueries({ queryKey: touchedKey });
+      // Optimistic update: mark single issue as read in cache
       const previous = queryClient.getQueryData<Issue[]>(touchedKey);
       queryClient.setQueryData<Issue[]>(touchedKey, (old) =>
         old?.map((issue) =>
@@ -585,15 +587,17 @@ export function Inbox() {
     mutationFn: async (issueIds: string[]) => {
       await issuesApi.markAllRead(selectedCompanyId!, issueIds);
     },
-    onMutate: (issueIds) => {
+    onMutate: async (issueIds) => {
       setFadingOutIssues((prev) => {
         const next = new Set(prev);
         for (const issueId of issueIds) next.add(issueId);
         return next;
       });
+      // Cancel in-flight fetches so they don't overwrite our optimistic update
+      const touchedKey = queryKeys.issues.listTouchedByMe(selectedCompanyId!);
+      await queryClient.cancelQueries({ queryKey: touchedKey });
       // Optimistic update: mark issues as read in cache immediately
       const idsSet = new Set(issueIds);
-      const touchedKey = queryKeys.issues.listTouchedByMe(selectedCompanyId!);
       const previous = queryClient.getQueryData<Issue[]>(touchedKey);
       queryClient.setQueryData<Issue[]>(touchedKey, (old) =>
         old?.map((issue) =>

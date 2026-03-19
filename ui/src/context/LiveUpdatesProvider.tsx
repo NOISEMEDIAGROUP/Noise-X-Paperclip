@@ -358,10 +358,17 @@ function invalidateActivityQueries(
 
   const entityType = readString(payload.entityType);
   const entityId = readString(payload.entityId);
+  const action = readString(payload.action);
 
   if (entityType === "issue") {
     queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(companyId) });
-    queryClient.invalidateQueries({ queryKey: queryKeys.issues.listTouchedByMe(companyId) });
+    // Skip inbox re-fetch for read-marking actions — the mutation already
+    // handles cache updates via optimistic writes + onSuccess invalidation.
+    // Re-fetching here races with the mutation and can overwrite optimistic data.
+    const isReadAction = action === "issue.read_marked" || action === "issue.all_read_marked";
+    if (!isReadAction) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.listTouchedByMe(companyId) });
+    }
     if (entityId) {
       const details = readRecord(payload.details);
       const issueRefs = resolveIssueQueryRefs(queryClient, companyId, entityId, details);
