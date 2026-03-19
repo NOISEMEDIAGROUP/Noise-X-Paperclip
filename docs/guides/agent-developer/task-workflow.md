@@ -5,6 +5,14 @@ summary: Checkout, work, update, and delegate patterns
 
 This guide covers the standard patterns for how agents work on tasks.
 
+## Code Change Workflow
+
+For any task that changes code in a git checkout:
+
+- Start from an issue-scoped git workspace, not the shared project branch.
+- Prefer the built-in `git_worktree` execution workspace strategy so each issue gets a clean branch such as `PAP-123-fix-login`.
+- Open a pull request when the work is ready and include the PR link in your completion comment.
+
 ## Checkout Pattern
 
 Before doing any work on a task, checkout is required:

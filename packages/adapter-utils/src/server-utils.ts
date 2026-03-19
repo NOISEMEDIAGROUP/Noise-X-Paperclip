@@ -32,6 +32,15 @@ export const runningProcesses = new Map<string, RunningProcess>();
 export const MAX_CAPTURE_BYTES = 4 * 1024 * 1024;
 export const MAX_EXCERPT_BYTES = 32 * 1024;
 const SENSITIVE_ENV_KEY = /(key|token|secret|password|passwd|authorization|cookie)/i;
+const CLAUDE_CODE_NESTING_VARS = [
+  "CLAUDECODE",
+  "CLAUDE_CODE_ENTRYPOINT",
+  "CLAUDE_CODE_SESSION",
+  "CLAUDE_CODE_PARENT_SESSION",
+] as const;
+const HOST_ENV_KEYS_BLOCKED_BY_DEFAULT = [
+  "DATABASE_URL",
+] as const;
 
 export function parseObject(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -208,6 +217,25 @@ export function ensurePathInEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return { ...env, PATH: defaultPathForPlatform() };
 }
 
+export function buildChildProcessEnv(env: Record<string, string>): NodeJS.ProcessEnv {
+  const merged: NodeJS.ProcessEnv = { ...process.env, ...env };
+
+  // Strip nesting guard env leaked from the parent runtime so nested CLIs still launch.
+  for (const key of CLAUDE_CODE_NESTING_VARS) {
+    delete merged[key];
+  }
+
+  // Local agent runs should not silently inherit the Paperclip server's database target.
+  // Keep explicit adapter config overrides intact.
+  for (const key of HOST_ENV_KEYS_BLOCKED_BY_DEFAULT) {
+    if (!Object.prototype.hasOwnProperty.call(env, key)) {
+      delete merged[key];
+    }
+  }
+
+  return ensurePathInEnv(merged);
+}
+
 export async function ensureAbsoluteDirectory(
   cwd: string,
   opts: { createIfMissing?: boolean } = {},
@@ -272,24 +300,7 @@ export async function runChildProcess(
   const onLogError = opts.onLogError ?? ((err, id, msg) => console.warn({ err, runId: id }, msg));
 
   return new Promise<RunProcessResult>((resolve, reject) => {
-    const rawMerged: NodeJS.ProcessEnv = { ...process.env, ...opts.env };
-
-    // Strip Claude Code nesting-guard env vars so spawned `claude` processes
-    // don't refuse to start with "cannot be launched inside another session".
-    // These vars leak in when the Paperclip server itself is started from
-    // within a Claude Code session (e.g. `npx paperclipai run` in a terminal
-    // owned by Claude Code) or when cron inherits a contaminated shell env.
-    const CLAUDE_CODE_NESTING_VARS = [
-      "CLAUDECODE",
-      "CLAUDE_CODE_ENTRYPOINT",
-      "CLAUDE_CODE_SESSION",
-      "CLAUDE_CODE_PARENT_SESSION",
-    ] as const;
-    for (const key of CLAUDE_CODE_NESTING_VARS) {
-      delete rawMerged[key];
-    }
-
-    const mergedEnv = ensurePathInEnv(rawMerged);
+    const mergedEnv = buildChildProcessEnv(opts.env);
     void resolveSpawnTarget(command, args, opts.cwd, mergedEnv)
       .then((target) => {
         const child = spawn(target.command, target.args, {
