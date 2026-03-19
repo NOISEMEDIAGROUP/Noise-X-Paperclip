@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Eye, EyeOff, RefreshCw } from "lucide-react";
 import type { AdapterConfigFieldsProps } from "../types";
 import {
   Field,
@@ -13,6 +13,219 @@ import {
 
 const inputClass =
   "w-full rounded-md border border-border px-2.5 py-1.5 bg-transparent outline-none text-sm font-mono placeholder:text-muted-foreground/40";
+
+const selectClass =
+  "w-full rounded-md border border-border px-2.5 py-1.5 bg-background text-foreground outline-none text-sm font-mono [color-scheme:dark] dark:bg-background";
+
+type GatewayAgent = {
+  id: string;
+  name: string;
+  identity?: { name?: string; emoji?: string };
+};
+
+type AgentsListResponse = {
+  defaultId: string;
+  agents: GatewayAgent[];
+};
+
+function agentLabel(a: GatewayAgent): string {
+  if (a.identity?.name) return a.identity.name;
+  return a.name || a.id;
+}
+
+type GatewayModel = {
+  id: string;
+  name: string;
+  provider: string;
+  contextWindow?: number;
+  reasoning?: boolean;
+};
+
+function modelLabel(m: GatewayModel): string {
+  const ctx = m.contextWindow ? ` (${Math.round(m.contextWindow / 1000)}k)` : "";
+  const reasoning = m.reasoning ? " 🧠" : "";
+  return `${m.provider}/${m.name}${ctx}${reasoning}`;
+}
+
+function useGatewayModels(
+  wsUrl: string,
+  token: string,
+): { models: GatewayModel[]; loading: boolean; error: string | null; refresh: () => void } {
+  const [models, setModels] = useState<GatewayModel[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+
+  useEffect(() => {
+    if (!wsUrl) return;
+
+    let cancelled = false;
+    let ws: WebSocket | null = null;
+    const timer = setTimeout(() => {
+      if (!cancelled) { setError("Connection timed out"); setLoading(false); ws?.close(); }
+    }, 15_000);
+
+    setLoading(true);
+    setError(null);
+
+    try { ws = new WebSocket(wsUrl); } catch (e) {
+      setError(e instanceof Error ? e.message : "Invalid WebSocket URL");
+      setLoading(false); clearTimeout(timer); return;
+    }
+
+    ws.onmessage = (event) => {
+      if (cancelled) return;
+      try {
+        const frame = JSON.parse(String(event.data));
+        if (frame.type === "event" && frame.event === "connect.challenge") {
+          ws?.send(JSON.stringify({
+            type: "req", id: "c1", method: "connect",
+            params: {
+              minProtocol: 3, maxProtocol: 3,
+              client: { id: "gateway-client", version: "paperclip", platform: "browser", mode: "backend" },
+              role: "operator", scopes: ["operator.admin"],
+              ...(token ? { auth: { token } } : {}),
+            },
+          }));
+          return;
+        }
+        if (frame.type === "res" && frame.id === "c1") {
+          if (!frame.ok) { setError(frame.error?.message ?? "Connect failed"); setLoading(false); clearTimeout(timer); ws?.close(); return; }
+          ws?.send(JSON.stringify({ type: "req", id: "ml", method: "models.list", params: {} }));
+          return;
+        }
+        if (frame.type === "res" && frame.id === "ml") {
+          clearTimeout(timer);
+          if (!frame.ok) { setError(frame.error?.message ?? "models.list failed"); setLoading(false); ws?.close(); return; }
+          setModels((frame.payload as { models: GatewayModel[] }).models ?? []);
+          setLoading(false);
+          ws?.close();
+        }
+      } catch { /* ignore */ }
+    };
+
+    ws.onerror = () => { if (!cancelled) { setError("WebSocket connection error"); setLoading(false); clearTimeout(timer); } };
+    ws.onclose = () => { clearTimeout(timer); };
+    return () => { cancelled = true; clearTimeout(timer); ws?.close(); };
+  }, [wsUrl, token, refreshKey]);
+
+  return { models, loading, error, refresh };
+}
+
+function useGatewayAgents(
+  wsUrl: string,
+  token: string,
+): { agents: GatewayAgent[]; defaultId: string | null; loading: boolean; error: string | null; refresh: () => void } {
+  const [agents, setAgents] = useState<GatewayAgent[]>([]);
+  const [defaultId, setDefaultId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+
+  useEffect(() => {
+    if (!wsUrl) return;
+
+    let cancelled = false;
+    let ws: WebSocket | null = null;
+    const timer = setTimeout(() => {
+      if (!cancelled) {
+        setError("Connection timed out");
+        setLoading(false);
+        ws?.close();
+      }
+    }, 15_000);
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Invalid WebSocket URL");
+      setLoading(false);
+      clearTimeout(timer);
+      return;
+    }
+
+    ws.onmessage = (event) => {
+      if (cancelled) return;
+      try {
+        const frame = JSON.parse(String(event.data));
+        if (frame.type === "event" && frame.event === "connect.challenge") {
+          ws?.send(
+            JSON.stringify({
+              type: "req",
+              id: "c1",
+              method: "connect",
+              params: {
+                minProtocol: 3,
+                maxProtocol: 3,
+                client: { id: "gateway-client", version: "paperclip", platform: "browser", mode: "backend" },
+                role: "operator",
+                scopes: ["operator.admin"],
+                ...(token ? { auth: { token } } : {}),
+              },
+            }),
+          );
+          return;
+        }
+        if (frame.type === "res" && frame.id === "c1") {
+          if (!frame.ok) {
+            setError(frame.error?.message ?? "Connect failed");
+            setLoading(false);
+            clearTimeout(timer);
+            ws?.close();
+            return;
+          }
+          ws?.send(
+            JSON.stringify({ type: "req", id: "al", method: "agents.list", params: {} }),
+          );
+          return;
+        }
+        if (frame.type === "res" && frame.id === "al") {
+          clearTimeout(timer);
+          if (!frame.ok) {
+            setError(frame.error?.message ?? "agents.list failed");
+            setLoading(false);
+            ws?.close();
+            return;
+          }
+          const data = frame.payload as AgentsListResponse;
+          setAgents(data.agents ?? []);
+          setDefaultId(data.defaultId ?? null);
+          setLoading(false);
+          ws?.close();
+        }
+      } catch {
+        // ignore parse errors
+      }
+    };
+
+    ws.onerror = () => {
+      if (!cancelled) {
+        setError("WebSocket connection error");
+        setLoading(false);
+        clearTimeout(timer);
+      }
+    };
+
+    ws.onclose = () => {
+      clearTimeout(timer);
+    };
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      ws?.close();
+    };
+  }, [wsUrl, token, refreshKey]);
+
+  return { agents, defaultId, loading, error, refresh };
+}
 
 function SecretField({
   label,
@@ -56,6 +269,120 @@ function parseScopes(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+function ModelSelector({
+  wsUrl,
+  token,
+  value,
+  onChange,
+}: {
+  wsUrl: string;
+  token: string;
+  value: string;
+  onChange: (model: string) => void;
+}) {
+  const { models, loading, error, refresh } = useGatewayModels(wsUrl, token);
+
+  // Group models by provider for a cleaner dropdown
+  const providers = models.reduce<Record<string, GatewayModel[]>>((acc, m) => {
+    (acc[m.provider] ??= []).push(m);
+    return acc;
+  }, {});
+
+  return (
+    <Field label="Model override">
+      <div className="flex gap-1.5 items-center">
+        <select
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          className={selectClass + " flex-1"}
+          disabled={loading}
+        >
+          <option value="">
+            {loading ? "Fetching models..." : models.length === 0 ? "Agent default" : "Agent default (no override)"}
+          </option>
+          {Object.entries(providers).map(([provider, providerModels]) => (
+            <optgroup key={provider} label={provider}>
+              {providerModels.map((m) => (
+                <option key={`${m.provider}/${m.id}`} value={`${m.provider}/${m.id}`}>
+                  {modelLabel(m)}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={refresh}
+          disabled={loading || !wsUrl}
+          className="p-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-40"
+          title="Refresh model list"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+        </button>
+      </div>
+      {error && <p className="text-xs text-destructive mt-1">{error}</p>}
+      {!error && models.length > 0 && (
+        <p className="text-xs text-muted-foreground mt-1">
+          {models.length} models from {Object.keys(providers).length} providers. Leave empty to use agent default.
+        </p>
+      )}
+    </Field>
+  );
+}
+
+function AgentSelector({
+  wsUrl,
+  token,
+  value,
+  onChange,
+}: {
+  wsUrl: string;
+  token: string;
+  value: string;
+  onChange: (agentId: string) => void;
+}) {
+  const { agents, defaultId, loading, error, refresh } = useGatewayAgents(wsUrl, token);
+
+  return (
+    <Field label="OpenClaw agent">
+      <div className="flex gap-1.5 items-center">
+        <select
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          className={selectClass + " flex-1"}
+          disabled={loading}
+        >
+          <option value="">
+            {loading ? "Fetching agents..." : agents.length === 0 ? "Enter gateway URL first" : "Select an agent"}
+          </option>
+          {agents.map((a) => (
+            <option key={a.id} value={a.id}>
+              {agentLabel(a)}{a.id === defaultId ? " (default)" : ""}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={refresh}
+          disabled={loading || !wsUrl}
+          className="p-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-40"
+          title="Refresh agent list"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+        </button>
+      </div>
+      {error && (
+        <p className="text-xs text-destructive mt-1">{error}</p>
+      )}
+      {!error && agents.length > 0 && (
+        <p className="text-xs text-muted-foreground mt-1">
+          {agents.length} agent{agents.length !== 1 ? "s" : ""} available. Each agent gets isolated session handling.
+        </p>
+      )}
+    </Field>
+  );
+}
+
 export function OpenClawGatewayConfigFields({
   isCreate,
   values,
@@ -93,8 +420,30 @@ export function OpenClawGatewayConfigFields({
   const sessionStrategy = eff(
     "adapterConfig",
     "sessionKeyStrategy",
-    String(config.sessionKeyStrategy ?? "fixed"),
+    String(config.sessionKeyStrategy ?? "project"),
   );
+
+  // Resolve the gateway URL and token for agent fetching
+  const rawUrl = isCreate
+    ? (values?.url ?? "")
+    : String(eff("adapterConfig", "url", String(config.url ?? "")));
+  const wsUrl = rawUrl.replace(/^http/, "ws");
+  const wsToken = isCreate ? "" : effectiveGatewayToken;
+
+  // Agent ID: in create mode stored as extra form value, in edit mode in adapterConfig
+  const currentAgentId = isCreate
+    ? String((values as unknown as Record<string, unknown>)?.openclawAgentId ?? "")
+    : String(eff("adapterConfig", "agentId", String(config.agentId ?? "")));
+
+  // Model override
+  const currentModel = isCreate
+    ? String((values as unknown as Record<string, unknown>)?.openclawModel ?? "")
+    : String(eff("adapterConfig", "model", String(config.model ?? "")));
+
+  // Thinking level
+  const currentThinking = isCreate
+    ? String((values as unknown as Record<string, unknown>)?.openclawThinking ?? "")
+    : String(eff("adapterConfig", "thinking", String(config.thinking ?? "")));
 
   return (
     <>
@@ -114,6 +463,61 @@ export function OpenClawGatewayConfigFields({
           className={inputClass}
           placeholder="ws://127.0.0.1:18789"
         />
+      </Field>
+
+      {!isCreate && (
+        <SecretField
+          label="Gateway auth token (x-openclaw-token)"
+          value={effectiveGatewayToken}
+          onCommit={commitGatewayToken}
+          placeholder="OpenClaw gateway token"
+        />
+      )}
+
+      <AgentSelector
+        wsUrl={wsUrl}
+        token={wsToken}
+        value={currentAgentId}
+        onChange={(agentId) =>
+          isCreate
+            ? set!({ openclawAgentId: agentId } as Partial<typeof values & { openclawAgentId: string }>)
+            : mark("adapterConfig", "agentId", agentId || undefined)
+        }
+      />
+
+      <ModelSelector
+        wsUrl={wsUrl}
+        token={wsToken}
+        value={currentModel}
+        onChange={(model) =>
+          isCreate
+            ? set!({ openclawModel: model } as Partial<typeof values & { openclawModel: string }>)
+            : mark("adapterConfig", "model", model || undefined)
+        }
+      />
+
+      <Field label="Thinking level">
+        <select
+          value={currentThinking || ""}
+          onChange={(e) =>
+            isCreate
+              ? set!({ openclawThinking: e.target.value } as Partial<typeof values & { openclawThinking: string }>)
+              : mark("adapterConfig", "thinking", e.target.value || undefined)
+          }
+          className={selectClass}
+        >
+          <option value="">Default (agent decides)</option>
+          <option value="off">Off</option>
+          <option value="minimal">Minimal</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="adaptive">Adaptive (Claude 4.6)</option>
+          <option value="xhigh">xHigh (GPT-5.2+ / Codex)</option>
+        </select>
+        <p className="text-xs text-muted-foreground mt-1">
+          Controls reasoning depth. Adaptive and xHigh are model-restricted — mismatches will error.
+        </p>
       </Field>
 
       <PayloadTemplateJsonField
@@ -154,10 +558,11 @@ export function OpenClawGatewayConfigFields({
             <select
               value={sessionStrategy}
               onChange={(e) => mark("adapterConfig", "sessionKeyStrategy", e.target.value)}
-              className={inputClass}
+              className={selectClass}
             >
-              <option value="fixed">Fixed</option>
+              <option value="project">Per project (recommended)</option>
               <option value="issue">Per issue</option>
+              <option value="fixed">Fixed</option>
               <option value="run">Per run</option>
             </select>
           </Field>
@@ -173,13 +578,6 @@ export function OpenClawGatewayConfigFields({
               />
             </Field>
           )}
-
-          <SecretField
-            label="Gateway auth token (x-openclaw-token)"
-            value={effectiveGatewayToken}
-            onCommit={commitGatewayToken}
-            placeholder="OpenClaw gateway token"
-          />
 
           <Field label="Role">
             <DraftInput

@@ -7,7 +7,7 @@ import { asNumber, asString, buildPaperclipEnv, parseObject } from "@paperclipai
 import crypto, { randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
 
-type SessionKeyStrategy = "fixed" | "issue" | "run";
+type SessionKeyStrategy = "fixed" | "issue" | "project" | "run";
 
 type WakePayload = {
   runId: string;
@@ -121,9 +121,9 @@ function parseBoolean(value: unknown, fallback = false): boolean {
 }
 
 function normalizeSessionKeyStrategy(value: unknown): SessionKeyStrategy {
-  const normalized = asString(value, "issue").trim().toLowerCase();
-  if (normalized === "fixed" || normalized === "run") return normalized;
-  return "issue";
+  const normalized = asString(value, "project").trim().toLowerCase();
+  if (normalized === "fixed" || normalized === "issue" || normalized === "run") return normalized;
+  return "project";
 }
 
 function resolveSessionKey(input: {
@@ -131,11 +131,16 @@ function resolveSessionKey(input: {
   configuredSessionKey: string | null;
   runId: string;
   issueId: string | null;
+  projectId: string | null;
+  agentId: string | null;
 }): string {
-  const fallback = input.configuredSessionKey ?? "paperclip";
-  if (input.strategy === "run") return `paperclip:run:${input.runId}`;
-  if (input.strategy === "issue" && input.issueId) return `paperclip:issue:${input.issueId}`;
-  return fallback;
+  const prefix = input.agentId ? `paperclip:${input.agentId}` : "paperclip";
+  if (input.strategy === "fixed") return input.configuredSessionKey ?? prefix;
+  if (input.strategy === "run") return `${prefix}:run:${input.runId}`;
+  if (input.strategy === "issue" && input.issueId) return `${prefix}:issue:${input.issueId}`;
+  if (input.strategy === "project" && input.projectId) return `${prefix}:project:${input.projectId}`;
+  // Fallback: if strategy is project but no projectId available, fall back to agent-level session
+  return input.configuredSessionKey ?? prefix;
 }
 
 function isLoopbackHost(hostname: string): boolean {
@@ -1055,13 +1060,19 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const paperclipEnv = buildPaperclipEnvForWake(ctx, wakePayload);
   const wakeText = buildWakeText(wakePayload, paperclipEnv);
 
-  const sessionKeyStrategy = normalizeSessionKeyStrategy(ctx.config.sessionKeyStrategy);
+  const sessionKeyStrategy = normalizeSessionKeyStrategy(
+    ctx.config.sessionStrategy ?? ctx.config.sessionKeyStrategy,
+  );
   const configuredSessionKey = nonEmpty(ctx.config.sessionKey);
+  const configuredAgentId = nonEmpty(ctx.config.agentId);
+  const contextProjectId = nonEmpty(ctx.context.projectId);
   const sessionKey = resolveSessionKey({
     strategy: sessionKeyStrategy,
     configuredSessionKey,
     runId: ctx.runId,
     issueId: wakePayload.issueId,
+    projectId: contextProjectId,
+    agentId: configuredAgentId,
   });
 
   const templateMessage = nonEmpty(payloadTemplate.message) ?? nonEmpty(payloadTemplate.text);
@@ -1075,10 +1086,18 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     idempotencyKey: ctx.runId,
   };
   delete agentParams.text;
+  // Model override is applied via sessions.patch before the agent call
+  // (WS 'agent' method does not accept 'model' directly)
+  const modelOverride = nonEmpty(agentParams.model) ?? nonEmpty(ctx.config.model);
+  delete agentParams.model;
 
-  const configuredAgentId = nonEmpty(ctx.config.agentId);
   if (configuredAgentId && !nonEmpty(agentParams.agentId)) {
     agentParams.agentId = configuredAgentId;
+  }
+
+  const configuredThinking = nonEmpty(ctx.config.thinking);
+  if (configuredThinking && !nonEmpty(agentParams.thinking)) {
+    agentParams.thinking = configuredThinking;
   }
 
   if (typeof agentParams.timeout !== "number") {
@@ -1247,6 +1266,18 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         "stdout",
         `[openclaw-gateway] connected protocol=${asNumber(asRecord(hello)?.protocol, PROTOCOL_VERSION)}\n`,
       );
+
+      // Apply model override via sessions.patch before sending the agent message
+      if (modelOverride && sessionKey) {
+        try {
+          await client.request("sessions.patch", { key: sessionKey, model: modelOverride }, {
+            timeoutMs: 5_000,
+          });
+          await ctx.onLog("stdout", `[openclaw-gateway] model override applied: ${modelOverride}\n`);
+        } catch (e) {
+          await ctx.onLog("stderr", `[openclaw-gateway] model override failed: ${e instanceof Error ? e.message : String(e)}\n`);
+        }
+      }
 
       const acceptedPayload = await client.request<Record<string, unknown>>("agent", agentParams, {
         timeoutMs: connectTimeoutMs,
