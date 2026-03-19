@@ -15,10 +15,12 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
 export function buildOpenClawGatewayConfig(v: CreateConfigValues): Record<string, unknown> {
   const ac: Record<string, unknown> = {};
   if (v.url) ac.url = v.url;
-  // Token: stored as form value during create
+  // Token: store in headers.x-openclaw-token to match edit-mode storage
   const token = (v as unknown as Record<string, unknown>).token;
   if (typeof token === "string" && token.trim()) {
-    ac.token = token.trim();
+    const headers = (ac.headers as Record<string, unknown>) ?? {};
+    headers["x-openclaw-token"] = token.trim();
+    ac.headers = headers;
   }
   ac.timeoutSec = 120;
   ac.waitTimeoutMs = 120000;
