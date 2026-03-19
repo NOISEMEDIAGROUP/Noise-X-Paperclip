@@ -125,6 +125,46 @@ describe("document PUT checkout ownership", () => {
     expect(mockDocumentService.upsertIssueDocument).toHaveBeenCalledTimes(1);
   });
 
+  it("logs checkout adoption when agent takes over a stale run", async () => {
+    mockIssueService.assertCheckoutOwner.mockResolvedValue({
+      ...ISSUE,
+      checkoutRunId: "run-new",
+      adoptedFromRunId: "run-old",
+    });
+    mockDocumentService.upsertIssueDocument.mockResolvedValue({
+      created: true,
+      document: {
+        id: "doc-1",
+        key: "plan",
+        title: "Plan",
+        format: "markdown",
+        latestRevisionNumber: 1,
+      },
+    });
+
+    const app = createApp({
+      type: "agent",
+      agentId: "agent-1",
+      companyId: "company-1",
+      runId: "run-new",
+    });
+
+    const res = await request(app)
+      .put("/api/issues/issue-1/documents/plan")
+      .send({
+        title: "Plan",
+        format: "markdown",
+        body: "# Plan\n\nContent",
+      });
+
+    expect(res.status).toBe(201);
+    expect(mockLogActivity).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ action: "issue.checkout_lock_adopted" }),
+    );
+    expect(mockDocumentService.upsertIssueDocument).toHaveBeenCalledTimes(1);
+  });
+
   it("allows document PUT from board users without checkout check", async () => {
     mockDocumentService.upsertIssueDocument.mockResolvedValue({
       created: false,
