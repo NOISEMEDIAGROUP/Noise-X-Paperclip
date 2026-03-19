@@ -424,6 +424,10 @@ class CodexRpcClient {
       this.startupError = error;
       this.rejectPending(error);
     });
+    this.proc.stdin.on("error", (error) => {
+      if (!this.startupError) this.startupError = error;
+      this.rejectPending(error);
+    });
     this.proc.stdout.setEncoding("utf8");
     this.proc.stderr.setEncoding("utf8");
     this.proc.stdout.on("data", (chunk: string) => this.onStdout(chunk));
