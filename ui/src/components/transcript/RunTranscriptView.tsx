@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { TranscriptEntry } from "../../adapters";
 import { MarkdownBody } from "../MarkdownBody";
 import { cn, formatTokens } from "../../lib/utils";
@@ -25,6 +25,8 @@ interface RunTranscriptViewProps {
   emptyMessage?: string;
   className?: string;
   thinkingClassName?: string;
+  /** Automatically scroll to bottom when new entries arrive, as long as the user hasn't scrolled up. */
+  autoScroll?: boolean;
 }
 
 type TranscriptBlock =
@@ -959,6 +961,88 @@ function RawTranscriptView({
   );
 }
 
+/**
+ * Find the nearest ancestor that is a scroll container (overflow-y auto/scroll/overlay
+ * and content taller than viewport). Returns null when nothing overflows yet.
+ */
+function findScrollAncestor(el: HTMLElement | null): HTMLElement | null {
+  let node = el?.parentElement ?? null;
+  while (node) {
+    const { overflowY } = window.getComputedStyle(node);
+    if (
+      (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") &&
+      node.scrollHeight > node.clientHeight + 1
+    ) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
+}
+
+/**
+ * Sticky auto-scroll: scrolls the nearest scrollable ancestor to keep the
+ * bottom sentinel visible whenever `deps` change — but only while the user
+ * is near the bottom (within `threshold` px). Scrolling up to read history
+ * disengages the behaviour; scrolling back down re-engages it.
+ *
+ * The scroll ancestor is re-resolved on every deps change so it works even
+ * when the container starts without overflow and gains it as entries stream in.
+ */
+function useAutoScroll(
+  bottomRef: React.RefObject<HTMLDivElement | null>,
+  enabled: boolean,
+  deps: unknown[],
+  threshold = 80,
+) {
+  const isNearBottom = useRef(true);
+  const scrollerRef = useRef<HTMLElement | null>(null);
+  const handlerRef = useRef<(() => void) | null>(null);
+
+  // (Re-)attach the scroll listener whenever deps change so we always track
+  // the right ancestor, even if overflow only appeared after new entries.
+  useEffect(() => {
+    if (!enabled) return;
+    const sentinel = bottomRef.current;
+    if (!sentinel) return;
+
+    // Detach previous listener if the scroller element changed.
+    if (handlerRef.current && scrollerRef.current) {
+      scrollerRef.current.removeEventListener("scroll", handlerRef.current);
+    }
+
+    const scroller = findScrollAncestor(sentinel);
+    scrollerRef.current = scroller;
+
+    if (!scroller) {
+      // No overflow yet — treat as "at bottom".
+      isNearBottom.current = true;
+      handlerRef.current = null;
+      return;
+    }
+
+    const onScroll = () => {
+      const distance = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      isNearBottom.current = distance <= threshold;
+    };
+
+    // Seed with current position so we pick up a mid-scroll state immediately.
+    onScroll();
+
+    handlerRef.current = onScroll;
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => scroller.removeEventListener("scroll", onScroll);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, ...deps]);
+
+  // Scroll to sentinel when deps change and user is near bottom.
+  useLayoutEffect(() => {
+    if (!enabled || !isNearBottom.current) return;
+    bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, ...deps]);
+}
+
 export function RunTranscriptView({
   entries,
   mode = "nice",
@@ -969,10 +1053,14 @@ export function RunTranscriptView({
   emptyMessage = "No transcript yet.",
   className,
   thinkingClassName,
+  autoScroll = false,
 }: RunTranscriptViewProps) {
   const blocks = useMemo(() => normalizeTranscript(entries, streaming), [entries, streaming]);
   const visibleBlocks = limit ? blocks.slice(-limit) : blocks;
   const visibleEntries = limit ? entries.slice(-limit) : entries;
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  useAutoScroll(bottomRef, autoScroll, [entries.length, visibleBlocks.length]);
 
   if (entries.length === 0) {
     return (
@@ -986,6 +1074,7 @@ export function RunTranscriptView({
     return (
       <div className={className}>
         <RawTranscriptView entries={visibleEntries} density={density} />
+        <div ref={bottomRef} />
       </div>
     );
   }
@@ -1010,6 +1099,7 @@ export function RunTranscriptView({
           {block.type === "event" && <TranscriptEventRow block={block} density={density} />}
         </div>
       ))}
+      <div ref={bottomRef} />
     </div>
   );
 }
