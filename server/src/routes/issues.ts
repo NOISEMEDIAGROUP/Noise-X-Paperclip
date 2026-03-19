@@ -1273,14 +1273,27 @@ export function issueRoutes(db: Db, storage: StorageService) {
       }
     }
 
-    // Fix: allow non-agent callers (e.g. Hermes via curl) to attribute comments to
-    // an agent by passing agentId in the request body. When agentId is provided,
-    // clear userId so the comment doesn't appear as a board-user comment, which
-    // would suppress unread-badge notifications for the board user.
-    const bodyAgentId = req.body.agentId as string | undefined;
+    // Resolve agentId: explicit body > actor > infer from active run on this issue
+    // Only infer for non-browser requests (curl from Hermes agent, no Referer header)
+    // to avoid misattributing user UI comments to agents.
+    let resolvedAgentId: string | undefined = (req.body.agentId as string | undefined) ?? actor.agentId ?? undefined;
+    if (!resolvedAgentId && currentIssue.assigneeAgentId && req.actor.source === "local_implicit" && !req.header("referer")) {
+      const activeRun = await heartbeat.getActiveRunForAgent(currentIssue.assigneeAgentId);
+      if (activeRun && activeRun.status === "running") {
+        const runIssueId =
+          activeRun.contextSnapshot &&
+          typeof activeRun.contextSnapshot === "object" &&
+          typeof (activeRun.contextSnapshot as Record<string, unknown>).issueId === "string"
+            ? ((activeRun.contextSnapshot as Record<string, unknown>).issueId as string)
+            : null;
+        if (runIssueId === currentIssue.id) {
+          resolvedAgentId = currentIssue.assigneeAgentId;
+        }
+      }
+    }
     const comment = await svc.addComment(id, req.body.body, {
-      agentId: bodyAgentId ?? actor.agentId ?? undefined,
-      userId: bodyAgentId ? undefined : (actor.actorType === "user" ? actor.actorId : undefined),
+      agentId: resolvedAgentId,
+      userId: resolvedAgentId ? undefined : (actor.actorType === "user" ? actor.actorId : undefined),
     });
 
     await logActivity(db, {
@@ -1307,11 +1320,11 @@ export function issueRoutes(db: Db, storage: StorageService) {
       const wakeups = new Map<string, Parameters<typeof heartbeat.wakeup>[1]>();
       const assigneeId = currentIssue.assigneeAgentId;
       const actorIsAgent = actor.actorType === "agent";
-      // Fix: also treat as self-comment when req.body.agentId matches the assignee.
+      // Fix: also treat as self-comment when resolvedAgentId matches the assignee.
       // This prevents wakeOnDemand loops when a Hermes agent posts a comment via curl
       // (which authenticates as local-board, not as an agent).
       const selfComment = (actorIsAgent && actor.actorId === assigneeId) ||
-        (bodyAgentId != null && bodyAgentId === assigneeId);
+        (resolvedAgentId != null && resolvedAgentId === assigneeId);
       const skipWake = selfComment || isClosed;
       if (assigneeId && (reopened || !skipWake)) {
         if (reopened) {
