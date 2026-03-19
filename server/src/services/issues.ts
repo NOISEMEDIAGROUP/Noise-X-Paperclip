@@ -56,6 +56,37 @@ function applyStatusSideEffects(
   return patch;
 }
 
+export function clearIssueRunLockFields(
+  patch: Partial<typeof issues.$inferInsert>,
+): Partial<typeof issues.$inferInsert> {
+  patch.checkoutRunId = null;
+  patch.executionRunId = null;
+  patch.executionAgentNameKey = null;
+  patch.executionLockedAt = null;
+  return patch;
+}
+
+export function shouldClearIssueRunLocksOnUpdate(input: {
+  currentStatus: string;
+  nextStatus?: string;
+  currentAssigneeAgentId: string | null;
+  currentAssigneeUserId: string | null;
+  nextAssigneeAgentId?: string | null;
+  nextAssigneeUserId?: string | null;
+}): boolean {
+  const nextStatus = input.nextStatus ?? input.currentStatus;
+  if (input.currentStatus === "in_progress" && nextStatus !== "in_progress") {
+    return true;
+  }
+  if (input.nextAssigneeAgentId !== undefined && input.nextAssigneeAgentId !== input.currentAssigneeAgentId) {
+    return true;
+  }
+  if (input.nextAssigneeUserId !== undefined && input.nextAssigneeUserId !== input.currentAssigneeUserId) {
+    return true;
+  }
+  return false;
+}
+
 export interface IssueFilters {
   status?: string;
   assigneeAgentId?: string;
@@ -752,14 +783,17 @@ export function issueService(db: Db) {
       if (issueData.status && issueData.status !== "cancelled") {
         patch.cancelledAt = null;
       }
-      if (issueData.status && issueData.status !== "in_progress") {
-        patch.checkoutRunId = null;
-      }
       if (
-        (issueData.assigneeAgentId !== undefined && issueData.assigneeAgentId !== existing.assigneeAgentId) ||
-        (issueData.assigneeUserId !== undefined && issueData.assigneeUserId !== existing.assigneeUserId)
+        shouldClearIssueRunLocksOnUpdate({
+          currentStatus: existing.status,
+          nextStatus: issueData.status,
+          currentAssigneeAgentId: existing.assigneeAgentId,
+          currentAssigneeUserId: existing.assigneeUserId,
+          nextAssigneeAgentId: issueData.assigneeAgentId,
+          nextAssigneeUserId: issueData.assigneeUserId,
+        })
       ) {
-        patch.checkoutRunId = null;
+        clearIssueRunLockFields(patch);
       }
 
       return db.transaction(async (tx) => {
@@ -1033,7 +1067,7 @@ export function issueService(db: Db) {
         .set({
           status: "todo",
           assigneeAgentId: null,
-          checkoutRunId: null,
+          ...clearIssueRunLockFields({}),
           updatedAt: new Date(),
         })
         .where(eq(issues.id, id))

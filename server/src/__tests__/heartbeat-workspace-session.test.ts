@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveDefaultAgentWorkspaceDir } from "../home-paths.js";
 import {
+  isIssueExecutionRunEligibleForLocking,
   resolveRuntimeSessionParamsForWorkspace,
   shouldResetTaskSessionForWake,
   type ResolvedWorkspaceForRun,
@@ -149,5 +150,29 @@ describe("shouldResetTaskSessionForWake", () => {
         wakeTriggerDetail: "callback",
       }),
     ).toBe(false);
+  });
+});
+
+describe("isIssueExecutionRunEligibleForLocking", () => {
+  it("ignores mention-triggered runs when deriving issue execution locks", () => {
+    expect(
+      isIssueExecutionRunEligibleForLocking({
+        wakeReason: "issue_comment_mentioned",
+        issueId: "issue-1",
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps assignment-triggered runs eligible for issue execution locks", () => {
+    expect(
+      isIssueExecutionRunEligibleForLocking({
+        wakeReason: "issue_assigned",
+        issueId: "issue-1",
+      }),
+    ).toBe(true);
+  });
+
+  it("defaults to eligible when wake reason is missing", () => {
+    expect(isIssueExecutionRunEligibleForLocking({ issueId: "issue-1" })).toBe(true);
   });
 });

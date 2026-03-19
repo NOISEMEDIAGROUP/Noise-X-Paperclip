@@ -426,6 +426,13 @@ export function shouldResetTaskSessionForWake(
   return false;
 }
 
+export function isIssueExecutionRunEligibleForLocking(
+  contextSnapshotRaw: Record<string, unknown> | null | undefined,
+) {
+  const wakeReason = readNonEmptyString(contextSnapshotRaw?.wakeReason);
+  return wakeReason !== "issue_comment_mentioned";
+}
+
 function describeSessionResetReason(
   contextSnapshot: Record<string, unknown> | null | undefined,
 ) {
@@ -2434,7 +2441,13 @@ export function heartbeatService(db: Db) {
             .then((rows) => rows[0] ?? null)
           : null;
 
-        if (activeExecutionRun && activeExecutionRun.status !== "queued" && activeExecutionRun.status !== "running") {
+        if (
+          activeExecutionRun &&
+          (
+            (activeExecutionRun.status !== "queued" && activeExecutionRun.status !== "running") ||
+            !isIssueExecutionRunEligibleForLocking(parseObject(activeExecutionRun.contextSnapshot))
+          )
+        ) {
           activeExecutionRun = null;
         }
 
@@ -2451,7 +2464,7 @@ export function heartbeatService(db: Db) {
         }
 
         if (!activeExecutionRun) {
-          const legacyRun = await tx
+          const legacyRuns = await tx
             .select()
             .from(heartbeatRuns)
             .where(
@@ -2465,8 +2478,12 @@ export function heartbeatService(db: Db) {
               sql`case when ${heartbeatRuns.status} = 'running' then 0 else 1 end`,
               asc(heartbeatRuns.createdAt),
             )
-            .limit(1)
-            .then((rows) => rows[0] ?? null);
+            .limit(20);
+
+          // Mention-triggered wakeups should not become issue execution locks.
+          const legacyRun =
+            legacyRuns.find((run) => isIssueExecutionRunEligibleForLocking(parseObject(run.contextSnapshot))) ??
+            null;
 
           if (legacyRun) {
             activeExecutionRun = legacyRun;
