@@ -205,13 +205,13 @@ function getPaperclipSkillText(): string {
  * Falls back to "not injected" on any error — safe to always inject.
  */
 async function isSkillAlreadyInjected(
-  client: { request: <T>(method: string, params: unknown, opts: { timeoutMs: number }) => Promise<T> },
+  client: { safeRequest: <T>(method: string, params: unknown, opts: { timeoutMs: number }) => Promise<T | null> },
   sessionKey: string,
 ): Promise<boolean> {
   const marker = getSkillMarker();
   try {
     // Use sessions.list filtered by key, with last messages included
-    const sessions = await client.request<Array<{
+    const sessions = await client.safeRequest<Array<{
       key?: string;
       messages?: Array<{ content?: string; text?: string }>;
     }>>(
@@ -816,6 +816,15 @@ class GatewayWsClient {
       pending.reject(err);
     }
     this.pending.clear();
+  }
+
+  /** Make a request but swallow rejections if the WS closes before response arrives. */
+  async safeRequest<T>(method: string, params: unknown, opts: { timeoutMs: number }): Promise<T | null> {
+    try {
+      return await this.request<T>(method, params, opts);
+    } catch {
+      return null;
+    }
   }
 
   private handleMessage(raw: string) {
