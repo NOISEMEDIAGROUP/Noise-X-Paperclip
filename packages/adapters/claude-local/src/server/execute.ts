@@ -42,6 +42,32 @@ async function resolvePaperclipSkillsDir(): Promise<string | null> {
   return null;
 }
 
+const MCP_KNOWLEDGE_CANDIDATES = [
+  path.resolve(__moduleDir, "../../../../mcp-knowledge/dist/index.js"),     // dev: src/server/ -> packages/mcp-knowledge/dist/
+  path.resolve(__moduleDir, "../../../mcp-knowledge/dist/index.js"),         // published fallback
+];
+
+async function resolveMcpKnowledgeDist(): Promise<string | null> {
+  for (const candidate of MCP_KNOWLEDGE_CANDIDATES) {
+    const exists = await fs.stat(candidate).then(() => true).catch(() => false);
+    if (exists) return candidate;
+  }
+  return null;
+}
+
+const MCP_SPRINT_PLANNER_CANDIDATES = [
+  path.resolve(__moduleDir, "../../../../mcp-sprint-planner/dist/index.js"),   // dev
+  path.resolve(__moduleDir, "../../../mcp-sprint-planner/dist/index.js"),       // published fallback
+];
+
+async function resolveMcpSprintPlannerDist(): Promise<string | null> {
+  for (const candidate of MCP_SPRINT_PLANNER_CANDIDATES) {
+    const exists = await fs.stat(candidate).then(() => true).catch(() => false);
+    if (exists) return candidate;
+  }
+  return null;
+}
+
 /**
  * Create a tmpdir with `.claude/skills/` containing symlinks to skills from
  * the repo's `skills/` directory, so `--add-dir` makes Claude Code discover
@@ -312,7 +338,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const model = asString(config.model, "");
   const effort = asString(config.effort, "");
   const chrome = asBoolean(config.chrome, false);
-  const maxTurns = asNumber(config.maxTurnsPerRun, 0);
+  const maxTurns = asNumber(config.maxTurnsPerRun, 300);
   const dangerouslySkipPermissions = asBoolean(config.dangerouslySkipPermissions, false);
   const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
   const instructionsFileDir = instructionsFilePath ? `${path.dirname(instructionsFilePath)}/` : "";
@@ -358,6 +384,52 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     const combinedPath = path.join(skillsDir, "agent-instructions.md");
     await fs.writeFile(combinedPath, instructionsContent + pathDirective, "utf-8");
     effectiveInstructionsFilePath = combinedPath;
+  }
+
+  // Write MCP config for knowledge hub into the skills dir
+  let mcpKnowledgeConfigPath: string | null = null;
+  const mcpKnowledgeDist = await resolveMcpKnowledgeDist();
+  if (mcpKnowledgeDist) {
+    const mcpConfig = {
+      mcpServers: {
+        "paperclip-knowledge": {
+          command: "node",
+          args: [mcpKnowledgeDist],
+          env: {
+            PAPERCLIP_API_URL: env.PAPERCLIP_API_URL ?? "",
+            PAPERCLIP_API_KEY: env.PAPERCLIP_API_KEY ?? "",
+            PAPERCLIP_COMPANY_ID: env.PAPERCLIP_COMPANY_ID ?? "",
+            PAPERCLIP_AGENT_ID: env.PAPERCLIP_AGENT_ID ?? "",
+          },
+        },
+      },
+    };
+    mcpKnowledgeConfigPath = path.join(skillsDir, "mcp-knowledge.json");
+    await fs.writeFile(mcpKnowledgeConfigPath, JSON.stringify(mcpConfig, null, 2), "utf-8");
+  }
+
+  // Write MCP config for sprint planner into the skills dir (only when configured)
+  let mcpSprintPlannerConfigPath: string | null = null;
+  const sprintPlannerApiUrl = env.SPRINT_PLANNER_API_URL ?? env.PAPERCLIP_SPRINT_PLANNER_API_URL ?? "";
+  if (sprintPlannerApiUrl) {
+    const mcpSprintPlannerDist = await resolveMcpSprintPlannerDist();
+    if (mcpSprintPlannerDist) {
+      const spMcpConfig = {
+        mcpServers: {
+          "paperclip-sprint-planner": {
+            command: "node",
+            args: [mcpSprintPlannerDist],
+            env: {
+              SPRINT_PLANNER_API_URL: sprintPlannerApiUrl,
+              SPRINT_PLANNER_SERVICE_TOKEN: env.SPRINT_PLANNER_SERVICE_TOKEN ?? env.PAPERCLIP_SPRINT_PLANNER_SERVICE_TOKEN ?? "",
+              SPRINT_PLANNER_AI_TEAM_ID: env.SPRINT_PLANNER_AI_TEAM_ID ?? env.PAPERCLIP_SPRINT_PLANNER_AI_TEAM_ID ?? "",
+            },
+          },
+        },
+      };
+      mcpSprintPlannerConfigPath = path.join(skillsDir, "mcp-sprint-planner.json");
+      await fs.writeFile(mcpSprintPlannerConfigPath, JSON.stringify(spMcpConfig, null, 2), "utf-8");
+    }
   }
 
   const runtimeSessionParams = parseObject(runtime.sessionParams);
@@ -413,6 +485,8 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       args.push("--append-system-prompt-file", effectiveInstructionsFilePath);
     }
     args.push("--add-dir", skillsDir);
+    if (mcpKnowledgeConfigPath) args.push("--mcp-config", mcpKnowledgeConfigPath);
+    if (mcpSprintPlannerConfigPath) args.push("--mcp-config", mcpSprintPlannerConfigPath);
     if (extraArgs.length > 0) args.push(...extraArgs);
     return args;
   };

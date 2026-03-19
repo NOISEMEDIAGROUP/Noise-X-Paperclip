@@ -52,6 +52,7 @@ export type {
   IssueLabel,
 } from "./issue.js";
 export type { Goal } from "./goal.js";
+export type { KnowledgeDocument } from "./knowledge.js";
 export type { Approval, ApprovalComment } from "./approval.js";
 export type {
   BudgetPolicy,
@@ -133,3 +134,13 @@ export type {
   PluginJobRunRecord,
   PluginWebhookDeliveryRecord,
 } from "./plugin.js";
+export type {
+  SprintPlannerSprint,
+  SprintPlannerTask,
+  SprintPlannerTicket,
+  SprintPlannerStats,
+  SprintPlannerKnowledgeItem,
+  SprintPlannerActivityEntry,
+  SprintPlannerCapacity,
+  SprintPlannerConfig,
+} from "./sprint-planner.js";

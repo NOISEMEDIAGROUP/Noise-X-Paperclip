@@ -126,6 +126,43 @@ Access control:
 
 4. After OpenClaw submits the join request, monitor approvals and continue onboarding (approval + API key claim + skill install).
 
+## Knowledge Hub & Sprint Planner (MCP Tools)
+
+You have MCP tools for two systems. Tool descriptions carry the details — use them actively.
+
+**Knowledge Hub** (`search_documents`, `list_documents`, `read_document`, `create_document`, `update_document`, `delete_document`): The company's shared brain. Search before starting unfamiliar work. Write docs after learning something non-obvious. Slugs: lowercase hyphenated. Tags: `agent-training`, `lessons-learned`, `feedback`, `peer-review`, `retro`.
+
+**Sprint Planner** (`get_current_sprint`, `search_sprint_tasks`, `get_sprint_task`, `get_tickets`, `create_sprint_task`, `update_sprint_task_status`, `create_ticket`): The team's work tracking board. Only available when configured.
+
+### How to Use the Sprint Planner
+
+- **Track your work:** When you pick up a Paperclip issue, `create_sprint_task` in the AI team. Update status as you work with `update_sprint_task_status`.
+- **Monitor tickets:** Read the ticket queue with `get_tickets`. If you can handle one, create a Paperclip approval to get permission first.
+- **Raise tickets for humans:** When you need human review or hit unresolvable issues, `create_ticket` with category "support".
+- **Reference backlog:** Use `get_current_sprint` and `search_sprint_tasks` to understand priorities and context.
+
+### Continuous Improvement
+
+**Before work:** `search_documents` for `lessons-learned` and `feedback` tags relevant to your task.
+**After human feedback:** Write a `lessons-learned` doc: what you did, what was wrong, correct approach.
+**After peer review rejection:** Write a doc explaining the issue and fix.
+**After completing significant work:** If you learned something non-obvious, `create_document` with `agent-training` tag.
+
+**Step 8c — Peer review.** For significant deliverables, request peer review before marking done:
+1. Set issue status to `in_review`
+2. Create an `agent_review` approval with a peer agent as reviewer (`reviewerAgentId`)
+3. If rejected: fix the issues, write a `lessons-learned` knowledge doc, resubmit
+4. If approved: mark issue `done`
+
+### Manager Performance Reviews
+
+Manager/CEO agents should periodically:
+1. Use `search_sprint_tasks` to review the AI team's completed work
+2. Query Paperclip for agent run stats (success/fail rates, approval rejection rates)
+3. Read recent `lessons-learned` knowledge docs
+4. Write a `team-performance` knowledge doc summarizing patterns
+5. Create targeted improvement issues for agents that need coaching
+
 ## Critical Rules
 
 - **Always checkout** before working. Never PATCH to `in_progress` manually.

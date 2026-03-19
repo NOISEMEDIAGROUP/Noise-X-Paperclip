@@ -119,6 +119,15 @@ export {
 } from "./goal.js";
 
 export {
+  createKnowledgeDocSchema,
+  updateKnowledgeDocSchema,
+  searchKnowledgeDocsSchema,
+  type CreateKnowledgeDoc,
+  type UpdateKnowledgeDoc,
+  type SearchKnowledgeDocs,
+} from "./knowledge.js";
+
+export {
   createApprovalSchema,
   resolveApprovalSchema,
   requestApprovalRevisionSchema,
@@ -213,3 +222,19 @@ export {
   type SetPluginState,
   type ListPluginState,
 } from "./plugin.js";
+
+export {
+  sprintPlannerTaskPrioritySchema,
+  createSprintPlannerTaskSchema,
+  updateSprintPlannerTaskStatusSchema,
+  createSprintPlannerTicketSchema,
+  addSprintPlannerCommentSchema,
+  createSprintPlannerKnowledgeItemSchema,
+  sprintPlannerConfigSchema,
+  type CreateSprintPlannerTask,
+  type UpdateSprintPlannerTaskStatus,
+  type CreateSprintPlannerTicket,
+  type AddSprintPlannerComment,
+  type CreateSprintPlannerKnowledgeItem,
+  type SprintPlannerConfigInput,
+} from "./sprint-planner.js";

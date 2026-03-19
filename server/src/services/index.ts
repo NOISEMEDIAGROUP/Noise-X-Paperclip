@@ -6,6 +6,7 @@ export { projectService } from "./projects.js";
 export { issueService, type IssueFilters } from "./issues.js";
 export { issueApprovalService } from "./issue-approvals.js";
 export { goalService } from "./goals.js";
+export { knowledgeService } from "./knowledge.js";
 export { activityService, type ActivityFilters } from "./activity.js";
 export { approvalService } from "./approvals.js";
 export { budgetService } from "./budgets.js";
@@ -26,3 +27,7 @@ export { notifyHireApproved, type NotifyHireApprovedInput } from "./hire-hook.js
 export { publishLiveEvent, subscribeCompanyLiveEvents } from "./live-events.js";
 export { reconcilePersistedRuntimeServicesOnStartup } from "./workspace-runtime.js";
 export { createStorageServiceFromConfig, getStorageService } from "../storage/index.js";
+export { sprintPlannerService, type SprintPlannerService } from "./sprint-planner.js";
+export { teamsOutboundService, type TeamsOutboundService } from "./teams-outbound.js";
+export { integrationsService, type IntegrationsService } from "./integrations.js";
+export { sprintPlannerSyncService, type SprintPlannerSyncService } from "./sprint-planner-sync.js";

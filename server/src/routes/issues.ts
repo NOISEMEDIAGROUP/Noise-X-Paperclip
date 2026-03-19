@@ -34,10 +34,11 @@ import { forbidden, HttpError, unauthorized } from "../errors.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 import { shouldWakeAssigneeOnCheckout } from "./issues-checkout-wakeup.js";
 import { isAllowedContentType, MAX_ATTACHMENT_BYTES } from "../attachment-types.js";
+import type { IntegrationsService } from "../services/integrations.js";
 
 const MAX_ISSUE_COMMENT_LIMIT = 500;
 
-export function issueRoutes(db: Db, storage: StorageService) {
+export function issueRoutes(db: Db, storage: StorageService, integrations?: IntegrationsService | null) {
   const router = Router();
   const svc = issueService(db);
   const access = accessService(db);
@@ -981,7 +982,24 @@ export function issueRoutes(db: Db, storage: StorageService) {
       }
     })();
 
+    // Fire integration hooks for status changes (fire-and-forget, after response)
+    const statusChanged = req.body.status && existing.status !== issue.status;
+
     res.json({ ...issue, comment });
+
+    if (integrations && statusChanged) {
+      void (async () => {
+        const actorAgent = actor.agentId
+          ? await agentsSvc.getById(actor.agentId).catch(() => null)
+          : null;
+        await integrations.onIssueStatusChanged(
+          { ...issue, companyPrefix: issue.identifier?.split("-")[0] ?? "ORG" },
+          existing.status,
+          issue.status,
+          actorAgent ? { id: actorAgent.id, name: actorAgent.name, urlKey: actorAgent.urlKey } : null,
+        );
+      })();
+    }
   });
 
   router.delete("/issues/:id", async (req, res) => {
