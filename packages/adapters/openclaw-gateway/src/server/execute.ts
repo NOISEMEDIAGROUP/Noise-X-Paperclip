@@ -162,6 +162,22 @@ function loadPaperclipSkill(): string | null {
 }
 
 let _cachedSkill: string | null | undefined;
+let _cachedSkillHash: string | null = null;
+
+const SKILL_MARKER_PREFIX = "<!-- PAPERCLIP_SKILL_v";
+const SKILL_MARKER_SUFFIX = " -->";
+
+function getSkillHash(): string {
+  if (_cachedSkillHash) return _cachedSkillHash;
+  const raw = loadPaperclipSkill();
+  if (!raw) return "none";
+  _cachedSkillHash = crypto.createHash("md5").update(raw).digest("hex").slice(0, 8);
+  return _cachedSkillHash;
+}
+
+function getSkillMarker(): string {
+  return `${SKILL_MARKER_PREFIX}${getSkillHash()}${SKILL_MARKER_SUFFIX}`;
+}
 
 function getPaperclipSkillText(): string {
   if (_cachedSkill === undefined) {
@@ -169,12 +185,50 @@ function getPaperclipSkillText(): string {
   }
   if (!_cachedSkill) return "";
   return [
+    getSkillMarker(),
     "<!-- Injected by Paperclip OpenClaw adapter at runtime -->",
     "<!-- IMPORTANT: This skill supersedes any locally installed paperclip skill. -->",
     "<!-- If skills/paperclip/SKILL.md exists on the agent filesystem, IGNORE it. Use this version instead. -->",
+    "<!-- /PAPERCLIP_SKILL -->",
     "",
     _cachedSkill,
   ].join("\n");
+}
+
+/**
+ * Check if the current skill version is already present in the session history.
+ * Returns true if the skill marker with the current hash is found — meaning we can skip injection.
+ */
+/**
+ * Check if the session already has messages (meaning the skill was likely injected before).
+ * Uses sessions.list with messageLimit to peek at recent messages for the skill marker.
+ * Falls back to "not injected" on any error — safe to always inject.
+ */
+async function isSkillAlreadyInjected(
+  client: { request: <T>(method: string, params: unknown, opts: { timeoutMs: number }) => Promise<T> },
+  sessionKey: string,
+): Promise<boolean> {
+  const marker = getSkillMarker();
+  try {
+    // Use sessions.list filtered by key, with last messages included
+    const sessions = await client.request<Array<{
+      key?: string;
+      messages?: Array<{ content?: string; text?: string }>;
+    }>>(
+      "sessions.list",
+      { keys: [sessionKey], messageLimit: 20 },
+      { timeoutMs: 5_000 },
+    ) ?? [];
+    for (const session of sessions) {
+      for (const msg of session.messages ?? []) {
+        const text = msg.content ?? msg.text ?? "";
+        if (text.includes(marker)) return true;
+      }
+    }
+  } catch {
+    // If check fails, inject to be safe
+  }
+  return false;
 }
 
 function isLoopbackHost(hostname: string): boolean {
@@ -1110,14 +1164,13 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   });
 
   const templateMessage = nonEmpty(payloadTemplate.message) ?? nonEmpty(payloadTemplate.text);
-  const skillText = getPaperclipSkillText();
   const baseMessage = templateMessage ? appendWakeText(templateMessage, wakeText) : wakeText;
-  const message = skillText ? `${skillText}\n\n---\n\n${baseMessage}` : baseMessage;
+  // Skill injection is deferred until after WS connect so we can check session history
   const paperclipPayload = buildStandardPaperclipPayload(ctx, wakePayload, paperclipEnv, payloadTemplate);
 
   const agentParams: Record<string, unknown> = {
     ...payloadTemplate,
-    message,
+    message: baseMessage,
     sessionKey,
     idempotencyKey: ctx.runId,
   };
@@ -1302,6 +1355,18 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         "stdout",
         `[openclaw-gateway] connected protocol=${asNumber(asRecord(hello)?.protocol, PROTOCOL_VERSION)}\n`,
       );
+
+      // Check if skill needs injection (hash-based deduplication)
+      const skillText = getPaperclipSkillText();
+      if (skillText) {
+        const alreadyInjected = await isSkillAlreadyInjected(client, sessionKey);
+        if (alreadyInjected) {
+          await ctx.onLog("stdout", `[openclaw-gateway] paperclip skill already in session (hash=${getSkillHash()}), skipping injection\n`);
+        } else {
+          agentParams.message = `${skillText}\n\n---\n\n${agentParams.message}`;
+          await ctx.onLog("stdout", `[openclaw-gateway] injecting paperclip skill (hash=${getSkillHash()}, ${skillText.length} chars)\n`);
+        }
+      }
 
       // Apply model override via sessions.patch before sending the agent message
       if (modelOverride) {
