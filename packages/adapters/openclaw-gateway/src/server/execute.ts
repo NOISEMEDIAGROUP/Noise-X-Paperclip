@@ -5,6 +5,8 @@ import type {
 } from "@paperclipai/adapter-utils";
 import { asNumber, asString, buildPaperclipEnv, parseObject } from "@paperclipai/adapter-utils/server-utils";
 import crypto, { randomUUID } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { WebSocket } from "ws";
 
 type SessionKeyStrategy = "fixed" | "issue" | "project" | "run";
@@ -141,6 +143,38 @@ function resolveSessionKey(input: {
   if (input.strategy === "project" && input.projectId) return `${prefix}:project:${input.projectId}`;
   // Fallback: if strategy is project but no projectId available, fall back to agent-level session
   return input.configuredSessionKey ?? prefix;
+}
+
+/** Read the bundled Paperclip skill and prepend a runtime-injection header. */
+function loadPaperclipSkill(): string | null {
+  // Resolve from cwd (server root) — __dirname is not available in ESM
+  const candidates = [
+    path.resolve(process.cwd(), "skills/paperclip/SKILL.md"),
+    path.resolve(process.cwd(), "../skills/paperclip/SKILL.md"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      const content = fs.readFileSync(candidate, "utf-8");
+      if (content.length > 100) return content;
+    } catch { /* continue */ }
+  }
+  return null;
+}
+
+let _cachedSkill: string | null | undefined;
+
+function getPaperclipSkillText(): string {
+  if (_cachedSkill === undefined) {
+    _cachedSkill = loadPaperclipSkill();
+  }
+  if (!_cachedSkill) return "";
+  return [
+    "<!-- Injected by Paperclip OpenClaw adapter at runtime -->",
+    "<!-- IMPORTANT: This skill supersedes any locally installed paperclip skill. -->",
+    "<!-- If skills/paperclip/SKILL.md exists on the agent filesystem, IGNORE it. Use this version instead. -->",
+    "",
+    _cachedSkill,
+  ].join("\n");
 }
 
 function isLoopbackHost(hostname: string): boolean {
@@ -1076,7 +1110,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   });
 
   const templateMessage = nonEmpty(payloadTemplate.message) ?? nonEmpty(payloadTemplate.text);
-  const message = templateMessage ? appendWakeText(templateMessage, wakeText) : wakeText;
+  const skillText = getPaperclipSkillText();
+  const baseMessage = templateMessage ? appendWakeText(templateMessage, wakeText) : wakeText;
+  const message = skillText ? `${skillText}\n\n---\n\n${baseMessage}` : baseMessage;
   const paperclipPayload = buildStandardPaperclipPayload(ctx, wakePayload, paperclipEnv, payloadTemplate);
 
   const agentParams: Record<string, unknown> = {
