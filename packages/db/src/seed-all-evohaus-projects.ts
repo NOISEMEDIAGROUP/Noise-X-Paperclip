@@ -24,6 +24,8 @@ if (!url) throw new Error("DATABASE_URL is required");
 const db = createDb(url);
 
 const COMPANY_ID = "e4f86ad5-bcdd-4ac9-9972-11ed5f6c7820";
+const OPENCLAW_GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL ?? "ws://127.0.0.1:18789";
+const OPENCLAW_GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN ?? "";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -77,6 +79,26 @@ interface ProjectDef {
   workspaces: WorkspaceDef[];
 }
 
+function parseDuration(value?: string): number {
+  if (!value) return 0;
+  const match = value.match(/^(\d+)(h|m|s)$/);
+  if (!match) return 0;
+  const num = parseInt(match[1], 10);
+  return match[2] === "h" ? num * 3600 : match[2] === "m" ? num * 60 : num;
+}
+
+function buildRuntimeConfig(heartbeatStr?: string): Record<string, unknown> {
+  const intervalSec = parseDuration(heartbeatStr);
+  return {
+    heartbeat: {
+      enabled: true,
+      intervalSec,
+      wakeOnDemand: true,
+      maxConcurrentRuns: 1,
+    },
+  };
+}
+
 async function seedProject(def: ProjectDef, ceoId: string): Promise<void> {
   // Lead agent
   const leadId = await insertAgent({
@@ -84,11 +106,12 @@ async function seedProject(def: ProjectDef, ceoId: string): Promise<void> {
     name: def.lead.name,
     role: "project_lead",
     title: "Project Lead",
-    adapterType: "openclaw-gateway",
-    adapterConfig: { openclawAgentId: def.lead.openclawAgentId },
+    adapterType: "openclaw_gateway",
+    adapterConfig: { openclawAgentId: def.lead.openclawAgentId, url: OPENCLAW_GATEWAY_URL, authToken: OPENCLAW_GATEWAY_TOKEN },
     capabilities: def.lead.capabilities,
     reportsTo: ceoId,
     metadata: { level: "project_lead", project: def.slug, heartbeat: "24h" },
+    runtimeConfig: buildRuntimeConfig("24h"),
   });
 
   // Team agents
@@ -102,7 +125,8 @@ async function seedProject(def: ProjectDef, ceoId: string): Promise<void> {
       adapterConfig: {},
       capabilities: member.capabilities,
       reportsTo: leadId,
-      metadata: { level: "team", project: def.slug },
+      metadata: { level: "team", project: def.slug, heartbeat: "1h" },
+      runtimeConfig: buildRuntimeConfig("1h"),
     });
   }
 
@@ -187,10 +211,11 @@ async function main() {
     name: "EVO",
     role: "ceo",
     title: "Chief Executive Officer",
-    adapterType: "openclaw-gateway",
-    adapterConfig: { openclawAgentId: "main", model: "anthropic/claude-opus-4-6" },
+    adapterType: "openclaw_gateway",
+    adapterConfig: { openclawAgentId: "main", model: "anthropic/claude-opus-4-6", url: OPENCLAW_GATEWAY_URL, authToken: OPENCLAW_GATEWAY_TOKEN },
     capabilities: "strategic-planning, delegation, org-management, reporting",
     metadata: { level: "c-level", heartbeat: "2h" },
+    runtimeConfig: buildRuntimeConfig("2h"),
   });
   console.log(`  [OK] EVO (${ceoId})\n`);
 
@@ -204,11 +229,12 @@ async function main() {
     name: "OPERASYON",
     role: "coo",
     title: "Chief Operating Officer",
-    adapterType: "openclaw-gateway",
-    adapterConfig: { openclawAgentId: "atlas-coo", model: "anthropic/claude-sonnet-4-6" },
+    adapterType: "openclaw_gateway",
+    adapterConfig: { openclawAgentId: "atlas-coo", model: "anthropic/claude-sonnet-4-6", url: OPENCLAW_GATEWAY_URL, authToken: OPENCLAW_GATEWAY_TOKEN },
     capabilities: "operations, scraper-management, vps-monitoring, whatsapp, crm",
     reportsTo: ceoId,
     metadata: { level: "c-level", heartbeat: "2h" },
+    runtimeConfig: buildRuntimeConfig("2h"),
   });
   console.log(`  [OK] OPERASYON (${cooId})`);
 
@@ -217,11 +243,12 @@ async function main() {
     name: "TEKNIK",
     role: "cto",
     title: "Chief Technology Officer",
-    adapterType: "openclaw-gateway",
-    adapterConfig: { openclawAgentId: "forge-cto", model: "anthropic/claude-sonnet-4-6" },
+    adapterType: "openclaw_gateway",
+    adapterConfig: { openclawAgentId: "forge-cto", model: "anthropic/claude-sonnet-4-6", url: OPENCLAW_GATEWAY_URL, authToken: OPENCLAW_GATEWAY_TOKEN },
     capabilities: "architecture, deployment, security, research, database",
     reportsTo: ceoId,
     metadata: { level: "c-level", heartbeat: "3h" },
+    runtimeConfig: buildRuntimeConfig("3h"),
   });
   console.log(`  [OK] TEKNIK (${ctoId})`);
 
@@ -230,11 +257,12 @@ async function main() {
     name: "PAZARLAMA",
     role: "cgo",
     title: "Chief Growth Officer",
-    adapterType: "openclaw-gateway",
-    adapterConfig: { openclawAgentId: "hunter-cgo", model: "anthropic/claude-sonnet-4-6" },
+    adapterType: "openclaw_gateway",
+    adapterConfig: { openclawAgentId: "hunter-cgo", model: "anthropic/claude-sonnet-4-6", url: OPENCLAW_GATEWAY_URL, authToken: OPENCLAW_GATEWAY_TOKEN },
     capabilities: "marketing, outreach, email, intelligence",
     reportsTo: ceoId,
     metadata: { level: "c-level", heartbeat: "4h" },
+    runtimeConfig: buildRuntimeConfig("4h"),
   });
   console.log(`  [OK] PAZARLAMA (${cgoId})\n`);
 
@@ -249,11 +277,12 @@ async function main() {
     name: "SCRAPER-TAKIP",
     role: "ops_scraper",
     title: "Scraper Operations",
-    adapterType: "openclaw-gateway",
-    adapterConfig: { openclawAgentId: "pulse-scraper" },
+    adapterType: "openclaw_gateway",
+    adapterConfig: { openclawAgentId: "pulse-scraper", url: OPENCLAW_GATEWAY_URL, authToken: OPENCLAW_GATEWAY_TOKEN },
     capabilities: "scraper-monitoring, data-collection",
     reportsTo: cooId,
     metadata: { level: "operational" },
+    runtimeConfig: buildRuntimeConfig(),
   });
   console.log("  [OK] SCRAPER-TAKIP");
 
@@ -262,11 +291,12 @@ async function main() {
     name: "SUNUCU",
     role: "ops_vps",
     title: "Server Operations",
-    adapterType: "openclaw-gateway",
-    adapterConfig: { openclawAgentId: "sentry-vps" },
+    adapterType: "openclaw_gateway",
+    adapterConfig: { openclawAgentId: "sentry-vps", url: OPENCLAW_GATEWAY_URL, authToken: OPENCLAW_GATEWAY_TOKEN },
     capabilities: "vps-monitoring, docker, system-health",
     reportsTo: cooId,
     metadata: { level: "operational" },
+    runtimeConfig: buildRuntimeConfig(),
   });
   console.log("  [OK] SUNUCU");
 
@@ -275,11 +305,12 @@ async function main() {
     name: "WHATSAPP",
     role: "ops_messaging",
     title: "WhatsApp Operations",
-    adapterType: "openclaw-gateway",
-    adapterConfig: { openclawAgentId: "bridge-whatsapp" },
+    adapterType: "openclaw_gateway",
+    adapterConfig: { openclawAgentId: "bridge-whatsapp", url: OPENCLAW_GATEWAY_URL, authToken: OPENCLAW_GATEWAY_TOKEN },
     capabilities: "whatsapp-management, messaging",
     reportsTo: cooId,
     metadata: { level: "operational" },
+    runtimeConfig: buildRuntimeConfig(),
   });
   console.log("  [OK] WHATSAPP");
 
@@ -288,11 +319,12 @@ async function main() {
     name: "CRM",
     role: "ops_crm",
     title: "CRM Operations",
-    adapterType: "openclaw-gateway",
-    adapterConfig: { openclawAgentId: "clerk-crm" },
+    adapterType: "openclaw_gateway",
+    adapterConfig: { openclawAgentId: "clerk-crm", url: OPENCLAW_GATEWAY_URL, authToken: OPENCLAW_GATEWAY_TOKEN },
     capabilities: "crm, customer-tracking",
     reportsTo: cooId,
     metadata: { level: "operational" },
+    runtimeConfig: buildRuntimeConfig(),
   });
   console.log("  [OK] CRM");
 
@@ -302,11 +334,12 @@ async function main() {
     name: "DEPLOY",
     role: "eng_deploy",
     title: "Deploy Engineer",
-    adapterType: "openclaw-gateway",
-    adapterConfig: { openclawAgentId: "welder-deploy" },
+    adapterType: "openclaw_gateway",
+    adapterConfig: { openclawAgentId: "welder-deploy", url: OPENCLAW_GATEWAY_URL, authToken: OPENCLAW_GATEWAY_TOKEN },
     capabilities: "ci-cd, docker-deploy, infrastructure",
     reportsTo: ctoId,
     metadata: { level: "operational" },
+    runtimeConfig: buildRuntimeConfig(),
   });
   console.log("  [OK] DEPLOY");
 
@@ -315,11 +348,12 @@ async function main() {
     name: "GUVENLIK",
     role: "eng_security",
     title: "Security Engineer",
-    adapterType: "openclaw-gateway",
-    adapterConfig: { openclawAgentId: "shield-security" },
+    adapterType: "openclaw_gateway",
+    adapterConfig: { openclawAgentId: "shield-security", url: OPENCLAW_GATEWAY_URL, authToken: OPENCLAW_GATEWAY_TOKEN },
     capabilities: "security-audit, vulnerability-scanning",
     reportsTo: ctoId,
     metadata: { level: "operational" },
+    runtimeConfig: buildRuntimeConfig(),
   });
   console.log("  [OK] GUVENLIK");
 
@@ -328,11 +362,12 @@ async function main() {
     name: "ARASTIRMA",
     role: "eng_research",
     title: "Research Engineer",
-    adapterType: "openclaw-gateway",
-    adapterConfig: { openclawAgentId: "scout-research" },
+    adapterType: "openclaw_gateway",
+    adapterConfig: { openclawAgentId: "scout-research", url: OPENCLAW_GATEWAY_URL, authToken: OPENCLAW_GATEWAY_TOKEN },
     capabilities: "technology-research, evaluation",
     reportsTo: ctoId,
     metadata: { level: "operational" },
+    runtimeConfig: buildRuntimeConfig(),
   });
   console.log("  [OK] ARASTIRMA");
 
@@ -341,11 +376,12 @@ async function main() {
     name: "VERITABANI",
     role: "eng_database",
     title: "Database Engineer",
-    adapterType: "openclaw-gateway",
-    adapterConfig: { openclawAgentId: "dock-database" },
+    adapterType: "openclaw_gateway",
+    adapterConfig: { openclawAgentId: "dock-database", url: OPENCLAW_GATEWAY_URL, authToken: OPENCLAW_GATEWAY_TOKEN },
     capabilities: "database-management, optimization, migrations",
     reportsTo: ctoId,
     metadata: { level: "operational" },
+    runtimeConfig: buildRuntimeConfig(),
   });
   console.log("  [OK] VERITABANI");
 
@@ -355,11 +391,12 @@ async function main() {
     name: "REKLAM",
     role: "mkt_outreach",
     title: "Outreach Specialist",
-    adapterType: "openclaw-gateway",
-    adapterConfig: { openclawAgentId: "ghost-outreach" },
+    adapterType: "openclaw_gateway",
+    adapterConfig: { openclawAgentId: "ghost-outreach", url: OPENCLAW_GATEWAY_URL, authToken: OPENCLAW_GATEWAY_TOKEN },
     capabilities: "outreach, advertising, lead-generation",
     reportsTo: cgoId,
     metadata: { level: "operational" },
+    runtimeConfig: buildRuntimeConfig(),
   });
   console.log("  [OK] REKLAM");
 
@@ -368,11 +405,12 @@ async function main() {
     name: "EMAIL",
     role: "mkt_email",
     title: "Email Marketing",
-    adapterType: "openclaw-gateway",
-    adapterConfig: { openclawAgentId: "herald-email" },
+    adapterType: "openclaw_gateway",
+    adapterConfig: { openclawAgentId: "herald-email", url: OPENCLAW_GATEWAY_URL, authToken: OPENCLAW_GATEWAY_TOKEN },
     capabilities: "email-campaigns, newsletters",
     reportsTo: cgoId,
     metadata: { level: "operational" },
+    runtimeConfig: buildRuntimeConfig(),
   });
   console.log("  [OK] EMAIL");
 
@@ -381,11 +419,12 @@ async function main() {
     name: "ISTIHBARAT",
     role: "mkt_intel",
     title: "Market Intelligence",
-    adapterType: "openclaw-gateway",
-    adapterConfig: { openclawAgentId: "radar-intel" },
+    adapterType: "openclaw_gateway",
+    adapterConfig: { openclawAgentId: "radar-intel", url: OPENCLAW_GATEWAY_URL, authToken: OPENCLAW_GATEWAY_TOKEN },
     capabilities: "market-research, competitor-analysis",
     reportsTo: cgoId,
     metadata: { level: "operational" },
+    runtimeConfig: buildRuntimeConfig(),
   });
   console.log("  [OK] ISTIHBARAT\n");
 

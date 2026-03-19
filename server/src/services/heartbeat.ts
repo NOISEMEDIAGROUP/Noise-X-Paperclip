@@ -62,6 +62,39 @@ import {
   type SessionCompactionPolicy,
 } from "@paperclipai/adapter-utils";
 
+// ---------------------------------------------------------------------------
+// Telegram auth failure notification (non-fatal, best-effort)
+// ---------------------------------------------------------------------------
+function isAuthError(message: string): boolean {
+  return (
+    message.includes("gateway token missing") ||
+    message.includes("provide gateway auth token") ||
+    message.includes("unauthorized") ||
+    message.includes("authentication failed")
+  );
+}
+
+async function notifyTelegramAuthFailure(agentName: string, adapterType: string, errorMsg: string): Promise<void> {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!botToken || !chatId) return;
+  try {
+    const text =
+      `🔐 <b>Paperclip Auth Hatası</b>\n` +
+      `Agent: <code>${agentName}</code>\n` +
+      `Adapter: <code>${adapterType}</code>\n` +
+      `Hata: ${errorMsg.slice(0, 200)}\n` +
+      `Zaman: ${new Date().toISOString()}`;
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
+    });
+  } catch {
+    // non-fatal — do not throw
+  }
+}
+
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_MAX = 10;
@@ -1375,13 +1408,39 @@ export function heartbeatService(db: Db) {
     });
   }
 
+  /** Parse human-readable duration strings like "2h", "30m", "3600s" into seconds */
+  function parseDurationToSec(value: string): number {
+    const trimmed = value.trim().toLowerCase();
+    const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*(h|m|s)?$/);
+    if (!match) return 0;
+    const num = parseFloat(match[1]);
+    if (!Number.isFinite(num) || num < 0) return 0;
+    const unit = match[2] ?? "s";
+    if (unit === "h") return Math.floor(num * 3600);
+    if (unit === "m") return Math.floor(num * 60);
+    return Math.floor(num);
+  }
+
   function parseHeartbeatPolicy(agent: typeof agents.$inferSelect) {
     const runtimeConfig = parseObject(agent.runtimeConfig);
     const heartbeat = parseObject(runtimeConfig.heartbeat);
 
+    // Primary: runtimeConfig.heartbeat.intervalSec (numeric)
+    let intervalSec = asNumber(heartbeat.intervalSec, -1);
+
+    // Fallback: metadata.heartbeat (human-readable string like "2h", "24h")
+    if (intervalSec < 0) {
+      const metadata = parseObject(agent.metadata);
+      if (typeof metadata.heartbeat === "string") {
+        intervalSec = parseDurationToSec(metadata.heartbeat);
+      } else {
+        intervalSec = 0;
+      }
+    }
+
     return {
       enabled: asBoolean(heartbeat.enabled, true),
-      intervalSec: Math.max(0, asNumber(heartbeat.intervalSec, 0)),
+      intervalSec: Math.max(0, intervalSec),
       wakeOnDemand: asBoolean(heartbeat.wakeOnDemand ?? heartbeat.wakeOnAssignment ?? heartbeat.wakeOnOnDemand ?? heartbeat.wakeOnAutomation, true),
       maxConcurrentRuns: normalizeMaxConcurrentRuns(heartbeat.maxConcurrentRuns),
     };
@@ -2443,6 +2502,9 @@ export function heartbeatService(db: Db) {
         logSha256: logSummary?.sha256,
         logCompressed: logSummary?.compressed ?? false,
       });
+      if (isAuthError(message)) {
+        void notifyTelegramAuthFailure(agent.name, agent.adapterType, message);
+      }
       await setWakeupStatus(run.wakeupRequestId, "failed", {
         finishedAt: new Date(),
         error: message,
