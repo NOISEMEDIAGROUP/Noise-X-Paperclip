@@ -66,13 +66,17 @@ type AdapterType =
   | "http"
   | "openclaw_gateway";
 
-const DEFAULT_TASK_DESCRIPTION = `Setup yourself as the CEO. Use the ceo persona found here: 
+const DEFAULT_TASK_DESCRIPTION = `IMPORTANT: You are the CEO of a company managed by Paperclip — an AI agent orchestration platform (NOT a paperclip manufacturer). Your workspace is a Paperclip-managed directory for coordinating AI agents.
 
-https://github.com/paperclipai/companies/blob/main/default/ceo/AGENTS.md
+Your setup tasks:
 
-Ensure you have a folder agents/ceo and then download this AGENTS.md, and sibling HEARTBEAT.md, SOUL.md, and TOOLS.md. and set that AGENTS.md as the path to your agents instruction file
+1. **Create your agent instructions folder.** Create a folder \`agents/ceo/\` in your workspace and add an \`AGENTS.md\` file describing your CEO role, responsibilities, and operating procedures.
 
-After that, hire yourself a Founding Engineer agent and then plan the roadmap and tasks for your new company.`;
+2. **Hire a Founding Engineer.** Use the Paperclip API to create a hire request for a Founding Engineer agent (role: engineer, adapter: claude_local). This agent will handle software development for the company.
+
+3. **Plan the roadmap.** Create 3-5 initial issues that define the company's first priorities, and assign the Founding Engineer to begin execution on the top priority.
+
+Use the Paperclip skill (/paperclip) for all coordination. Report blockers as comments on this issue.`;
 
 export function OnboardingWizard() {
   const { onboardingOpen, onboardingOptions, closeOnboarding } = useDialog();
