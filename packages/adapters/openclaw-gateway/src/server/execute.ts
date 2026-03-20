@@ -539,10 +539,8 @@ function buildDeviceAuthPayloadV3(params: {
 }): string {
   const scopes = params.scopes.join(",");
   const token = params.token ?? "";
-  const platform = params.platform?.trim() ?? "";
-  const deviceFamily = params.deviceFamily?.trim() ?? "";
   return [
-    "v3",
+    "v2",
     params.deviceId,
     params.clientId,
     params.clientMode,
@@ -551,8 +549,6 @@ function buildDeviceAuthPayloadV3(params: {
     String(params.signedAtMs),
     token,
     params.nonce,
-    platform,
-    deviceFamily,
   ].join("|");
 }
 
