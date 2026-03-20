@@ -288,16 +288,27 @@ export function agentRoutes(db: Db) {
     }
   }
 
+  /**
+   * Convert MSYS/Git Bash drive paths (/c/Users/...) to native Windows paths (C:\Users\...).
+   * On non-Windows or non-matching paths, returns the input unchanged.
+   */
+  function normalizeMsysDrivePath(p: string): string {
+    if (process.platform !== "win32") return p;
+    const m = p.match(/^\/([a-zA-Z])\/(.*)/);
+    return m ? `${m[1].toUpperCase()}:\\${m[2].replace(/\//g, "\\")}` : p;
+  }
+
   function resolveInstructionsFilePath(candidatePath: string, adapterConfig: Record<string, unknown>) {
-    const trimmed = candidatePath.trim();
+    const trimmed = normalizeMsysDrivePath(candidatePath.trim());
     if (path.isAbsolute(trimmed)) return trimmed;
 
-    const cwd = asNonEmptyString(adapterConfig.cwd);
-    if (!cwd) {
+    const rawCwd = asNonEmptyString(adapterConfig.cwd);
+    if (!rawCwd) {
       throw unprocessable(
         "Relative instructions path requires adapterConfig.cwd to be set to an absolute path",
       );
     }
+    const cwd = normalizeMsysDrivePath(rawCwd);
     if (!path.isAbsolute(cwd)) {
       throw unprocessable("adapterConfig.cwd must be an absolute path to resolve relative instructions path");
     }

@@ -433,9 +433,20 @@ function resolveRawGitHubUrl(owner: string, repo: string, ref: string, filePath:
   return `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${normalizedFilePath}`;
 }
 
+/**
+ * Convert MSYS/Git Bash drive paths (/c/Users/...) to native Windows paths (C:\Users\...).
+ * On non-Windows or non-matching paths, returns the input unchanged.
+ */
+function normalizeMsysDrivePath(p: string): string {
+  if (process.platform !== "win32") return p;
+  const m = p.match(/^\/([a-zA-Z])\/(.*)/);
+  return m ? `${m[1].toUpperCase()}:\\${m[2].replace(/\//g, "\\")}` : p;
+}
+
 async function readAgentInstructions(agent: AgentLike): Promise<{ body: string; warning: string | null }> {
   const config = agent.adapterConfig as Record<string, unknown>;
-  const instructionsFilePath = asString(config.instructionsFilePath);
+  const rawPath = asString(config.instructionsFilePath);
+  const instructionsFilePath = rawPath ? normalizeMsysDrivePath(rawPath) : rawPath;
   if (instructionsFilePath) {
     const workspaceCwd = asString(process.env.PAPERCLIP_WORKSPACE_CWD);
     const candidates = new Set<string>();
