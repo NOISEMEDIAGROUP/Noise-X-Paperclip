@@ -261,6 +261,8 @@ async function applyPendingMigrationsManually(
 
       await runInTransaction(sql, async () => {
         for (const statement of splitMigrationStatements(migrationContent)) {
+          const alreadyApplied = await migrationStatementAlreadyApplied(sql, statement);
+          if (alreadyApplied) continue;
           await sql.unsafe(statement);
         }
 
@@ -678,8 +680,28 @@ export async function applyPendingMigrations(url: string): Promise<void> {
   }
 
   if (initialState.reason === "no-migration-journal-non-empty-db") {
+    // Database has tables but no migration journal (e.g. shared database,
+    // partially-failed prior run, or external schema management).
+    // Reconcile by detecting already-applied statements and recording them,
+    // then apply any genuinely pending migrations with per-statement safety.
+    const repair = await reconcilePendingMigrationHistory(url);
+    let state = await inspectMigrations(url);
+    if (state.status === "upToDate") return;
+
+    if (state.status === "needsMigrations" && state.reason === "pending-migrations") {
+      await applyPendingMigrationsManually(url, state.pendingMigrations);
+
+      const finalState = await inspectMigrations(url);
+      if (finalState.status !== "upToDate") {
+        throw new Error(
+          `Failed to apply pending migrations for non-empty DB: ${finalState.pendingMigrations.join(", ")}`,
+        );
+      }
+      return;
+    }
+
     throw new Error(
-      "Database has tables but no migration journal; automatic migration is unsafe. Initialize migration history manually.",
+      "Database has tables but could not reconcile migration journal; automatic migration is unsafe. Initialize migration history manually.",
     );
   }
 
