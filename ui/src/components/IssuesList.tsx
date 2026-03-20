@@ -682,12 +682,12 @@ export function IssuesList({
                           </span>
                         </span>
                       )}
-                      <PrBadge workProducts={issue.workProducts} />
                     </>
                   )}
                   mobileMeta={timeAgo(issue.updatedAt)}
                   desktopTrailing={(
                     <>
+                      <PrBadge workProducts={issue.workProducts} />
                       {(issue.labels ?? []).length > 0 && (
                         <span className="hidden items-center gap-1 overflow-hidden md:flex md:max-w-[240px]">
                           {(issue.labels ?? []).slice(0, 3).map((label) => (

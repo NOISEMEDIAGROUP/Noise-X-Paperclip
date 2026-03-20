@@ -782,9 +782,9 @@ export function Inbox() {
                             </span>
                           </span>
                         )}
-                        <PrBadge workProducts={issue.workProducts} />
                       </>
                     )}
+                    desktopTrailing={<PrBadge workProducts={issue.workProducts} />}
                     mobileMeta={
                       issue.lastExternalCommentAt
                         ? `commented ${timeAgo(issue.lastExternalCommentAt)}`
