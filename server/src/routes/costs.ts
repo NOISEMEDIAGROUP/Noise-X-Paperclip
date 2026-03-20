@@ -3,6 +3,7 @@ import type { Db } from "@paperclipai/db";
 import { createCostEventSchema, updateBudgetSchema } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
 import { costService, companyService, agentService, logActivity } from "../services/index.js";
+import { verticalBudgetService } from "../services/vertical-budget.js";
 import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
 
 export function costRoutes(db: Db) {
@@ -10,6 +11,7 @@ export function costRoutes(db: Db) {
   const costs = costService(db);
   const companies = companyService(db);
   const agents = agentService(db);
+  const vbs = verticalBudgetService(db);
 
   router.post("/companies/:companyId/cost-events", validate(createCostEventSchema), async (req, res) => {
     const companyId = req.params.companyId as string;
@@ -102,8 +104,11 @@ export function costRoutes(db: Db) {
 
     if (req.actor.type === "agent") {
       if (req.actor.agentId !== agentId) {
-        res.status(403).json({ error: "Agent can only change its own budget" });
-        return;
+        const actorAgent = await agents.getById(req.actor.agentId!);
+        if (actorAgent?.role !== "cfo") {
+          res.status(403).json({ error: "Only self or VP Finance can change agent budgets" });
+          return;
+        }
       }
     }
 
@@ -123,6 +128,76 @@ export function costRoutes(db: Db) {
       entityType: "agent",
       entityId: updated.id,
       details: { budgetMonthlyCents: updated.budgetMonthlyCents },
+    });
+
+    res.json(updated);
+  });
+
+  // Vertical budget endpoints
+
+  router.get("/companies/:companyId/verticals/budgets", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+    const summaries = await vbs.getAllVerticalBudgets(companyId);
+    res.json(summaries);
+  });
+
+  router.get("/agents/:agentId/vertical-budget", async (req, res) => {
+    const agentId = req.params.agentId as string;
+    const agent = await agents.getById(agentId);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    assertCompanyAccess(req, agent.companyId);
+
+    const vp = await vbs.getVerticalHead(agentId);
+    if (!vp) {
+      res.status(404).json({ error: "No vertical head found for this agent" });
+      return;
+    }
+
+    const budget = await vbs.computeVerticalBudget(vp.id);
+    if (!budget) {
+      res.status(404).json({ error: "Could not compute vertical budget" });
+      return;
+    }
+    res.json(budget);
+  });
+
+  router.post("/agents/:agentId/budget-reload", async (req, res) => {
+    const agentId = req.params.agentId as string;
+    const { reloadCents } = req.body as { reloadCents?: number };
+    if (typeof reloadCents !== "number" || reloadCents <= 0) {
+      res.status(400).json({ error: "reloadCents must be a positive number" });
+      return;
+    }
+
+    // Restrict to board users or CFO-role agents
+    if (req.actor.type === "agent") {
+      const actorAgent = await agents.getById(req.actor.agentId!);
+      if (actorAgent?.role !== "cfo") {
+        res.status(403).json({ error: "Only VP Finance or board users can reload budgets" });
+        return;
+      }
+    }
+
+    const updated = await vbs.executeReload(agentId, reloadCents);
+    if (!updated) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: updated.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      action: "agent.budget_reloaded",
+      entityType: "agent",
+      entityId: updated.id,
+      details: { reloadCents, newBudgetMonthlyCents: updated.budgetMonthlyCents },
     });
 
     res.json(updated);
