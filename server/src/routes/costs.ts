@@ -165,6 +165,44 @@ export function costRoutes(db: Db) {
     res.json(budget);
   });
 
+  // Agent calls this when it's over budget. Server handles everything:
+  // dedup, vertical budget check, VP Finance lookup, issue creation, human escalation.
+  router.post("/agents/:agentId/request-reload", async (req, res) => {
+    const agentId = req.params.agentId as string;
+    const agent = await agents.getById(agentId);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+
+    // Only the agent itself or board users can request a reload
+    if (req.actor.type === "agent" && req.actor.agentId !== agentId) {
+      res.status(403).json({ error: "Agents can only request reload for themselves" });
+      return;
+    }
+
+    const result = await vbs.requestBudgetReload(agentId);
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: agent.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      action: "agent.budget_reload_requested",
+      entityType: "agent",
+      entityId: agentId,
+      details: result,
+    });
+
+    if (result.action === "error") {
+      res.status(400).json(result);
+    } else {
+      res.json(result);
+    }
+  });
+
+  // VP Finance calls this to execute the reload (increase budget + set idle)
   router.post("/agents/:agentId/budget-reload", async (req, res) => {
     const agentId = req.params.agentId as string;
     const { reloadCents } = req.body as { reloadCents?: number };
