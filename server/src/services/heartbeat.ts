@@ -2850,7 +2850,10 @@ export function heartbeatService(db: Db) {
       .from(companies)
       .where(eq(companies.id, agent.companyId))
       .then((rows) => rows[0] ?? null);
-    if (company?.status === "archived") {
+    if (!company) {
+      throw conflict("Cannot invoke heartbeat: company not found");
+    }
+    if (company.status === "archived") {
       throw conflict("Cannot invoke heartbeat for an archived company");
     }
 
