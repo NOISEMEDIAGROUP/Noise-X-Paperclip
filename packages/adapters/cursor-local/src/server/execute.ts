@@ -18,6 +18,7 @@ import {
   removeMaintainerOnlySkillSymlinks,
   renderTemplate,
   joinPromptSections,
+  buildWakeContextSuffix,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "../index.js";
@@ -353,7 +354,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     sessionHandoffNote,
     paperclipEnvNote,
     renderedPrompt,
-  ]);
+  ]) + buildWakeContextSuffix(context);
   const promptMetrics = {
     promptChars: prompt.length,
     instructionsChars,
