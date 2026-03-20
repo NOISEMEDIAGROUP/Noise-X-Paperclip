@@ -57,6 +57,7 @@ import {
 } from "@paperclipai/adapter-utils";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
+const DEFAULT_MAX_RUN_AGE_SEC = 3600; // 60 min — force-fail tracked runs older than this
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_MAX = 10;
 const DEFERRED_WAKE_CONTEXT_KEY = "_paperclipWakeContext";
@@ -1457,46 +1458,159 @@ export function heartbeatService(db: Db) {
       .from(heartbeatRuns)
       .where(eq(heartbeatRuns.status, "running"));
 
-    const reaped: string[] = [];
+    const reapedOrphans: string[] = [];
+    const reapedHung: string[] = [];
+
+    // Pre-fetch agent configs for wall-clock timeout checks
+    const agentIds = [...new Set(activeRuns.map((run) => run.agentId))];
+    const agentConfigs = new Map<string, { timeoutSec: number; graceSec: number }>();
+    for (const agentId of agentIds) {
+      const agent = await getAgent(agentId);
+      if (agent) {
+        const config = parseObject(agent.adapterConfig);
+        agentConfigs.set(agentId, {
+          timeoutSec: asNumber(config.timeoutSec, DEFAULT_MAX_RUN_AGE_SEC),
+          graceSec: asNumber(config.graceSec, 15),
+        });
+      }
+    }
 
     for (const run of activeRuns) {
-      if (runningProcesses.has(run.id) || activeRunExecutions.has(run.id)) continue;
+      const isTracked = runningProcesses.has(run.id) || activeRunExecutions.has(run.id);
 
-      // Apply staleness threshold to avoid false positives
-      if (staleThresholdMs > 0) {
-        const refTime = run.updatedAt ? new Date(run.updatedAt).getTime() : 0;
-        if (now.getTime() - refTime < staleThresholdMs) continue;
-      }
+      if (!isTracked) {
+        // Untracked run: process lost (original reaper behavior)
+        if (staleThresholdMs > 0) {
+          const refTime = run.updatedAt ? new Date(run.updatedAt).getTime() : 0;
+          if (now.getTime() - refTime < staleThresholdMs) continue;
+        }
 
-      await setRunStatus(run.id, "failed", {
-        error: "Process lost -- server may have restarted",
-        errorCode: "process_lost",
-        finishedAt: now,
-      });
-      await setWakeupStatus(run.wakeupRequestId, "failed", {
-        finishedAt: now,
-        error: "Process lost -- server may have restarted",
-      });
-      const updatedRun = await getRun(run.id);
-      if (updatedRun) {
-        await appendRunEvent(updatedRun, 1, {
-          eventType: "lifecycle",
-          stream: "system",
-          level: "error",
-          message: "Process lost -- server may have restarted",
+        const runAgeMs = run.startedAt ? now.getTime() - new Date(run.startedAt).getTime() : 0;
+        logger.warn(
+          {
+            runId: run.id,
+            agentId: run.agentId,
+            startedAt: run.startedAt ? new Date(run.startedAt).toISOString() : null,
+            runAgeSec: Math.round(runAgeMs / 1000),
+            reapReason: "process_lost",
+          },
+          "reaping untracked run -- process lost (server may have restarted)",
+        );
+
+        await failAndCleanupRun(run, now, {
+          error: "Process lost -- server may have restarted",
+          errorCode: "process_lost",
         });
-        await releaseIssueExecutionAndPromote(updatedRun);
+        reapedOrphans.push(run.id);
+        continue;
       }
-      await finalizeAgentStatus(run.agentId, "failed");
-      await startNextQueuedRunForAgent(run.agentId);
-      runningProcesses.delete(run.id);
-      reaped.push(run.id);
+
+      // Tracked run: check wall-clock max-age timeout
+      const agentConfig = agentConfigs.get(run.agentId);
+      const maxAgeSec = agentConfig?.timeoutSec ?? DEFAULT_MAX_RUN_AGE_SEC;
+      if (maxAgeSec <= 0) continue; // 0 = no wall-clock reaping
+
+      const startedAt = run.startedAt ? new Date(run.startedAt).getTime() : 0;
+      if (startedAt <= 0) continue; // no start time, skip
+      const runAgeSec = (now.getTime() - startedAt) / 1000;
+      if (runAgeSec < maxAgeSec) continue;
+
+      const errorMessage =
+        `Run exceeded max wall-clock age: ran for ${Math.round(runAgeSec)}s ` +
+        `(limit: ${maxAgeSec}s). Force-killing tracked-but-hung run.`;
+
+      logger.warn(
+        {
+          runId: run.id,
+          agentId: run.agentId,
+          startedAt: new Date(startedAt).toISOString(),
+          runAgeSec: Math.round(runAgeSec),
+          maxAgeSec,
+          trackedInRunningProcesses: runningProcesses.has(run.id),
+          trackedInActiveRunExecutions: activeRunExecutions.has(run.id),
+          reapReason: "max_age_exceeded",
+        },
+        "reaping tracked-but-hung run -- exceeded wall-clock timeout",
+      );
+
+      // Kill the child process if it exists
+      const running = runningProcesses.get(run.id);
+      if (running) {
+        try {
+          running.child.kill("SIGTERM");
+          const graceSec = agentConfig?.graceSec ?? 15;
+          const graceMs = Math.max(1, graceSec) * 1000;
+          setTimeout(() => {
+            try {
+              if (!running.child.killed) {
+                running.child.kill("SIGKILL");
+              }
+            } catch { /* ignore kill errors on already-dead process */ }
+          }, graceMs);
+        } catch (killErr) {
+          logger.warn(
+            { err: killErr, runId: run.id },
+            "failed to kill hung process during max-age reap",
+          );
+        }
+      }
+
+      await failAndCleanupRun(run, now, {
+        error: errorMessage,
+        errorCode: "max_age_exceeded",
+      });
+      reapedHung.push(run.id);
     }
 
-    if (reaped.length > 0) {
-      logger.warn({ reapedCount: reaped.length, runIds: reaped }, "reaped orphaned heartbeat runs");
+    const totalReaped = reapedOrphans.length + reapedHung.length;
+    if (totalReaped > 0) {
+      logger.warn(
+        {
+          reapedOrphanCount: reapedOrphans.length,
+          reapedHungCount: reapedHung.length,
+          orphanRunIds: reapedOrphans,
+          hungRunIds: reapedHung,
+        },
+        "reaped stale heartbeat runs",
+      );
     }
-    return { reaped: reaped.length, runIds: reaped };
+    return {
+      reaped: totalReaped,
+      runIds: [...reapedOrphans, ...reapedHung],
+      reapedOrphans: reapedOrphans.length,
+      reapedHung: reapedHung.length,
+    };
+  }
+
+  /** Shared helper for reapOrphanedRuns: fail a run, emit event, release issue execution, and clean up tracking. */
+  async function failAndCleanupRun(
+    run: typeof heartbeatRuns.$inferSelect,
+    now: Date,
+    details: { error: string; errorCode: string },
+  ) {
+    await setRunStatus(run.id, "failed", {
+      error: details.error,
+      errorCode: details.errorCode,
+      finishedAt: now,
+    });
+    await setWakeupStatus(run.wakeupRequestId, "failed", {
+      finishedAt: now,
+      error: details.error,
+    });
+    const updatedRun = await getRun(run.id);
+    if (updatedRun) {
+      await appendRunEvent(updatedRun, 1, {
+        eventType: "lifecycle",
+        stream: "system",
+        level: "error",
+        message: details.error,
+      });
+      await releaseIssueExecutionAndPromote(updatedRun);
+    }
+    await finalizeAgentStatus(run.agentId, "failed");
+    await startNextQueuedRunForAgent(run.agentId);
+    runningProcesses.delete(run.id);
+    activeRunExecutions.delete(run.id);
   }
 
   async function resumeQueuedRuns() {
@@ -2144,6 +2258,16 @@ export function heartbeatService(db: Db) {
           "local agent jwt secret missing or invalid; running without injected PAPERCLIP_API_KEY",
         );
       }
+      const adapterStartMs = Date.now();
+      logger.info(
+        {
+          runId: run.id,
+          agentId: agent.id,
+          adapterType: agent.adapterType,
+          sessionId: runtimeForAdapter.sessionDisplayId ?? runtimeForAdapter.sessionId,
+        },
+        "adapter.execute starting",
+      );
       const adapterResult = await adapter.execute({
         runId: run.id,
         agent,
@@ -2154,6 +2278,19 @@ export function heartbeatService(db: Db) {
         onMeta: onAdapterMeta,
         authToken: authToken ?? undefined,
       });
+      const adapterElapsedMs = Date.now() - adapterStartMs;
+      logger.info(
+        {
+          runId: run.id,
+          agentId: agent.id,
+          adapterType: agent.adapterType,
+          adapterElapsedMs,
+          exitCode: adapterResult.exitCode,
+          timedOut: adapterResult.timedOut,
+          hasError: !!adapterResult.errorMessage,
+        },
+        "adapter.execute returned — starting finalization",
+      );
       const adapterManagedRuntimeServices = adapterResult.runtimeServices
         ? await persistAdapterManagedRuntimeServices({
             db,
@@ -2298,6 +2435,16 @@ export function heartbeatService(db: Db) {
         logCompressed: logSummary?.compressed ?? false,
       });
 
+      logger.info(
+        {
+          runId: run.id,
+          agentId: agent.id,
+          outcome,
+          totalElapsedMs: Date.now() - adapterStartMs,
+        },
+        "run status finalized — completing post-run bookkeeping",
+      );
+
       await setWakeupStatus(run.wakeupRequestId, outcome === "succeeded" ? "completed" : status, {
         finishedAt: new Date(),
         error: adapterResult.errorMessage ?? null,
@@ -2437,6 +2584,10 @@ export function heartbeatService(db: Db) {
         } finally {
           await releaseRuntimeServicesForRun(run.id).catch(() => undefined);
           activeRunExecutions.delete(run.id);
+          logger.info(
+            { runId: run.id, agentId: run.agentId },
+            "run execution fully cleaned up — activeRunExecutions released",
+          );
           await startNextQueuedRunForAgent(run.agentId);
         }
   }
