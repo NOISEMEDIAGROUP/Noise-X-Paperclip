@@ -447,8 +447,8 @@ export function Inbox() {
   }, [issues]);
 
   const failedRuns = useMemo(
-    () => getLatestFailedRunsByAgent(heartbeatRuns ?? []).filter((r) => !dismissed.has(`run:${r.id}`)),
-    [heartbeatRuns, dismissed],
+    () => getLatestFailedRunsByAgent(heartbeatRuns ?? []),
+    [heartbeatRuns],
   );
   const liveIssueIds = useMemo(() => {
     const ids = new Set<string>();
@@ -588,6 +588,20 @@ export function Inbox() {
           return next;
         });
       }, 300);
+    },
+  });
+
+  const dismissRunMutation = useMutation({
+    mutationFn: (runId: string) => heartbeatsApi.dismiss(runId),
+    onSuccess: () => {
+      setActionError(null);
+      if (selectedCompanyId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.heartbeats(selectedCompanyId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.sidebarBadges(selectedCompanyId) });
+      }
+    },
+    onError: (err) => {
+      setActionError(err instanceof Error ? err.message : "Failed to dismiss run");
     },
   });
 
@@ -872,7 +886,7 @@ export function Inbox() {
                   issueById={issueById}
                   agentName={agentName(run.agentId)}
                   issueLinkState={issueLinkState}
-                  onDismiss={() => dismiss(`run:${run.id}`)}
+                  onDismiss={() => dismissRunMutation.mutate(run.id)}
                 />
               ))}
             </div>
