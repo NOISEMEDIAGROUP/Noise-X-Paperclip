@@ -186,6 +186,14 @@ function ProjectIssuesList({ projectId, companyId }: { projectId: string; compan
     },
   });
 
+  const deleteIssue = useMutation({
+    mutationFn: (id: string) => issuesApi.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.listByProject(companyId, projectId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(companyId) });
+    },
+  });
+
   return (
     <IssuesList
       issues={issues ?? []}
@@ -196,6 +204,7 @@ function ProjectIssuesList({ projectId, companyId }: { projectId: string; compan
       projectId={projectId}
       viewStateKey={`paperclip:project-view:${projectId}`}
       onUpdateIssue={(id, data) => updateIssue.mutate({ id, data })}
+      onDeleteIssue={(id) => deleteIssue.mutateAsync(id)}
     />
   );
 }

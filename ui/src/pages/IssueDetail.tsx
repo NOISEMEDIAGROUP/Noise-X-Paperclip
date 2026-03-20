@@ -44,6 +44,7 @@ import {
   EyeOff,
   Hexagon,
   ListTree,
+  Loader2,
   MessageSquare,
   MoreHorizontal,
   Paperclip,
@@ -201,6 +202,7 @@ export function IssueDetail() {
   const location = useLocation();
   const { pushToast } = useToast();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [copied, setCopied] = useState(false);
   const [mobilePropsOpen, setMobilePropsOpen] = useState(false);
   const [detailTab, setDetailTab] = useState("comments");
@@ -474,6 +476,14 @@ export function IssueDetail() {
     mutationFn: (data: Record<string, unknown>) => issuesApi.update(issueId!, data),
     onSuccess: () => {
       invalidateIssue();
+    },
+  });
+
+  const deleteIssue = useMutation({
+    mutationFn: () => issuesApi.remove(issueId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
+      navigate("/issues/all");
     },
   });
 
@@ -799,7 +809,7 @@ export function IssueDetail() {
               <SlidersHorizontal className="h-4 w-4" />
             </Button>
 
-            <Popover open={moreOpen} onOpenChange={setMoreOpen}>
+            <Popover open={moreOpen} onOpenChange={(open) => { setMoreOpen(open); if (!open) setConfirmDelete(false); }}>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon-xs" className="shrink-0">
                   <MoreHorizontal className="h-4 w-4" />
@@ -819,6 +829,36 @@ export function IssueDetail() {
                 <EyeOff className="h-3 w-3" />
                 Hide this Issue
               </button>
+              {!confirmDelete ? (
+                <button
+                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 text-destructive"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Delete Issue
+                </button>
+              ) : (
+                <div className="border-t border-border mt-1 pt-1 space-y-1">
+                  <p className="px-2 py-1 text-xs text-destructive font-medium">Delete this issue? This cannot be undone.</p>
+                  <div className="flex items-center gap-1 px-1">
+                    <button
+                      className="flex-1 px-2 py-1 text-xs rounded hover:bg-accent/50 disabled:opacity-50"
+                      disabled={deleteIssue.isPending}
+                      onClick={() => setConfirmDelete(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="flex-1 px-2 py-1 text-xs rounded bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50 inline-flex items-center justify-center gap-1"
+                      disabled={deleteIssue.isPending}
+                      onClick={() => deleteIssue.mutate()}
+                    >
+                      {deleteIssue.isPending && <Loader2 className="h-3 w-3 animate-spin" />}
+                      {deleteIssue.isPending ? "Deleting..." : "Delete"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </PopoverContent>
             </Popover>
           </div>
