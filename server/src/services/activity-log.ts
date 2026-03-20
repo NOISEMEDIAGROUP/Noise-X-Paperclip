@@ -10,6 +10,7 @@ import { logger } from "../middleware/logger.js";
 import type { PluginEventBus } from "./plugin-event-bus.js";
 
 const PLUGIN_EVENT_SET: ReadonlySet<string> = new Set(PLUGIN_EVENT_TYPES);
+const ACTIVITY_RUN_ID_FK_CONSTRAINT = "activity_log_run_id_heartbeat_runs_id_fk";
 
 let _pluginEventBus: PluginEventBus | null = null;
 
@@ -33,10 +34,17 @@ export interface LogActivityInput {
   details?: Record<string, unknown> | null;
 }
 
+function isMissingHeartbeatRunReferenceError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const record = err as { code?: unknown; constraint?: unknown; constraint_name?: unknown };
+  const constraint = record.constraint ?? record.constraint_name;
+  return record.code === "23503" && constraint === ACTIVITY_RUN_ID_FK_CONSTRAINT;
+}
+
 export async function logActivity(db: Db, input: LogActivityInput) {
   const sanitizedDetails = input.details ? sanitizeRecord(input.details) : null;
   const redactedDetails = sanitizedDetails ? redactCurrentUserValue(sanitizedDetails) : null;
-  await db.insert(activityLog).values({
+  const insertRecord = async (runId: string | null) => db.insert(activityLog).values({
     companyId: input.companyId,
     actorType: input.actorType,
     actorId: input.actorId,
@@ -44,9 +52,18 @@ export async function logActivity(db: Db, input: LogActivityInput) {
     entityType: input.entityType,
     entityId: input.entityId,
     agentId: input.agentId ?? null,
-    runId: input.runId ?? null,
+    runId,
     details: redactedDetails,
   });
+
+  let persistedRunId = input.runId ?? null;
+  try {
+    await insertRecord(persistedRunId);
+  } catch (err) {
+    if (!persistedRunId || !isMissingHeartbeatRunReferenceError(err)) throw err;
+    persistedRunId = null;
+    await insertRecord(null);
+  }
 
   publishLiveEvent({
     companyId: input.companyId,
@@ -58,7 +75,7 @@ export async function logActivity(db: Db, input: LogActivityInput) {
       entityType: input.entityType,
       entityId: input.entityId,
       agentId: input.agentId ?? null,
-      runId: input.runId ?? null,
+      runId: persistedRunId,
       details: redactedDetails,
     },
   });
@@ -76,7 +93,7 @@ export async function logActivity(db: Db, input: LogActivityInput) {
       payload: {
         ...redactedDetails,
         agentId: input.agentId ?? null,
-        runId: input.runId ?? null,
+        runId: persistedRunId,
       },
     };
     void _pluginEventBus.emit(event).then(({ errors }) => {
