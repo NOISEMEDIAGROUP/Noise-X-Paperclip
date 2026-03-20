@@ -5,20 +5,26 @@ import { useTranslation } from "react-i18next";
 import { instanceSettingsApi } from "@/api/instanceSettings";
 import { Button } from "@/components/ui/button";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
+import { useCompany } from "../context/CompanyContext";
+import { buildInstanceSettingsBreadcrumbs } from "../lib/instance-settings";
 import { queryKeys } from "../lib/queryKeys";
 
 export function InstanceGeneralSettings() {
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
   const { i18n, t } = useTranslation();
+  const { selectedCompany } = useCompany();
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
-    setBreadcrumbs([
-      { label: t("instanceSettings.title") },
-      { label: t("instanceSettings.general") },
-    ]);
-  }, [setBreadcrumbs, t]);
+    setBreadcrumbs(
+      buildInstanceSettingsBreadcrumbs(
+        selectedCompany?.name ?? t("sidebar.company"),
+        t("sidebar.settings"),
+        t("instanceSettings.general"),
+      ),
+    );
+  }, [selectedCompany?.name, setBreadcrumbs, t]);
 
   const languageOptions = [
     {

@@ -20,6 +20,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { PageTabBar } from "@/components/PageTabBar";
+import { buildInstanceSettingsBreadcrumbs } from "@/lib/instance-settings";
 import {
   JsonSchemaForm,
   validateJsonSchemaForm,
@@ -116,9 +117,13 @@ export function PluginSettings() {
 
   useEffect(() => {
     setBreadcrumbs([
-      { label: selectedCompany?.name ?? t("sidebar.company"), href: "/dashboard" },
-      { label: t("sidebar.settings"), href: "/instance/settings/heartbeats" },
-      { label: t("instanceSettings.plugins"), href: "/instance/settings/plugins" },
+      ...buildInstanceSettingsBreadcrumbs(
+        selectedCompany?.name ?? t("sidebar.company"),
+        t("sidebar.settings"),
+        t("instanceSettings.plugins"),
+      ).map((crumb, index, crumbs) =>
+        index === crumbs.length - 1 ? { ...crumb, href: "/instance/settings/plugins" } : crumb,
+      ),
       { label: plugin?.manifestJson?.displayName ?? plugin?.packageName ?? t("instanceSettings.pluginsDetailPage.titleFallback") },
     ]);
   }, [selectedCompany?.name, setBreadcrumbs, companyPrefix, plugin, t]);

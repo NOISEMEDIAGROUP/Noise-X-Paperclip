@@ -29,6 +29,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/context/ToastContext";
+import { buildInstanceSettingsBreadcrumbs } from "@/lib/instance-settings";
 import { cn } from "@/lib/utils";
 
 function firstNonEmptyLine(value: string | null | undefined): string | null {
@@ -88,11 +89,13 @@ export function PluginManager() {
   const [errorDetailsPlugin, setErrorDetailsPlugin] = useState<PluginRecord | null>(null);
 
   useEffect(() => {
-    setBreadcrumbs([
-      { label: selectedCompany?.name ?? t("sidebar.company"), href: "/dashboard" },
-      { label: t("sidebar.settings"), href: "/instance/settings/heartbeats" },
-      { label: t("instanceSettings.plugins") },
-    ]);
+    setBreadcrumbs(
+      buildInstanceSettingsBreadcrumbs(
+        selectedCompany?.name ?? t("sidebar.company"),
+        t("sidebar.settings"),
+        t("instanceSettings.plugins"),
+      ),
+    );
   }, [selectedCompany?.name, setBreadcrumbs, t]);
 
   const { data: plugins, isLoading, error } = useQuery({

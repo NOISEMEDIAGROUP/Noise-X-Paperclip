@@ -11,8 +11,10 @@ import { EmptyState } from "../components/EmptyState";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { buildInstanceSettingsBreadcrumbs } from "../lib/instance-settings";
 import { queryKeys } from "../lib/queryKeys";
 import { formatDateTime, relativeTime } from "../lib/utils";
+import { useCompany } from "../context/CompanyContext";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
@@ -31,14 +33,18 @@ export function InstanceSettings() {
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
+  const { selectedCompany } = useCompany();
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
-    setBreadcrumbs([
-      { label: t("instanceSettings.title") },
-      { label: t("instanceSettings.heartbeats") },
-    ]);
-  }, [setBreadcrumbs, t]);
+    setBreadcrumbs(
+      buildInstanceSettingsBreadcrumbs(
+        selectedCompany?.name ?? t("sidebar.company"),
+        t("sidebar.settings"),
+        t("instanceSettings.heartbeats"),
+      ),
+    );
+  }, [selectedCompany?.name, setBreadcrumbs, t]);
 
   const heartbeatsQuery = useQuery({
     queryKey: queryKeys.instance.schedulerHeartbeats,

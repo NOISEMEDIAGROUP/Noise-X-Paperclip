@@ -4,6 +4,8 @@ import { FlaskConical } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { instanceSettingsApi } from "@/api/instanceSettings";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
+import { useCompany } from "../context/CompanyContext";
+import { buildInstanceSettingsBreadcrumbs } from "../lib/instance-settings";
 import { queryKeys } from "../lib/queryKeys";
 import { cn } from "../lib/utils";
 
@@ -11,14 +13,18 @@ export function InstanceExperimentalSettings() {
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
+  const { selectedCompany } = useCompany();
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
-    setBreadcrumbs([
-      { label: t("instanceSettings.title") },
-      { label: t("instanceSettings.experimental") },
-    ]);
-  }, [setBreadcrumbs, t]);
+    setBreadcrumbs(
+      buildInstanceSettingsBreadcrumbs(
+        selectedCompany?.name ?? t("sidebar.company"),
+        t("sidebar.settings"),
+        t("instanceSettings.experimental"),
+      ),
+    );
+  }, [selectedCompany?.name, setBreadcrumbs, t]);
 
   const experimentalQuery = useQuery({
     queryKey: queryKeys.instance.experimentalSettings,

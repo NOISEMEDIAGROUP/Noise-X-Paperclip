@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildInstanceSettingsBreadcrumbs,
   DEFAULT_INSTANCE_SETTINGS_PATH,
   normalizeRememberedInstanceSettingsPath,
 } from "./instance-settings";
@@ -22,5 +23,15 @@ describe("normalizeRememberedInstanceSettingsPath", () => {
       DEFAULT_INSTANCE_SETTINGS_PATH,
     );
     expect(normalizeRememberedInstanceSettingsPath(null)).toBe(DEFAULT_INSTANCE_SETTINGS_PATH);
+  });
+});
+
+describe("buildInstanceSettingsBreadcrumbs", () => {
+  it("creates a company-aware breadcrumb trail back to the dashboard and settings hub", () => {
+    expect(buildInstanceSettingsBreadcrumbs("Celinet", "Configurações", "Heartbeat")).toEqual([
+      { label: "Celinet", href: "/dashboard" },
+      { label: "Configurações", href: DEFAULT_INSTANCE_SETTINGS_PATH },
+      { label: "Heartbeat" },
+    ]);
   });
 });
