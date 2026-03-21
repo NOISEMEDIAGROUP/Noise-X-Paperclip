@@ -117,26 +117,6 @@ export async function sendMessage(
 }
 
 /**
- * Update the conversation title with a topic derived from the message.
- * Only auto-titles if the current title is the default "Conversation: {name}" format.
- */
-export async function autoTitleConversation(
-  issueId: string,
-  body: string,
-  currentTitle: string,
-): Promise<void> {
-  // Only auto-title if still using the default title
-  if (!currentTitle.startsWith(CONVERSATION_PREFIX)) return;
-  const agentName = currentTitle.slice(CONVERSATION_PREFIX.length);
-  const topic = body.replace(/\n/g, " ").trim().slice(0, 40);
-  if (!topic) return;
-  const suffix = body.trim().length > 40 ? "..." : "";
-  await issuesApi.update(issueId, {
-    title: `${CONVERSATION_PREFIX}${agentName} — ${topic}${suffix}`,
-  });
-}
-
-/**
  * Rename a conversation to a custom title. Preserves the "Conversation: " prefix
  * so the issue remains identifiable as a conversation.
  */
