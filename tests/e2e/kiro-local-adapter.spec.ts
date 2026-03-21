@@ -16,7 +16,7 @@ import { test, expect, type Page } from "@playwright/test";
  *   /:companyPrefix/agents/:urlKey/configuration
  */
 
-const PORT = process.env.PAPERCLIP_E2E_PORT ?? 3200;
+const PORT = process.env.PAPERCLIP_E2E_PORT ?? 3100;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 const KIRO_MODELS = [
@@ -56,7 +56,8 @@ async function selectKiroAdapter(page: Page) {
   const kiroItem = page.locator("button", { hasText: "Kiro (local)" }).first();
   await expect(kiroItem).toBeVisible({ timeout: 5_000 });
   await kiroItem.click();
-  await page.waitForTimeout(500);
+  // Wait for adapter form to re-render after selection (CI can be slow)
+  await page.waitForTimeout(1_500);
 }
 
 test.describe("kiro_local adapter — Agent Creation (New Agent page)", () => {
@@ -92,15 +93,15 @@ test.describe("kiro_local adapter — Agent Creation (New Agent page)", () => {
 
     await selectKiroAdapter(page);
 
-    // Working directory should be visible
-    await expect(page.locator("text=Working directory").first()).toBeVisible({ timeout: 5_000 });
-
     // Agent instructions file should be visible
-    await expect(page.locator("text=Agent instructions file").first()).toBeVisible();
+    await expect(page.locator("text=Agent instructions file").first()).toBeVisible({ timeout: 10_000 });
 
     // Command field with "kiro-cli" placeholder
     const commandInput = page.locator('input[placeholder="kiro-cli"]');
     await expect(commandInput).toBeVisible({ timeout: 5_000 });
+
+    // Working directory (legacy) is intentionally hidden in create mode
+    await expect(page.locator("text=Working directory").first()).not.toBeVisible();
   });
 
   test("command field has 'kiro-cli' placeholder (not 'claude' or other)", async ({ page }) => {
@@ -210,17 +211,14 @@ test.describe("kiro_local adapter — Agent Creation (New Agent page)", () => {
     await selectKiroAdapter(page);
     await page.waitForTimeout(500);
 
-    // Fill agent name
+    // Fill agent name (wait for form to be ready after adapter switch)
     const nameInput = page.locator('input[placeholder="Agent name"]');
+    await expect(nameInput).toBeVisible({ timeout: 10_000 });
     await nameInput.fill(agentName);
 
-    // Fill working directory
-    const cwdInput = page.locator('input[placeholder="/path/to/project"]').first();
-    await cwdInput.fill("/tmp/kiro-test");
-    await cwdInput.blur();
-
-    // Fill instructions file
+    // Fill instructions file (working directory is hidden in create mode)
     const instrInput = page.locator('input[placeholder="/absolute/path/to/AGENTS.md"]').first();
+    await expect(instrInput).toBeVisible({ timeout: 10_000 });
     await instrInput.fill("/tmp/kiro-test/AGENTS.md");
     await instrInput.blur();
 
@@ -251,8 +249,7 @@ test.describe("kiro_local adapter — Agent Creation (New Agent page)", () => {
       expect(cfg[field], `adapterConfig should not contain field "${field}"`).toBeUndefined();
     }
 
-    // Verify cwd and instructionsFilePath were saved
-    expect(cfg.cwd).toBe("/tmp/kiro-test");
+    // Verify instructionsFilePath was saved
     expect(cfg.instructionsFilePath).toBe("/tmp/kiro-test/AGENTS.md");
 
     // Cleanup
