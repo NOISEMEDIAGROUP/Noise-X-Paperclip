@@ -8,6 +8,7 @@ import { piLocalUIAdapter } from "./pi-local";
 import { openClawGatewayUIAdapter } from "./openclaw-gateway";
 import { processUIAdapter } from "./process";
 import { httpUIAdapter } from "./http";
+import { emissoSandboxUIAdapter } from "./emisso-sandbox";
 
 const uiAdapters: UIAdapterModule[] = [
   claudeLocalUIAdapter,
@@ -19,6 +20,7 @@ const uiAdapters: UIAdapterModule[] = [
   openClawGatewayUIAdapter,
   processUIAdapter,
   httpUIAdapter,
+  emissoSandboxUIAdapter,
 ];
 
 const adaptersByType = new Map<string, UIAdapterModule>(

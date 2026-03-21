@@ -9,6 +9,11 @@ import { printOpenClawGatewayStreamEvent } from "@paperclipai/adapter-openclaw-g
 import { processCLIAdapter } from "./process/index.js";
 import { httpCLIAdapter } from "./http/index.js";
 
+const emissoSandboxCLIAdapter: CLIAdapterModule = {
+  type: "emisso_sandbox",
+  formatStdoutEvent: printClaudeStreamEvent,
+};
+
 const claudeLocalCLIAdapter: CLIAdapterModule = {
   type: "claude_local",
   formatStdoutEvent: printClaudeStreamEvent,
@@ -55,6 +60,7 @@ const adaptersByType = new Map<string, CLIAdapterModule>(
     openclawGatewayCLIAdapter,
     processCLIAdapter,
     httpCLIAdapter,
+    emissoSandboxCLIAdapter,
   ].map((a) => [a.type, a]),
 );
 

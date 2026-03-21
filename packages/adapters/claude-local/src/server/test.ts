@@ -115,6 +115,43 @@ export async function testEnvironment(
     });
   }
 
+  // Validate mcpServers structure if configured
+  const mcpServers = parseObject(config.mcpServers);
+  const mcpKeys = Object.keys(mcpServers);
+  if (mcpKeys.length > 0) {
+    let allValid = true;
+    for (const key of mcpKeys) {
+      const entry = parseObject(mcpServers[key]);
+      const hasCommand = isNonEmpty(entry.command);
+      const hasUrl = isNonEmpty(entry.url);
+      if (!hasCommand && !hasUrl) {
+        checks.push({
+          code: "claude_mcp_server_invalid",
+          level: "warn",
+          message: `MCP server "${key}" is missing both "command" and "url".`,
+          hint: "Each MCP server entry must have a \"command\" (for stdio transport) or \"url\" (for SSE transport).",
+        });
+        allValid = false;
+      }
+      if (entry.args !== undefined && !Array.isArray(entry.args)) {
+        checks.push({
+          code: "claude_mcp_server_args_invalid",
+          level: "warn",
+          message: `MCP server "${key}" has non-array "args".`,
+          hint: "\"args\" must be a string array.",
+        });
+        allValid = false;
+      }
+    }
+    if (allValid) {
+      checks.push({
+        code: "claude_mcp_servers_valid",
+        level: "info",
+        message: `${mcpKeys.length} MCP server(s) configured: ${mcpKeys.join(", ")}`,
+      });
+    }
+  }
+
   const canRunProbe =
     checks.every((check) => check.code !== "claude_cwd_invalid" && check.code !== "claude_command_unresolvable");
   if (canRunProbe) {

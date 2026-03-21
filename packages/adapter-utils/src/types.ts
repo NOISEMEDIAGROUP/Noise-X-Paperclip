@@ -344,7 +344,14 @@ export interface CreateConfigValues {
   workspaceBranchTemplate?: string;
   worktreeParentDir?: string;
   runtimeServicesJson?: string;
+  mcpServersJson?: string;
   maxTurnsPerRun: number;
+  maxTurns?: number;
   heartbeatEnabled: boolean;
   intervalSec: number;
+  // Emisso Sandbox fields
+  repoUrl?: string;
+  vcpus?: number;
+  timeoutSec?: number;
+  snapshotId?: string;
 }

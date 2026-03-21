@@ -27,6 +27,7 @@ Core fields:
 - env (object, optional): KEY=VALUE environment variables
 - workspaceStrategy (object, optional): execution workspace strategy; currently supports { type: "git_worktree", baseRef?, branchTemplate?, worktreeParentDir? }
 - workspaceRuntime (object, optional): workspace runtime service intents; local host-managed services are realized before Claude starts and exposed back via context/env
+- mcpServers (object, optional): MCP server configuration. Keys are server names, values are { command, args?, env? }. Written to a temp file and passed via --mcp-config.
 
 Operational fields:
 - timeoutSec (number, optional): run timeout in seconds
