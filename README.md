@@ -269,7 +269,7 @@ Key settings for production:
 - Enable health checks for automatic restart on failure
 - Bind to `127.0.0.1` if not using a reverse proxy
 
-See the Docker deployment guide in `/docs` for full configuration.
+See the [Docker deployment guide](docs/deploy/docker.md) for full configuration.
 
 ### API key management
 
@@ -365,4 +365,4 @@ MIT &copy; 2026 Paperclip
 
 <p align="center">
   <sub>Open source under MIT. Built for people who want to run companies, not babysit agents.</sub>
-</p>>
+</p>
