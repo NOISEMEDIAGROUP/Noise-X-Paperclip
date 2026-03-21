@@ -1,11 +1,12 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
-import { spawn, type ChildProcess } from "node:child_process";
+import { app, BrowserWindow, dialog, shell } from "electron";
+import { execSync, spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import os from "node:os";
+import fs from "node:fs";
 import net from "node:net";
 import treeKill from "tree-kill";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// __dirname is available natively in CommonJS
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -61,6 +62,95 @@ function waitForPort(port: number, timeoutMs: number): Promise<void> {
 }
 
 /**
+ * Find the Node.js binary.
+ *
+ * In packaged mode we ship a bundled Node binary inside the app resources.
+ * Falls back to probing well-known install locations.
+ */
+function findNodeBinary(): string {
+  if (!app.isPackaged) return "node";
+
+  const isWin = process.platform === "win32";
+  const bundledNode = path.join(
+    process.resourcesPath,
+    "app-server",
+    "node-bin",
+    isWin ? "node.exe" : "node",
+  );
+  try {
+    fs.accessSync(bundledNode, fs.constants.X_OK);
+    return bundledNode;
+  } catch { /* bundled binary not found, fall back */ }
+
+  // Fallback: probe well-known install locations
+  const candidates: string[] = [];
+  const home = process.env.HOME ?? "";
+  const nvmDir = process.env.NVM_DIR ?? path.join(home, ".nvm");
+  try {
+    const ver = fs.readFileSync(path.join(nvmDir, "alias", "default"), "utf8").trim();
+    candidates.push(path.join(nvmDir, "versions", "node", ver, "bin", "node"));
+  } catch { /* nvm not present */ }
+
+  candidates.push(
+    "/usr/local/bin/node",
+    "/opt/homebrew/bin/node",
+    "/usr/bin/node",
+  );
+
+  for (const c of candidates) {
+    try { fs.accessSync(c, fs.constants.X_OK); return c; } catch { /* not here */ }
+  }
+
+  return "node";
+}
+
+/**
+ * Resolve the user's full login-shell PATH.
+ *
+ * Electron apps launched from Finder / Dock inherit a minimal PATH that
+ * excludes directories like ~/.nvm, /opt/homebrew/bin, and npm global bin.
+ */
+function resolveShellPath(): string {
+  const fallbackDirs = [
+    "/usr/local/bin",
+    "/opt/homebrew/bin",
+    "/usr/local/sbin",
+    "/usr/bin",
+    "/bin",
+    "/usr/sbin",
+    "/sbin",
+  ];
+
+  const home = process.env.HOME ?? "";
+  if (home) {
+    fallbackDirs.unshift(
+      path.join(home, ".local", "bin"),
+      path.join(home, ".npm-global", "bin"),
+    );
+    const nvmDir = process.env.NVM_DIR ?? path.join(home, ".nvm");
+    try {
+      const ver = fs.readFileSync(path.join(nvmDir, "alias", "default"), "utf8").trim();
+      fallbackDirs.unshift(path.join(nvmDir, "versions", "node", ver, "bin"));
+    } catch { /* nvm not present */ }
+  }
+
+  try {
+    const userShell = process.env.SHELL || "/bin/zsh";
+    const shellPath = execSync(`${userShell} -ilc 'echo $PATH'`, {
+      encoding: "utf8",
+      timeout: 5000,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (shellPath) return shellPath;
+  } catch { /* shell probe failed */ }
+
+  const current = process.env.PATH ?? "";
+  const existing = new Set(current.split(":"));
+  const missing = fallbackDirs.filter((d) => !existing.has(d));
+  return missing.length > 0 ? current + ":" + missing.join(":") : current;
+}
+
+/**
  * Spawn the Paperclip server as a child process.
  */
 function startServer(): ChildProcess {
@@ -71,15 +161,15 @@ function startServer(): ChildProcess {
 
   if (app.isPackaged) {
     const serverEntry = path.join(root, "server", "dist", "index.js");
-    // Use the bundled Electron binary as a Node.js runtime via ELECTRON_RUN_AS_NODE
-    child = spawn(process.execPath, [serverEntry], {
+    const enrichedPath = resolveShellPath();
+    child = spawn(findNodeBinary(), [serverEntry], {
       cwd: root,
       env: {
         ...process.env,
-        ELECTRON_RUN_AS_NODE: "1",
+        PATH: enrichedPath,
         NODE_ENV: "production",
         PORT: String(SERVER_PORT),
-        PAPERCLIP_DATA_DIR: path.join(app.getPath("userData"), "data"),
+        PAPERCLIP_HOME: path.join(os.homedir(), ".paperclip"),
       },
       stdio: ["ignore", "pipe", "pipe"],
       detached: !isWin,
@@ -147,7 +237,7 @@ function sendSplashStatus(step: string, detail: string, progress: number) {
   }
 }
 
-function createSplashWindow(): BrowserWindow {
+async function createSplashWindow(): Promise<BrowserWindow> {
   const splash = new BrowserWindow({
     width: 480,
     height: 380,
@@ -165,7 +255,6 @@ function createSplashWindow(): BrowserWindow {
 
   splash.center();
 
-  // The Paperclip SVG icon path (matches favicon.svg / avatar branding)
   const paperclipSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg>`;
 
   const html = `<!DOCTYPE html>
@@ -206,7 +295,6 @@ function createSplashWindow(): BrowserWindow {
     animation: fadeIn 0.5s ease-out 0.15s forwards;
   }
 
-  /* Progress bar */
   .progress-track {
     width: 240px;
     height: 3px;
@@ -225,7 +313,6 @@ function createSplashWindow(): BrowserWindow {
     transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Steps list */
   .steps {
     display: flex;
     flex-direction: column;
@@ -243,14 +330,9 @@ function createSplashWindow(): BrowserWindow {
     color: #52525b;
     transition: color 0.3s ease;
   }
-  .step.active {
-    color: #e4e4e7;
-  }
-  .step.done {
-    color: #71717a;
-  }
+  .step.active { color: #e4e4e7; }
+  .step.done { color: #71717a; }
 
-  /* Step indicator icons */
   .step-icon {
     width: 16px;
     height: 16px;
@@ -282,9 +364,7 @@ function createSplashWindow(): BrowserWindow {
     line-height: 1;
   }
 
-  .step-label {
-    flex: 1;
-  }
+  .step-label { flex: 1; }
 
   .step-detail {
     font-size: 11px;
@@ -292,9 +372,7 @@ function createSplashWindow(): BrowserWindow {
     margin-top: 2px;
   }
 
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
+  @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }
@@ -313,27 +391,19 @@ function createSplashWindow(): BrowserWindow {
   <div class="steps" id="steps">
     <div class="step" id="step-init" data-key="init">
       <div class="step-icon"><div class="pending"></div></div>
-      <div>
-        <div class="step-label">Initializing</div>
-      </div>
+      <div><div class="step-label">Initializing</div></div>
     </div>
     <div class="step" id="step-database" data-key="database">
       <div class="step-icon"><div class="pending"></div></div>
-      <div>
-        <div class="step-label">Starting database</div>
-      </div>
+      <div><div class="step-label">Starting database</div></div>
     </div>
     <div class="step" id="step-server" data-key="server">
       <div class="step-icon"><div class="pending"></div></div>
-      <div>
-        <div class="step-label">Starting server</div>
-      </div>
+      <div><div class="step-label">Starting server</div></div>
     </div>
     <div class="step" id="step-ready" data-key="ready">
       <div class="step-icon"><div class="pending"></div></div>
-      <div>
-        <div class="step-label">Loading interface</div>
-      </div>
+      <div><div class="step-label">Loading interface</div></div>
     </div>
   </div>
 
@@ -353,8 +423,6 @@ function createSplashWindow(): BrowserWindow {
       if (!el) return;
 
       const iconContainer = el.querySelector('.step-icon');
-
-      // Remove previous classes
       el.classList.remove('active', 'done');
 
       if (state === 'active') {
@@ -367,7 +435,6 @@ function createSplashWindow(): BrowserWindow {
         iconContainer.innerHTML = '<div class="pending"></div>';
       }
 
-      // Update detail text if provided
       let detailEl = el.querySelector('.step-detail');
       if (detail) {
         if (!detailEl) {
@@ -381,12 +448,9 @@ function createSplashWindow(): BrowserWindow {
       }
     }
 
-    // Listen for status updates from main process
     window.electronSplash.onStatusUpdate(({ step, detail, progress }) => {
-      // Update progress bar
       progressBar.style.width = Math.min(100, Math.max(0, progress)) + '%';
 
-      // Mark all steps before current as done
       const currentIdx = stepOrder.indexOf(step);
       stepOrder.forEach((key, idx) => {
         if (idx < currentIdx) {
@@ -403,7 +467,13 @@ function createSplashWindow(): BrowserWindow {
 </body>
 </html>`;
 
-  splash.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+  // Write HTML to a temp file — data: URLs block preload scripts in Electron 35+
+  const splashDir = path.join(app.getPath("temp"), "paperclip-splash");
+  fs.mkdirSync(splashDir, { recursive: true });
+  const splashPath = path.join(splashDir, "splash.html");
+  fs.writeFileSync(splashPath, html, "utf8");
+  await splash.loadFile(splashPath);
+
   splashWindow = splash;
   return splash;
 }
@@ -450,34 +520,51 @@ function createWindow(): BrowserWindow {
 app.setName("Paperclip");
 
 app.whenReady().then(async () => {
-  const splash = createSplashWindow();
+  const splash = await createSplashWindow();
 
   try {
     // Step 1: Initializing
     sendSplashStatus("init", "Preparing environment\u2026", 5);
-    await sleep(300); // brief pause so the user sees the first step
+    await sleep(300);
 
     // Step 2: Starting database
     sendSplashStatus("database", "Launching embedded PostgreSQL\u2026", 15);
 
     serverProcess = startServer();
 
-    // Watch stdout for server log milestones to update splash status
+    // Track progress — only allow forward movement to prevent visual regression
     let dbReady = false;
     let serverListening = false;
+    let lastProgress = 15;
+
+    const updateProgress = (step: string, detail: string, progress: number) => {
+      if (progress > lastProgress) {
+        lastProgress = progress;
+        sendSplashStatus(step, detail, progress);
+      }
+    };
+
+    // Accumulate output for error reporting; also write to a log file
+    const serverOutputLines: string[] = [];
+    const logFile = path.join(app.getPath("userData"), "server.log");
+    const logStream = fs.createWriteStream(logFile, { flags: "a" });
+    logStream.write(`\n--- Server start ${new Date().toISOString()} ---\n`);
 
     const onServerData = (chunk: Buffer) => {
       const text = chunk.toString();
+      serverOutputLines.push(...text.split("\n").filter(Boolean));
+      if (serverOutputLines.length > 200) serverOutputLines.splice(0, serverOutputLines.length - 200);
+      logStream.write(text);
 
-      // Detect database readiness from server logs
-      if (!dbReady && (text.includes("database") || text.includes("postgres") || text.includes("migration"))) {
+      // Match specific Paperclip server log markers
+      if (!dbReady && (text.includes("PostgreSQL ready") || text.includes("migration"))) {
         dbReady = true;
-        sendSplashStatus("database", "Running migrations\u2026", 35);
+        updateProgress("database", "Running migrations\u2026", 35);
       }
 
-      if (!serverListening && (text.includes("listening") || text.includes("Server") || text.includes("ready"))) {
+      if (!serverListening && text.includes("Server listening on")) {
         serverListening = true;
-        sendSplashStatus("server", "Server is starting\u2026", 55);
+        updateProgress("server", "Server is starting\u2026", 55);
       }
     };
 
@@ -485,14 +572,16 @@ app.whenReady().then(async () => {
     serverProcess.stderr?.on("data", onServerData);
 
     serverProcess.on("exit", (code, signal) => {
+      logStream.end();
       if (serverProcess) {
-        console.error(`Server exited unexpectedly (code=${code}, signal=${signal})`);
+        const tail = serverOutputLines.slice(-30).join("\n");
+        console.error(`Server exited unexpectedly (code=${code}, signal=${signal})\n${tail}`);
         dialog
           .showMessageBox({
             type: "error",
             title: "Server Error",
             message: "The Paperclip server stopped unexpectedly.",
-            detail: `Exit code: ${code}, signal: ${signal}`,
+            detail: `Exit code: ${code}, signal: ${signal}\n\nLog: ${logFile}\n\n${tail}`,
             buttons: ["Quit"],
           })
           .then(() => app.quit());
@@ -502,13 +591,13 @@ app.whenReady().then(async () => {
     // Animate progress while waiting for the port
     const progressInterval = setInterval(() => {
       if (!dbReady) {
-        sendSplashStatus("database", "Launching embedded PostgreSQL\u2026", 20);
+        updateProgress("database", "Launching embedded PostgreSQL\u2026", 20);
       } else if (!serverListening) {
-        sendSplashStatus("server", "Waiting for server\u2026", 50);
+        updateProgress("server", "Waiting for server\u2026", 50);
       }
     }, 2000);
 
-    sendSplashStatus("server", "Waiting for server\u2026", 45);
+    updateProgress("server", "Waiting for server\u2026", 45);
 
     // Step 3: Wait for server
     await waitForPort(SERVER_PORT, SERVER_STARTUP_TIMEOUT_MS);
@@ -526,10 +615,8 @@ app.whenReady().then(async () => {
       sendSplashStatus("ready", "Almost there\u2026", 95);
     });
 
-    // When the main window is ready, close the splash
     mainWindow.once("ready-to-show", () => {
       sendSplashStatus("ready", "Ready!", 100);
-      // Short delay so the user sees "Ready!" before the splash disappears
       setTimeout(() => {
         if (splash && !splash.isDestroyed()) {
           splash.destroy();
@@ -581,9 +668,10 @@ app.on("before-quit", async (e) => {
 });
 
 for (const sig of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
-  process.on(sig, async () => {
-    await killServer();
-    process.exit(0);
+  process.on(sig, () => {
+    // Fire-and-forget: Node does not await async signal handlers.
+    // killServer() is idempotent so concurrent calls from before-quit are safe.
+    void killServer().then(() => process.exit(0));
   });
 }
 
