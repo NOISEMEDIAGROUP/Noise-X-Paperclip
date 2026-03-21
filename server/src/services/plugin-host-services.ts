@@ -61,16 +61,39 @@ const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
  *
  * Allowed hosts still go through DNS pinning to prevent rebinding attacks;
  * only the private-IP filter is bypassed.
+ *
+ * **Security note:** Adding a hostname to this allowlist permits plugins to
+ * reach *any* port and path on that host (e.g. `localhost` opens access to
+ * every local service — Postgres, Redis, etc.). Only add hosts you trust all
+ * installed plugins to contact.
  */
 let _allowedPrivateHosts: Set<string> | undefined;
-function getAllowedPrivateHosts(): Set<string> {
+
+function getAllowedPrivateHosts(envValue?: string): Set<string> {
+  if (envValue !== undefined) {
+    // Explicit value passed (e.g. from tests) — bypass cache.
+    return new Set(
+      envValue.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean),
+    );
+  }
   if (!_allowedPrivateHosts) {
     const raw = process.env.PAPERCLIP_PLUGIN_ALLOWED_HOSTS ?? "";
     _allowedPrivateHosts = new Set(
       raw.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean),
     );
+    if (_allowedPrivateHosts.size > 0) {
+      logger.warn(
+        { allowedHosts: [..._allowedPrivateHosts] },
+        "PAPERCLIP_PLUGIN_ALLOWED_HOSTS is set — plugins may reach private/local IPs on these hosts",
+      );
+    }
   }
   return _allowedPrivateHosts;
+}
+
+/** Reset the cached allowlist. Exported for test isolation only. */
+export function _resetAllowedPrivateHostsCache(): void {
+  _allowedPrivateHosts = undefined;
 }
 
 /**
@@ -174,6 +197,7 @@ async function validateAndResolveFetchUrl(urlString: string): Promise<ValidatedF
     // Hosts listed in PAPERCLIP_PLUGIN_ALLOWED_HOSTS bypass private-IP
     // filtering so that self-hosted plugins can reach local services.
     // DNS pinning still applies to prevent rebinding.
+    // Note: allowed hosts can be reached on ANY port — see JSDoc above.
     const allowedHosts = getAllowedPrivateHosts();
     const hostIsAllowed = allowedHosts.has(originalHostname.toLowerCase());
     const safeResults = hostIsAllowed
