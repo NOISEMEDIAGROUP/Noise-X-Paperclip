@@ -103,7 +103,7 @@ export function ensureConversation(
   })();
 
   ensureInFlight.set(key, promise);
-  promise.finally(() => ensureInFlight.delete(key));
+  promise.finally(() => ensureInFlight.delete(key)).catch(() => {});
 
   return promise;
 }
