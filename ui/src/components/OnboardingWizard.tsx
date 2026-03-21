@@ -66,17 +66,19 @@ type AdapterType =
   | "http"
   | "openclaw_gateway";
 
-const DEFAULT_TASK_DESCRIPTION = `IMPORTANT: You are the CEO of a company managed by Paperclip — an AI agent orchestration platform (NOT a paperclip manufacturer). Your workspace is a Paperclip-managed directory for coordinating AI agents.
+function getDefaultTaskDescription(adapterType: AdapterType) {
+  return `IMPORTANT: You are the CEO of a company managed by Paperclip — an AI agent orchestration platform (NOT a paperclip manufacturer). Your workspace is a Paperclip-managed directory for coordinating AI agents.
 
 Your setup tasks:
 
 1. **Create your agent instructions folder.** Create a folder \`agents/ceo/\` in your workspace and add an \`AGENTS.md\` file describing your CEO role, responsibilities, and operating procedures.
 
-2. **Hire a Founding Engineer.** Use the Paperclip API to create a hire request for a Founding Engineer agent (role: engineer, adapter: claude_local). This agent will handle software development for the company.
+2. **Hire a Founding Engineer.** Use the Paperclip API to create a hire request for a Founding Engineer agent (role: engineer, adapter: ${adapterType}). This agent will handle software development for the company.
 
 3. **Plan the roadmap.** Create 3-5 initial issues that define the company's first priorities, and assign the Founding Engineer to begin execution on the top priority.
 
 Use the Paperclip skill (/paperclip) for all coordination. Report blockers as comments on this issue.`;
+}
 
 export function OnboardingWizard() {
   const { onboardingOpen, onboardingOptions, closeOnboarding } = useDialog();
@@ -134,7 +136,7 @@ export function OnboardingWizard() {
   // Step 3
   const [taskTitle, setTaskTitle] = useState("Create your CEO HEARTBEAT.md");
   const [taskDescription, setTaskDescription] = useState(
-    DEFAULT_TASK_DESCRIPTION
+    getDefaultTaskDescription(adapterType)
   );
 
   // Auto-grow textarea for task description
@@ -217,6 +219,20 @@ export function OnboardingWizard() {
       ? "opencode"
       : "claude");
 
+  // Keep task description in sync with the selected adapter type, but only
+  // when the user hasn't manually edited the description.
+  const prevAdapterRef = useRef(adapterType);
+  useEffect(() => {
+    const prev = prevAdapterRef.current;
+    prevAdapterRef.current = adapterType;
+    if (prev === adapterType) return;
+    setTaskDescription((cur) =>
+      cur === getDefaultTaskDescription(prev)
+        ? getDefaultTaskDescription(adapterType)
+        : cur
+    );
+  }, [adapterType]);
+
   useEffect(() => {
     if (step !== 2) return;
     setAdapterEnvResult(null);
@@ -288,7 +304,7 @@ export function OnboardingWizard() {
     setForceUnsetAnthropicApiKey(false);
     setUnsetAnthropicLoading(false);
     setTaskTitle("Create your CEO HEARTBEAT.md");
-    setTaskDescription(DEFAULT_TASK_DESCRIPTION);
+    setTaskDescription(getDefaultTaskDescription(adapterType));
     setCreatedCompanyId(null);
     setCreatedCompanyPrefix(null);
     setCreatedAgentId(null);
