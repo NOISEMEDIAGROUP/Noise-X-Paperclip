@@ -151,7 +151,7 @@ describe("CEO self-deletion guards (#1334)", () => {
     mockAccessService.setPrincipalPermission.mockResolvedValue(undefined);
   });
 
-  describe("PATCH /agents/:id — agent self-termination blocked", () => {
+  describe("PATCH /agents/:id — termination via PATCH blocked", () => {
     it("rejects agents trying to set status to terminated", async () => {
       mockAgentService.getById.mockResolvedValue(ceoAgent);
       const app = createApp(agentActor);
@@ -160,8 +160,20 @@ describe("CEO self-deletion guards (#1334)", () => {
         .patch("/api/agents/11111111-1111-4111-8111-111111111111")
         .send({ status: "terminated" });
 
-      expect(res.status).toBe(403);
-      expect(res.body.error).toContain("board users");
+      expect(res.status).toBe(422);
+      expect(res.body.error).toContain("POST /agents/:id/terminate");
+    });
+
+    it("rejects board users trying to set status to terminated via PATCH", async () => {
+      mockAgentService.getById.mockResolvedValue(ceoAgent);
+      const app = createApp(boardActor);
+
+      const res = await request(app)
+        .patch("/api/agents/11111111-1111-4111-8111-111111111111")
+        .send({ status: "terminated" });
+
+      expect(res.status).toBe(422);
+      expect(res.body.error).toContain("POST /agents/:id/terminate");
     });
   });
 
