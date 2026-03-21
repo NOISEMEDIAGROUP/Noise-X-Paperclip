@@ -33,9 +33,33 @@ import { resolveClaudeDesiredSkillNames } from "./skills.js";
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
 
 /**
- * Create a tmpdir with `.claude/skills/` containing symlinks to skills from
- * the repo's `skills/` directory, so `--add-dir` makes Claude Code discover
- * them as proper registered skills.
+ * Link a skill source into the target path.
+ * On Windows, symlinks require elevated privileges or Developer Mode.
+ * Falls back to directory junction, then recursive copy.
+ */
+async function linkSkillEntry(source: string, target: string): Promise<void> {
+  // Try a regular symlink first
+  try {
+    await fs.symlink(source, target);
+    return;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "EPERM") throw err;
+  }
+  // On Windows without privileges, try a directory junction (no elevation needed)
+  try {
+    await fs.symlink(source, target, "junction");
+    return;
+  } catch {
+    // fall through to copy
+  }
+  // Last resort: recursive copy
+  await fs.cp(source, target, { recursive: true });
+}
+
+/**
+ * Create a tmpdir with `.claude/skills/` containing symlinks (or junctions/copies
+ * on Windows) to skills from the repo's `skills/` directory, so `--add-dir`
+ * makes Claude Code discover them as proper registered skills.
  */
 async function buildSkillsDir(config: Record<string, unknown>): Promise<string> {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-skills-"));
@@ -50,10 +74,7 @@ async function buildSkillsDir(config: Record<string, unknown>): Promise<string> 
   );
   for (const entry of availableEntries) {
     if (!desiredNames.has(entry.key)) continue;
-    await fs.symlink(
-      entry.source,
-      path.join(target, entry.runtimeName),
-    );
+    await linkSkillEntry(entry.source, path.join(target, entry.runtimeName));
   }
   return tmp;
 }
