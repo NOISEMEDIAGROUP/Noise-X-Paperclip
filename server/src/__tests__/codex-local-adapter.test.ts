@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { isCodexUnknownSessionError, parseCodexJsonl } from "@paperclipai/adapter-codex-local/server";
+import {
+  calculateCodexUsageCostUsd,
+  isCodexUnknownSessionError,
+  parseCodexJsonl,
+  resolveCodexModelPricingPerToken,
+} from "@paperclipai/adapter-codex-local/server";
 import { parseCodexStdoutLine } from "@paperclipai/adapter-codex-local/ui";
 import { printCodexStreamEvent } from "@paperclipai/adapter-codex-local/cli";
 
@@ -30,6 +35,44 @@ describe("codex_local stale session detection", () => {
       "2026-02-19T19:58:53.281939Z ERROR codex_core::rollout::list: state db missing rollout path for thread 019c775d-967c-7ef1-acc7-e396dc2c87cc";
 
     expect(isCodexUnknownSessionError("", stderr)).toBe(true);
+  });
+});
+
+describe("codex_local pricing", () => {
+  it("uses codex-mini pricing for known models", () => {
+    const cost = calculateCodexUsageCostUsd("codex-mini", {
+      inputTokens: 1000,
+      cachedInputTokens: 0,
+      outputTokens: 500,
+    });
+    expect(cost).toBeCloseTo(0.0045, 9);
+  });
+
+  it("uses codex-mini pricing for versioned codex-mini model ids", () => {
+    const cost = calculateCodexUsageCostUsd("codex-mini-2025-01-31", {
+      inputTokens: 1000,
+      cachedInputTokens: 0,
+      outputTokens: 500,
+    });
+    expect(cost).toBeCloseTo(0.0045, 9);
+  });
+
+  it("falls back for unknown models with warning", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const pricing = resolveCodexModelPricingPerToken("unknown-model");
+      const cost = calculateCodexUsageCostUsd("unknown-model", {
+        inputTokens: 1000,
+        cachedInputTokens: 0,
+        outputTokens: 500,
+      });
+      expect(pricing.input).toBeCloseTo(3 / 1_000_000, 12);
+      expect(pricing.output).toBeCloseTo(15 / 1_000_000, 12);
+      expect(cost).toBeCloseTo(0.0105, 9);
+      expect(warnSpy).toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });
 
