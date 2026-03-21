@@ -2282,6 +2282,11 @@ export function heartbeatService(db: Db) {
           "local agent jwt secret missing or invalid; running without injected PAPERCLIP_API_KEY",
         );
       }
+      // Inject vault snapshot for cross-platform context awareness
+      try {
+        context.vaultSnapshot = await getVaultSnapshot();
+      } catch { /* non-fatal: vault may be unavailable */ }
+
       const adapterResult = await adapter.execute({
         runId: run.id,
         agent,
