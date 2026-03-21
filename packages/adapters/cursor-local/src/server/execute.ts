@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { inferOpenAiCompatibleBiller, type AdapterExecutionContext, type AdapterExecutionResult } from "@paperclipai/adapter-utils";
+import { inferOpenAiCompatibleBiller, resolveSkillAllowlist, filterSkills, type AdapterExecutionContext, type AdapterExecutionResult } from "@paperclipai/adapter-utils";
 import {
   asString,
   asNumber,
@@ -97,19 +97,36 @@ type EnsureCursorSkillsInjectedOptions = {
   skillsEntries?: Array<{ name: string; source: string }>;
   skillsHome?: string;
   linkSkill?: (source: string, target: string) => Promise<void>;
+  runtimeConfig?: unknown;
 };
 
 export async function ensureCursorSkillsInjected(
   onLog: AdapterExecutionContext["onLog"],
   options: EnsureCursorSkillsInjectedOptions = {},
 ) {
-  const skillsEntries = options.skillsEntries
+  let skillsEntries = options.skillsEntries
     ?? (options.skillsDir
       ? (await fs.readdir(options.skillsDir, { withFileTypes: true }))
           .filter((entry) => entry.isDirectory())
           .map((entry) => ({ name: entry.name, source: path.join(options.skillsDir!, entry.name) }))
       : await listPaperclipSkillEntries(__moduleDir));
   if (skillsEntries.length === 0) return;
+
+  // Apply skill allowlist filtering when configured on the agent
+  const allowlistPolicy = resolveSkillAllowlist(options.runtimeConfig);
+  if (allowlistPolicy.enabled || allowlistPolicy.blocked.length > 0) {
+    const allNames = skillsEntries.map((e) => e.name);
+    const allowedNames = new Set(filterSkills(allNames, allowlistPolicy));
+    const beforeCount = skillsEntries.length;
+    skillsEntries = skillsEntries.filter((e) => allowedNames.has(e.name));
+    const filtered = beforeCount - skillsEntries.length;
+    if (filtered > 0) {
+      await onLog(
+        "stderr",
+        `[paperclip] Skill allowlist active: ${skillsEntries.length} allowed, ${filtered} filtered out\n`,
+      );
+    }
+  }
 
   const skillsHome = options.skillsHome ?? cursorSkillsHome();
   try {
@@ -179,7 +196,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const effectiveWorkspaceCwd = useConfiguredInsteadOfAgentHome ? "" : workspaceCwd;
   const cwd = effectiveWorkspaceCwd || configuredCwd || process.cwd();
   await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
-  await ensureCursorSkillsInjected(onLog);
+  await ensureCursorSkillsInjected(onLog, { runtimeConfig: agent.runtimeConfig });
 
   const envConfig = parseObject(config.env);
   const hasExplicitApiKey =

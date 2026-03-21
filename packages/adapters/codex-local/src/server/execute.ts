@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { inferOpenAiCompatibleBiller, type AdapterExecutionContext, type AdapterExecutionResult } from "@paperclipai/adapter-utils";
+import { inferOpenAiCompatibleBiller, resolveSkillAllowlist, filterSkills, type AdapterExecutionContext, type AdapterExecutionResult } from "@paperclipai/adapter-utils";
 import {
   asString,
   asNumber,
@@ -99,14 +99,31 @@ type EnsureCodexSkillsInjectedOptions = {
   skillsHome?: string;
   skillsEntries?: Awaited<ReturnType<typeof listPaperclipSkillEntries>>;
   linkSkill?: (source: string, target: string) => Promise<void>;
+  runtimeConfig?: unknown;
 };
 
 export async function ensureCodexSkillsInjected(
   onLog: AdapterExecutionContext["onLog"],
   options: EnsureCodexSkillsInjectedOptions = {},
 ) {
-  const skillsEntries = options.skillsEntries ?? await listPaperclipSkillEntries(__moduleDir);
+  let skillsEntries = options.skillsEntries ?? await listPaperclipSkillEntries(__moduleDir);
   if (skillsEntries.length === 0) return;
+
+  // Apply skill allowlist filtering when configured on the agent
+  const allowlistPolicy = resolveSkillAllowlist(options.runtimeConfig);
+  if (allowlistPolicy.enabled || allowlistPolicy.blocked.length > 0) {
+    const allNames = skillsEntries.map((e) => e.name);
+    const allowedNames = new Set(filterSkills(allNames, allowlistPolicy));
+    const beforeCount = skillsEntries.length;
+    skillsEntries = skillsEntries.filter((e) => allowedNames.has(e.name));
+    const filtered = beforeCount - skillsEntries.length;
+    if (filtered > 0) {
+      await onLog(
+        "stdout",
+        `[paperclip] Skill allowlist active: ${skillsEntries.length} allowed, ${filtered} filtered out\n`,
+      );
+    }
+  }
 
   const skillsHome = options.skillsHome ?? path.join(resolveCodexHomeDir(process.env), "skills");
   await fs.mkdir(skillsHome, { recursive: true });
@@ -226,7 +243,10 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const effectiveCodexHome = configuredCodexHome ?? preparedWorktreeCodexHome;
   await ensureCodexSkillsInjected(
     onLog,
-    effectiveCodexHome ? { skillsHome: path.join(effectiveCodexHome, "skills") } : {},
+    {
+      ...(effectiveCodexHome ? { skillsHome: path.join(effectiveCodexHome, "skills") } : {}),
+      runtimeConfig: agent.runtimeConfig,
+    },
   );
   const hasExplicitApiKey =
     typeof envConfig.PAPERCLIP_API_KEY === "string" && envConfig.PAPERCLIP_API_KEY.trim().length > 0;

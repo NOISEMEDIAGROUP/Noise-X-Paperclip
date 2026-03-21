@@ -19,37 +19,33 @@ export async function llmCheck(config: PaperclipConfig): Promise<CheckResult> {
   }
 
   try {
-    if (config.llm.provider === "claude") {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": config.llm.apiKey,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-5-20250929",
-          max_tokens: 1,
-          messages: [{ role: "user", content: "hi" }],
-        }),
-      });
-      if (res.ok || res.status === 400) {
-        return { name: "LLM provider", status: "pass", message: "Claude API key is valid" };
-      }
-      if (res.status === 401) {
+    if (config.llm.provider === "gemini") {
+      const key = config.llm.apiKey;
+      if (!key.startsWith("AIza") || key.length < 30) {
         return {
           name: "LLM provider",
           status: "fail",
-          message: "Claude API key is invalid (401)",
+          message: "Gemini API key format invalid (expected AIza... prefix, 39+ chars)",
           canRepair: false,
-          repairHint: "Run `paperclipai configure --section llm`",
+          repairHint: "Run `paperclipai configure --section llm` with a valid Google AI API key",
         };
       }
-      return {
-        name: "LLM provider",
-        status: "warn",
-        message: `Claude API returned status ${res.status}`,
-      };
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`,
+      );
+      if (res.ok) {
+        return { name: "LLM provider", status: "pass", message: "Gemini API key is valid" };
+      }
+      if (res.status === 400 || res.status === 403) {
+        return {
+          name: "LLM provider",
+          status: "fail",
+          message: `Gemini API key rejected (${res.status})`,
+          canRepair: false,
+          repairHint: "Run `paperclipai configure --section llm` with a valid Google AI API key",
+        };
+      }
+      return { name: "LLM provider", status: "warn", message: `Gemini API returned status ${res.status}` };
     } else {
       const res = await fetch("https://api.openai.com/v1/models", {
         headers: { Authorization: `Bearer ${config.llm.apiKey}` },

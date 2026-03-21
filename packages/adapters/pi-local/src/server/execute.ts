@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { inferOpenAiCompatibleBiller, type AdapterExecutionContext, type AdapterExecutionResult } from "@paperclipai/adapter-utils";
+import { inferOpenAiCompatibleBiller, resolveSkillAllowlist, filterSkills, type AdapterExecutionContext, type AdapterExecutionResult } from "@paperclipai/adapter-utils";
 import {
   asString,
   asNumber,
@@ -54,9 +54,25 @@ function resolvePiBiller(env: Record<string, string>, provider: string | null): 
   return inferOpenAiCompatibleBiller(env, null) ?? provider ?? "unknown";
 }
 
-async function ensurePiSkillsInjected(onLog: AdapterExecutionContext["onLog"]) {
-  const skillsEntries = await listPaperclipSkillEntries(__moduleDir);
+async function ensurePiSkillsInjected(onLog: AdapterExecutionContext["onLog"], runtimeConfig?: unknown) {
+  let skillsEntries = await listPaperclipSkillEntries(__moduleDir);
   if (skillsEntries.length === 0) return;
+
+  // Apply skill allowlist filtering when configured on the agent
+  const allowlistPolicy = resolveSkillAllowlist(runtimeConfig);
+  if (allowlistPolicy.enabled || allowlistPolicy.blocked.length > 0) {
+    const allNames = skillsEntries.map((e) => e.name);
+    const allowedNames = new Set(filterSkills(allNames, allowlistPolicy));
+    const beforeCount = skillsEntries.length;
+    skillsEntries = skillsEntries.filter((e) => allowedNames.has(e.name));
+    const filtered = beforeCount - skillsEntries.length;
+    if (filtered > 0) {
+      await onLog(
+        "stderr",
+        `[paperclip] Skill allowlist active: ${skillsEntries.length} allowed, ${filtered} filtered out\n`,
+      );
+    }
+  }
 
   const piSkillsHome = path.join(os.homedir(), ".pi", "agent", "skills");
   await fs.mkdir(piSkillsHome, { recursive: true });
@@ -137,7 +153,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   await ensureSessionsDir();
   
   // Inject skills
-  await ensurePiSkillsInjected(onLog);
+  await ensurePiSkillsInjected(onLog, agent.runtimeConfig);
 
   // Build environment
   const envConfig = parseObject(config.env);
