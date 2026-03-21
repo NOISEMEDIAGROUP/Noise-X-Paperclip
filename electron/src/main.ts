@@ -12,9 +12,10 @@ import treeKill from "tree-kill";
 // Constants
 // ---------------------------------------------------------------------------
 
-const SERVER_PORT = 3100;
+const PREFERRED_PORT = 3100;
 const SERVER_STARTUP_TIMEOUT_MS = 60_000;
 const POLL_INTERVAL_MS = 400;
+const PID_FILE_NAME = "paperclip-electron.pid";
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -29,10 +30,38 @@ function getMonorepoRoot(): string {
 }
 
 // ---------------------------------------------------------------------------
+// Port detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if a TCP port is already in use.
+ */
+function isPortInUse(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const sock = net.createConnection({ port, host: "127.0.0.1" }, () => {
+      sock.destroy();
+      resolve(true);
+    });
+    sock.on("error", () => resolve(false));
+  });
+}
+
+/**
+ * Find a free port starting from the preferred port.
+ */
+async function findFreePort(startPort: number): Promise<number> {
+  for (let port = startPort; port < startPort + 100; port++) {
+    if (!(await isPortInUse(port))) return port;
+  }
+  throw new Error(`No free port found in range ${startPort}-${startPort + 99}`);
+}
+
+// ---------------------------------------------------------------------------
 // Server lifecycle
 // ---------------------------------------------------------------------------
 
 let serverProcess: ChildProcess | null = null;
+let serverPort: number = PREFERRED_PORT;
 
 /**
  * Wait for a TCP port to accept connections.
@@ -109,6 +138,7 @@ function findNodeBinary(): string {
  *
  * Electron apps launched from Finder / Dock inherit a minimal PATH that
  * excludes directories like ~/.nvm, /opt/homebrew/bin, and npm global bin.
+ * Uses -lc (login, non-interactive) to avoid .bashrc/.zshrc side effects.
  */
 function resolveShellPath(): string {
   const fallbackDirs = [
@@ -136,7 +166,8 @@ function resolveShellPath(): string {
 
   try {
     const userShell = process.env.SHELL || "/bin/zsh";
-    const shellPath = execSync(`${userShell} -ilc 'echo $PATH'`, {
+    // Use -lc (login, non-interactive) to avoid .bashrc/.zshrc side effects
+    const shellPath = execSync(`${userShell} -lc 'echo $PATH'`, {
       encoding: "utf8",
       timeout: 5000,
       stdio: ["ignore", "pipe", "ignore"],
@@ -150,10 +181,43 @@ function resolveShellPath(): string {
   return missing.length > 0 ? current + ":" + missing.join(":") : current;
 }
 
+// ---------------------------------------------------------------------------
+// PID file for orphan protection
+// ---------------------------------------------------------------------------
+
+function getPidFilePath(): string {
+  return path.join(app.getPath("userData"), PID_FILE_NAME);
+}
+
+function writePidFile(pid: number): void {
+  try {
+    fs.writeFileSync(getPidFilePath(), String(pid), "utf8");
+  } catch { /* best-effort */ }
+}
+
+function cleanupPidFile(): void {
+  try {
+    fs.unlinkSync(getPidFilePath());
+  } catch { /* best-effort */ }
+}
+
+function killOrphanedServer(): void {
+  try {
+    const pidStr = fs.readFileSync(getPidFilePath(), "utf8").trim();
+    const pid = parseInt(pidStr, 10);
+    if (!isNaN(pid) && pid > 0) {
+      process.kill(pid, 0); // test if alive
+      treeKill(pid, "SIGTERM");
+      console.log(`Killed orphaned server process (pid=${pid})`);
+    }
+  } catch { /* no orphan or already dead */ }
+  cleanupPidFile();
+}
+
 /**
  * Spawn the Paperclip server as a child process.
  */
-function startServer(): ChildProcess {
+function startServer(port: number): ChildProcess {
   const root = getMonorepoRoot();
   const isWin = process.platform === "win32";
 
@@ -168,7 +232,7 @@ function startServer(): ChildProcess {
         ...process.env,
         PATH: enrichedPath,
         NODE_ENV: "production",
-        PORT: String(SERVER_PORT),
+        PORT: String(port),
         PAPERCLIP_HOME: path.join(os.homedir(), ".paperclip"),
       },
       stdio: ["ignore", "pipe", "pipe"],
@@ -180,12 +244,17 @@ function startServer(): ChildProcess {
       cwd: root,
       env: {
         ...process.env,
-        PORT: String(SERVER_PORT),
+        PORT: String(port),
       },
       stdio: ["ignore", "pipe", "pipe"],
       shell: isWin,
       detached: !isWin,
     });
+  }
+
+  // Write PID file for orphan protection
+  if (child.pid) {
+    writePidFile(child.pid);
   }
 
   child.stdout?.on("data", (chunk: Buffer) => {
@@ -220,6 +289,7 @@ function killServer(): Promise<void> {
           // ignore
         }
       }
+      cleanupPidFile();
       resolve();
     });
   });
@@ -484,7 +554,7 @@ async function createSplashWindow(): Promise<BrowserWindow> {
 
 let mainWindow: BrowserWindow | null = null;
 
-function createWindow(): BrowserWindow {
+function createWindow(port: number): BrowserWindow {
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -503,10 +573,31 @@ function createWindow(): BrowserWindow {
     win.show();
   });
 
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("http://") || url.startsWith("https://")) {
-      shell.openExternal(url);
+  // Block navigation to non-localhost URLs to prevent preload script exposure
+  win.webContents.on("will-navigate", (e, url) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
+        e.preventDefault();
+        shell.openExternal(url);
+      }
+    } catch {
+      e.preventDefault();
     }
+  });
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    // Only allow opening external http/https links in the system browser
+    try {
+      const parsed = new URL(url);
+      if (
+        (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+        parsed.hostname !== "localhost" &&
+        parsed.hostname !== "127.0.0.1"
+      ) {
+        shell.openExternal(url);
+      }
+    } catch { /* malformed URL, ignore */ }
     return { action: "deny" };
   });
 
@@ -517,20 +608,31 @@ function createWindow(): BrowserWindow {
 // App lifecycle
 // ---------------------------------------------------------------------------
 
+let isQuitting = false;
+
 app.setName("Paperclip");
 
 app.whenReady().then(async () => {
+  // Clean up any orphaned server from a previous crash
+  killOrphanedServer();
+
   const splash = await createSplashWindow();
 
   try {
     // Step 1: Initializing
     sendSplashStatus("init", "Preparing environment\u2026", 5);
-    await sleep(300);
+
+    // Step 1b: Find a free port before spawning the server
+    serverPort = await findFreePort(PREFERRED_PORT);
+    if (serverPort !== PREFERRED_PORT) {
+      console.log(`Port ${PREFERRED_PORT} in use, using ${serverPort} instead`);
+    }
+    sendSplashStatus("init", "Preparing environment\u2026", 10);
 
     // Step 2: Starting database
     sendSplashStatus("database", "Launching embedded PostgreSQL\u2026", 15);
 
-    serverProcess = startServer();
+    serverProcess = startServer(serverPort);
 
     // Track progress — only allow forward movement to prevent visual regression
     let dbReady = false;
@@ -548,7 +650,7 @@ app.whenReady().then(async () => {
     const serverOutputLines: string[] = [];
     const logFile = path.join(app.getPath("userData"), "server.log");
     const logStream = fs.createWriteStream(logFile, { flags: "a" });
-    logStream.write(`\n--- Server start ${new Date().toISOString()} ---\n`);
+    logStream.write(`\n--- Server start ${new Date().toISOString()} (port=${serverPort}) ---\n`);
 
     const onServerData = (chunk: Buffer) => {
       const text = chunk.toString();
@@ -600,7 +702,7 @@ app.whenReady().then(async () => {
     updateProgress("server", "Waiting for server\u2026", 45);
 
     // Step 3: Wait for server
-    await waitForPort(SERVER_PORT, SERVER_STARTUP_TIMEOUT_MS);
+    await waitForPort(serverPort, SERVER_STARTUP_TIMEOUT_MS);
 
     clearInterval(progressInterval);
     sendSplashStatus("server", "Server is ready", 70);
@@ -608,8 +710,8 @@ app.whenReady().then(async () => {
     // Step 4: Loading interface
     sendSplashStatus("ready", "Loading the UI\u2026", 80);
 
-    mainWindow = createWindow();
-    mainWindow.loadURL(`http://localhost:${SERVER_PORT}`);
+    mainWindow = createWindow(serverPort);
+    mainWindow.loadURL(`http://localhost:${serverPort}`);
 
     mainWindow.webContents.once("did-finish-load", () => {
       sendSplashStatus("ready", "Almost there\u2026", 95);
@@ -648,8 +750,8 @@ app.whenReady().then(async () => {
 // macOS: re-create window when dock icon clicked
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0 && serverProcess) {
-    mainWindow = createWindow();
-    mainWindow.loadURL(`http://localhost:${SERVER_PORT}`);
+    mainWindow = createWindow(serverPort);
+    mainWindow.loadURL(`http://localhost:${serverPort}`);
   }
 });
 
@@ -660,7 +762,9 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", async (e) => {
+  if (isQuitting) return;
   if (serverProcess) {
+    isQuitting = true;
     e.preventDefault();
     await killServer();
     app.quit();
@@ -669,9 +773,10 @@ app.on("before-quit", async (e) => {
 
 for (const sig of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
   process.on(sig, () => {
-    // Fire-and-forget: Node does not await async signal handlers.
-    // killServer() is idempotent so concurrent calls from before-quit are safe.
-    void killServer().then(() => process.exit(0));
+    // Use app.quit() for graceful Electron shutdown instead of process.exit()
+    // which can leave GPU/helper processes alive.
+    isQuitting = true;
+    void killServer().then(() => app.quit());
   });
 }
 
