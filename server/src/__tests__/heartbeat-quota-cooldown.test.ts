@@ -55,6 +55,27 @@ async function waitForRun(
   throw new Error(`Timed out waiting for heartbeat run ${runId}`);
 }
 
+async function waitForAgentState(
+  db: ReturnType<typeof createDb>,
+  agentId: string,
+  timeoutMs = 10_000,
+) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const agent = await db
+      .select()
+      .from(agents)
+      .where(eq(agents.id, agentId))
+      .then((rows) => rows[0] ?? null);
+    const cooldown = (agent?.metadata as Record<string, unknown> | null)?.paperclipWakeCooldown;
+    if (agent?.status === "idle" && cooldown) {
+      return agent;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Timed out waiting for agent ${agentId} to become idle with a cooldown`);
+}
+
 describe("heartbeatService quota cooldown suppression", () => {
   let databaseDir = "";
   let databaseUrl = "";
@@ -154,11 +175,7 @@ describe("heartbeatService quota cooldown suppression", () => {
     expect(finalizedFirstRun.status).toBe("failed");
     expect(finalizedFirstRun.errorCode).toBe("claude_quota_cooldown");
 
-    const updatedAgent = await db
-      .select()
-      .from(agents)
-      .where(eq(agents.id, agentId))
-      .then((rows) => rows[0] ?? null);
+    const updatedAgent = await waitForAgentState(db, agentId);
 
     expect(updatedAgent?.status).toBe("idle");
     expect(updatedAgent?.metadata).toMatchObject({
