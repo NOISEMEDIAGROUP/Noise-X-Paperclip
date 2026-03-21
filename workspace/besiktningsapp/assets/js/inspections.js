@@ -14,6 +14,7 @@ const InspectionsModule = (() => {
   let _wizardStep = 1;
   let _wizardData = {};
   let _wizardSteps = ['grunduppgifter', 'parter', 'handlingar', 'startmote']; // default
+  let _checklistFilter = 'all'; // 'all' | 'issues' (Fel+Anm only)
 
   // Default inspection types if JSON not loaded
   const DEFAULT_TYPES = [
@@ -901,6 +902,7 @@ const InspectionsModule = (() => {
       container.appendChild(item);
     });
     if (scrollParent) scrollParent.scrollTop = savedScroll;
+    _applyChecklistFilter();
   }
 
   function _buildChecklistItem(inspection, room, roomIdx, point, pointIdx) {
@@ -993,6 +995,7 @@ const InspectionsModule = (() => {
         await StorageModule.update(inspection.id, inspection);
         _updateStats(room);
         _renderRoomNav(inspection);
+        _applyChecklistFilter();
       });
     });
 
@@ -1287,6 +1290,44 @@ const InspectionsModule = (() => {
     if (statOk)  statOk.textContent  = ok + ' OK';
     if (statFel) statFel.textContent = fel + ' Fel';
     if (statAnm) statAnm.textContent = anm + ' Anm.';
+
+    // Update filter button count badge
+    const countEl = document.getElementById('filter-issues-count');
+    const total = fel + anm;
+    if (countEl) countEl.textContent = total > 0 ? `(${total})` : '';
+  }
+
+  // Apply Fel/Anm filter to visible checklist items — no re-render needed
+  function _applyChecklistFilter() {
+    const isFiltered = _checklistFilter === 'issues';
+    document.querySelectorAll('#checklist-items .checklist-item').forEach(item => {
+      const isIssue = item.classList.contains('status-fel') || item.classList.contains('status-anm');
+      item.hidden = isFiltered && !isIssue;
+    });
+    const btn = document.getElementById('btn-filter-issues');
+    if (btn) {
+      btn.classList.toggle('active', isFiltered);
+      btn.setAttribute('aria-pressed', isFiltered ? 'true' : 'false');
+    }
+    // Empty state when filter is on but no Fel/Anm
+    let emptyFilter = document.getElementById('filter-empty-state');
+    if (isFiltered) {
+      const visible = document.querySelectorAll('#checklist-items .checklist-item:not([hidden])').length;
+      if (visible === 0) {
+        if (!emptyFilter) {
+          emptyFilter = document.createElement('div');
+          emptyFilter.id = 'filter-empty-state';
+          emptyFilter.className = 'filter-empty';
+          emptyFilter.innerHTML = '<span>✅</span> Inga fel eller anmärkningar i detta rum.';
+          const container = document.getElementById('checklist-items');
+          if (container) container.appendChild(emptyFilter);
+        }
+      } else if (emptyFilter) {
+        emptyFilter.remove();
+      }
+    } else if (emptyFilter) {
+      emptyFilter.remove();
+    }
   }
 
   // ============================================================
@@ -1721,6 +1762,12 @@ const InspectionsModule = (() => {
     document.getElementById('wizard-finish')?.addEventListener('click', _finishWizard);
 
     document.getElementById('inspection-back')?.addEventListener('click', _showListView);
+
+    // Fel/Anm filter toggle
+    document.getElementById('btn-filter-issues')?.addEventListener('click', () => {
+      _checklistFilter = _checklistFilter === 'issues' ? 'all' : 'issues';
+      _applyChecklistFilter();
+    });
 
     document.getElementById('btn-finish-inspection')?.addEventListener('click', () => {
       if (_currentInspectionId) _showSummary(_currentInspectionId);

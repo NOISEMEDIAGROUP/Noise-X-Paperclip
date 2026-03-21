@@ -236,10 +236,15 @@
             <div id="checklist-panel" class="checklist-panel">
               <div id="checklist-header" class="checklist-header">
                 <h3 id="checklist-room-title">Välj ett rum</h3>
-                <div class="checklist-stats">
-                  <span class="stat stat-ok" id="stat-ok">0 OK</span>
-                  <span class="stat stat-fel" id="stat-fel">0 Fel</span>
-                  <span class="stat stat-anm" id="stat-anm">0 Anm.</span>
+                <div class="checklist-header-row2">
+                  <div class="checklist-stats">
+                    <span class="stat stat-ok" id="stat-ok">0 OK</span>
+                    <span class="stat stat-fel" id="stat-fel">0 Fel</span>
+                    <span class="stat stat-anm" id="stat-anm">0 Anm.</span>
+                  </div>
+                  <button class="btn-issues-filter" id="btn-filter-issues" aria-pressed="false" title="Visa endast Fel och Anmärkningar">
+                    Fel/Anm <span id="filter-issues-count" class="filter-count"></span>
+                  </button>
                 </div>
               </div>
               <div id="checklist-items" class="checklist-items">
