@@ -560,7 +560,7 @@ export function OpenClawGatewayConfigFields({
           <option value="medium">Medium</option>
           <option value="high">High</option>
           <option value="adaptive">Adaptive (Claude 4.6+)</option>
-          <option value="xhigh">Extra High</option>
+          <option value="xhigh">Extra High (GPT-5.2+)</option>
         </select>
         <p className="text-xs text-muted-foreground mt-1">
           Controls reasoning depth. Adaptive and xHigh are model-restricted — mismatches will error.
