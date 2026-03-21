@@ -1710,8 +1710,10 @@ export function agentRoutes(db: Db) {
       Object.prototype.hasOwnProperty.call(patchData, "adapterType") ||
       Object.prototype.hasOwnProperty.call(patchData, "adapterConfig");
     if (touchesAdapterConfiguration) {
+      // Merge incoming adapterConfig with existing values so that a partial
+      // PATCH doesn't wipe fields the caller did not intend to change (GH #1427).
       const rawEffectiveAdapterConfig = Object.prototype.hasOwnProperty.call(patchData, "adapterConfig")
-        ? (asRecord(patchData.adapterConfig) ?? {})
+        ? { ...(asRecord(existing.adapterConfig) ?? {}), ...(asRecord(patchData.adapterConfig) ?? {}) }
         : (asRecord(existing.adapterConfig) ?? {});
       const effectiveAdapterConfig = applyCreateDefaultsByAdapterType(
         requestedAdapterType,
