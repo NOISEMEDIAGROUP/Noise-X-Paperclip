@@ -682,31 +682,18 @@ export async function applyPendingMigrations(url: string): Promise<void> {
   if (initialState.reason === "no-migration-journal-non-empty-db") {
     // Database has tables but no migration journal (e.g. shared database,
     // partially-failed prior run, or external schema management).
-    // Reconcile by detecting already-applied statements and recording them,
-    // then apply any genuinely pending migrations with per-statement safety.
-    // reconcilePendingMigrationHistory cannot help here because there is no
-    // migration journal table yet (inspectMigrations would return
-    // "no-migration-journal-non-empty-db", not "pending-migrations").
-    // Instead, fall through to applyPendingMigrationsManually which handles
-    // already-applied statements gracefully.
-    let state = await inspectMigrations(url);
-    if (state.status === "upToDate") return;
+    // applyPendingMigrationsManually handles this: it creates the journal
+    // table via ensureMigrationJournalTable, skips already-applied statements,
+    // and records each migration in the journal.
+    await applyPendingMigrationsManually(url, initialState.pendingMigrations);
 
-    if (state.status === "needsMigrations" && state.reason === "pending-migrations") {
-      await applyPendingMigrationsManually(url, state.pendingMigrations);
-
-      const finalState = await inspectMigrations(url);
-      if (finalState.status !== "upToDate") {
-        throw new Error(
-          `Failed to apply pending migrations for non-empty DB: ${finalState.pendingMigrations.join(", ")}`,
-        );
-      }
-      return;
+    const finalState = await inspectMigrations(url);
+    if (finalState.status !== "upToDate") {
+      throw new Error(
+        `Failed to apply pending migrations for non-empty DB: ${finalState.pendingMigrations.join(", ")}`,
+      );
     }
-
-    throw new Error(
-      "Database has tables but could not reconcile migration journal; automatic migration is unsafe. Initialize migration history manually.",
-    );
+    return;
   }
 
   let state = await inspectMigrations(url);
