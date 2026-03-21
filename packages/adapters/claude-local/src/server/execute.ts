@@ -3,12 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AdapterExecutionContext, AdapterExecutionResult, AdapterSkill } from "@paperclipai/adapter-utils";
-import {
-  parseMcpServers,
-  expandMcpEnv,
-  toClaudeMcpJson,
-  writeMcpConfigFile,
-} from "@paperclipai/adapter-utils/mcp";
 import type { RunProcessResult } from "@paperclipai/adapter-utils/server-utils";
 import { formatSelfContextBlock } from "@paperclipai/adapter-utils/self-context";
 import {
@@ -379,14 +373,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const billingType = resolveClaudeBillingType(env);
   const skillsDir = await buildSkillsDir(ctx.skills);
 
-  const mcpServers = parseMcpServers(config);
-  let mcpConfigPath: string | null = null;
-  if (mcpServers) {
-    const expanded = expandMcpEnv(mcpServers, env);
-    const content = toClaudeMcpJson(expanded);
-    mcpConfigPath = await writeMcpConfigFile(skillsDir, "mcp-servers.json", content);
-  }
-
   // When instructionsFilePath is configured, create a combined temp file that
   // includes both the file content and the path directive, so we only need
   // --append-system-prompt-file (Claude CLI forbids using both flags together).
@@ -441,7 +427,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       args.push("--append-system-prompt-file", effectiveInstructionsFilePath);
     }
     args.push("--add-dir", skillsDir);
-    if (mcpConfigPath) args.push("--mcp-config", mcpConfigPath);
     if (extraArgs.length > 0) args.push(...extraArgs);
     return args;
   };
@@ -475,7 +460,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         prompt: effectivePrompt,
         context,
         skillsInjected: ctx.skills?.map((s) => s.name),
-        mcpServers: mcpServers ?? undefined,
       });
     }
 

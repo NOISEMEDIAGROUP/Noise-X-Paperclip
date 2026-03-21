@@ -816,23 +816,13 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
       )}
 
       {/* ---- MCP Servers ---- */}
-      {uiAdapter.mcpSupported && (
+      {!isCreate && uiAdapter.mcpSupported && (
         <div className={cn(!cards && "border-b border-border")}>
           <div className={cn(cards ? "rounded-md border border-border p-4" : "px-4 py-3")}>
             <McpServersSection
-              mode={isCreate ? "create" : "edit"}
-              servers={
-                isCreate
-                  ? {}
-                  : (eff("adapterConfig", "mcpServers", (config.mcpServers ?? {}) as Record<string, unknown>) as Record<string, { transport: "stdio" | "http"; command?: string; args?: string[]; url?: string; headers?: Record<string, string>; env?: Record<string, string>; enabled?: boolean }>)
-              }
-              onChange={(servers) => {
-                if (isCreate) {
-                  /* no-op for create mode, mcpServers not in create values */
-                } else {
-                  mark("adapterConfig", "mcpServers", Object.keys(servers).length > 0 ? servers : undefined);
-                }
-              }}
+              agentId={props.agent.id}
+              adapterType={adapterType}
+              companyId={props.agent.companyId}
             />
           </div>
         </div>

@@ -24,13 +24,17 @@ export type {
   CreateConfigValues,
 } from "./types.js";
 
-export type { McpServerEntry, McpServersMap } from "./mcp.js";
+export type { McpServerEntry, McpServersMap, McpConfigFormat, McpConfigPathInfo } from "./mcp.js";
 export {
   parseMcpServers,
   expandMcpEnv,
   toClaudeMcpJson,
   toOpenCodeMcpJson,
   toCodexToml,
+  fromClaudeMcpJson,
+  fromOpenCodeJson,
+  fromCodexToml,
+  mcpConfigPath,
   writeMcpConfigFile,
   writeMcpTempFile,
 } from "./mcp.js";

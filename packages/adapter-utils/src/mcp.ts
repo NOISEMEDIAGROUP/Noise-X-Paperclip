@@ -97,7 +97,7 @@ export function toOpenCodeMcpJson(servers: McpServersMap): string {
         type: "local",
         enabled: true,
         command: [srv.command ?? "", ...(srv.args ?? [])],
-        ...(srv.env && Object.keys(srv.env).length > 0 ? { env: srv.env } : {}),
+        ...(srv.env && Object.keys(srv.env).length > 0 ? { environment: srv.env } : {}),
       };
     } else {
       mcp[name] = {
@@ -107,7 +107,7 @@ export function toOpenCodeMcpJson(servers: McpServersMap): string {
         ...(srv.headers && Object.keys(srv.headers).length > 0
           ? { headers: srv.headers }
           : {}),
-        ...(srv.env && Object.keys(srv.env).length > 0 ? { env: srv.env } : {}),
+        ...(srv.env && Object.keys(srv.env).length > 0 ? { environment: srv.env } : {}),
       };
     }
   }
@@ -138,6 +138,153 @@ export function toCodexToml(servers: McpServersMap): string {
     lines.push("");
   }
   return lines.join("\n");
+}
+
+// ---- Reverse parsers (disk file -> McpServersMap) ----
+
+/** Parse Claude Code / Cursor .mcp.json content -> McpServersMap */
+export function fromClaudeMcpJson(content: string): McpServersMap {
+  const parsed = JSON.parse(content);
+  const raw = parsed?.mcpServers;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const result: McpServersMap = {};
+  for (const [name, value] of Object.entries(raw as Record<string, Record<string, unknown>>)) {
+    if (!value || typeof value !== "object") continue;
+    const type = value.type as string | undefined;
+    if (type === "stdio") {
+      result[name] = {
+        transport: "stdio",
+        command: typeof value.command === "string" ? value.command : undefined,
+        args: Array.isArray(value.args) ? (value.args as string[]) : undefined,
+        env: isStringRecord(value.env) ? value.env : undefined,
+        enabled: true,
+      };
+    } else if (type === "http") {
+      result[name] = {
+        transport: "http",
+        url: typeof value.url === "string" ? value.url : undefined,
+        headers: isStringRecord(value.headers) ? value.headers : undefined,
+        env: isStringRecord(value.env) ? value.env : undefined,
+        enabled: true,
+      };
+    }
+  }
+  return result;
+}
+
+/** Parse OpenCode opencode.json content -> McpServersMap (extracts `mcp` key only) */
+export function fromOpenCodeJson(content: string): McpServersMap {
+  const parsed = JSON.parse(content);
+  const raw = parsed?.mcp;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const result: McpServersMap = {};
+  for (const [name, value] of Object.entries(raw as Record<string, Record<string, unknown>>)) {
+    if (!value || typeof value !== "object") continue;
+    const type = value.type as string | undefined;
+    const envObj = isStringRecord(value.environment) ? value.environment
+      : isStringRecord(value.env) ? value.env
+      : undefined;
+    const enabled = value.enabled !== false;
+    if (type === "local") {
+      const cmdArr = Array.isArray(value.command) ? (value.command as string[]) : [];
+      result[name] = {
+        transport: "stdio",
+        command: cmdArr[0] ?? undefined,
+        args: cmdArr.length > 1 ? cmdArr.slice(1) : undefined,
+        env: envObj,
+        enabled,
+      };
+    } else if (type === "remote") {
+      result[name] = {
+        transport: "http",
+        url: typeof value.url === "string" ? value.url : undefined,
+        headers: isStringRecord(value.headers) ? value.headers : undefined,
+        env: envObj,
+        enabled,
+      };
+    }
+  }
+  return result;
+}
+
+/** Parse Codex config.toml content -> McpServersMap (best-effort TOML subset) */
+export function fromCodexToml(content: string): McpServersMap {
+  const result: McpServersMap = {};
+  const sectionRe = /^\[mcp_servers\.(\w+)\]\s*$/;
+  let current: { name: string; fields: Record<string, string | string[]> } | null = null;
+
+  const flush = () => {
+    if (!current) return;
+    const { name, fields } = current;
+    const transport = (fields.type as unknown as string) === "http" ? "http" as const : "stdio" as const;
+    const entry: McpServerEntry = { transport, enabled: true };
+    if (transport === "stdio") {
+      entry.command = typeof fields.command === "string" ? fields.command : undefined;
+      entry.args = Array.isArray(fields.args) ? fields.args : undefined;
+    } else {
+      entry.url = typeof fields.url === "string" ? fields.url : undefined;
+    }
+    result[name] = entry;
+  };
+
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    const sectionMatch = sectionRe.exec(trimmed);
+    if (sectionMatch) {
+      flush();
+      current = { name: sectionMatch[1], fields: {} };
+      continue;
+    }
+    if (!current || !trimmed || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx < 0) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    const rawVal = trimmed.slice(eqIdx + 1).trim();
+    if (rawVal.startsWith("[")) {
+      const items = rawVal.slice(1, rawVal.lastIndexOf("]"))
+        .split(",")
+        .map(s => s.trim().replace(/^"|"$/g, ""))
+        .filter(Boolean);
+      current.fields[key] = items;
+    } else {
+      current.fields[key] = rawVal.replace(/^"|"$/g, "");
+    }
+  }
+  flush();
+  return result;
+}
+
+function isStringRecord(v: unknown): v is Record<string, string> {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+  return Object.values(v as Record<string, unknown>).every(val => typeof val === "string");
+}
+
+// ---- Adapter -> config file path mapping ----
+
+export type McpConfigFormat = "claude" | "opencode" | "codex" | "cursor";
+
+export interface McpConfigPathInfo {
+  filePath: string;
+  format: McpConfigFormat;
+}
+
+/**
+ * Returns the config file path (relative to agent cwd) and format
+ * for a given adapter type. Returns null for unsupported adapters.
+ */
+export function mcpConfigPath(adapterType: string): McpConfigPathInfo | null {
+  switch (adapterType) {
+    case "claude_local":
+      return { filePath: ".mcp.json", format: "claude" };
+    case "opencode_local":
+      return { filePath: "opencode.json", format: "opencode" };
+    case "cursor":
+      return { filePath: ".cursor/mcp.json", format: "cursor" };
+    case "codex_local":
+      return { filePath: "config.toml", format: "codex" };
+    default:
+      return null;
+  }
 }
 
 // ---- Temp file helpers ----

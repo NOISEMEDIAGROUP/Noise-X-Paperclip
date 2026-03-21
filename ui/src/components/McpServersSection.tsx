@@ -1,7 +1,10 @@
 import { useState, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Server, ToggleLeft, ToggleRight, Pencil, X, Check, Zap } from "lucide-react";
+import { Plus, Trash2, Server, ToggleLeft, ToggleRight, Pencil, X, Check, Zap, Loader2 } from "lucide-react";
 import { cn } from "../lib/utils";
+import { api } from "../api/client";
+import { queryKeys } from "../lib/queryKeys";
 
 interface McpServerEntry {
   transport: "stdio" | "http";
@@ -16,9 +19,15 @@ interface McpServerEntry {
 type McpServersMap = Record<string, McpServerEntry>;
 
 interface McpServersSectionProps {
-  mode: "create" | "edit";
+  agentId: string;
+  adapterType: string;
+  companyId: string;
+}
+
+interface McpServersResponse {
   servers: McpServersMap;
-  onChange: (servers: McpServersMap) => void;
+  adapterType: string;
+  filePath: string | null;
 }
 
 const SECRET_PATTERNS = /_KEY$|_SECRET$|_TOKEN$|_PASSWORD$/i;
@@ -47,12 +56,14 @@ function ServerForm({
   onSave,
   onCancel,
   isNew,
+  saving,
 }: {
   name: string;
   server: McpServerEntry;
   onSave: (name: string, server: McpServerEntry) => void;
   onCancel: () => void;
   isNew: boolean;
+  saving?: boolean;
 }) {
   const [name, setName] = useState(initialName);
   const [transport, setTransport] = useState<"stdio" | "http">(initial.transport);
@@ -242,16 +253,16 @@ function ServerForm({
       </div>
 
       <div className="flex items-center gap-2 pt-1">
-        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onCancel}>
+        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onCancel} disabled={saving}>
           Cancel
         </Button>
         <Button
           size="sm"
           className="h-7 text-xs"
           onClick={handleSave}
-          disabled={!name.trim()}
+          disabled={!name.trim() || saving}
         >
-          <Check className="h-3 w-3 mr-1" />
+          {saving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Check className="h-3 w-3 mr-1" />}
           {isNew ? "Add" : "Update"}
         </Button>
       </div>
@@ -259,20 +270,45 @@ function ServerForm({
   );
 }
 
-export function McpServersSection({ mode, servers, onChange }: McpServersSectionProps) {
+export function McpServersSection({ agentId, adapterType, companyId }: McpServersSectionProps) {
+  const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [presetServer, setPresetServer] = useState<McpServerEntry | null>(null);
   const [presetName, setPresetName] = useState("");
 
+  const { data, isLoading, isError } = useQuery({
+    queryKey: queryKeys.mcpServers(agentId),
+    queryFn: () =>
+      api.get<McpServersResponse>(`/agents/${agentId}/mcp-servers?companyId=${companyId}`),
+    enabled: !!agentId,
+  });
+
+  const servers = data?.servers ?? {};
+
+  const saveMutation = useMutation({
+    mutationFn: (nextServers: McpServersMap) =>
+      api.put<{ servers: McpServersMap; filePath: string }>(
+        `/agents/${agentId}/mcp-servers?companyId=${companyId}`,
+        { servers: nextServers },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.mcpServers(agentId) });
+    },
+  });
+
   const handleAdd = useCallback(
     (name: string, server: McpServerEntry) => {
-      onChange({ ...servers, [name]: server });
-      setAdding(false);
-      setPresetServer(null);
-      setPresetName("");
+      const next = { ...servers, [name]: server };
+      saveMutation.mutate(next, {
+        onSuccess: () => {
+          setAdding(false);
+          setPresetServer(null);
+          setPresetName("");
+        },
+      });
     },
-    [servers, onChange],
+    [servers, saveMutation],
   );
 
   const handleUpdate = useCallback(
@@ -282,31 +318,33 @@ export function McpServersSection({ mode, servers, onChange }: McpServersSection
         delete next[editing];
       }
       next[name] = server;
-      onChange(next);
-      setEditing(null);
+      saveMutation.mutate(next, {
+        onSuccess: () => setEditing(null),
+      });
     },
-    [servers, onChange, editing],
+    [servers, saveMutation, editing],
   );
 
   const handleRemove = useCallback(
     (name: string) => {
       const next = { ...servers };
       delete next[name];
-      onChange(next);
+      saveMutation.mutate(next);
     },
-    [servers, onChange],
+    [servers, saveMutation],
   );
 
   const handleToggle = useCallback(
     (name: string) => {
       const srv = servers[name];
       if (!srv) return;
-      onChange({
+      const next = {
         ...servers,
         [name]: { ...srv, enabled: srv.enabled === false ? true : false },
-      });
+      };
+      saveMutation.mutate(next);
     },
-    [servers, onChange],
+    [servers, saveMutation],
   );
 
   const handleAgentMailConnect = useCallback(() => {
@@ -321,12 +359,46 @@ export function McpServersSection({ mode, servers, onChange }: McpServersSection
 
   const entries = Object.entries(servers);
 
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-1.5">
+          <Server className="h-3 w-3 text-muted-foreground" />
+          <span className="text-xs font-medium text-muted-foreground">MCP Servers</span>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground/60">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Loading...
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-1.5">
+          <Server className="h-3 w-3 text-muted-foreground" />
+          <span className="text-xs font-medium text-muted-foreground">MCP Servers</span>
+        </div>
+        <div className="text-xs text-destructive">
+          Failed to load MCP configuration from disk.
+        </div>
+      </div>
+    );
+  }
+
+  if (!data?.filePath) {
+    return null;
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <Server className="h-3 w-3 text-muted-foreground" />
           <span className="text-xs font-medium text-muted-foreground">MCP Servers</span>
+          <span className="text-[10px] text-muted-foreground/40 font-mono">{data.filePath}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <Button
@@ -334,7 +406,7 @@ export function McpServersSection({ mode, servers, onChange }: McpServersSection
             size="sm"
             className="h-6 px-2 text-[11px]"
             onClick={handleAgentMailConnect}
-            disabled={adding}
+            disabled={adding || saveMutation.isPending}
           >
             <Zap className="h-3 w-3 mr-1" />
             AgentMail
@@ -348,7 +420,7 @@ export function McpServersSection({ mode, servers, onChange }: McpServersSection
               setPresetName("");
               setAdding(true);
             }}
-            disabled={adding}
+            disabled={adding || saveMutation.isPending}
           >
             <Plus className="h-3 w-3 mr-1" />
             Add
@@ -371,6 +443,7 @@ export function McpServersSection({ mode, servers, onChange }: McpServersSection
             onSave={handleUpdate}
             onCancel={() => setEditing(null)}
             isNew={false}
+            saving={saveMutation.isPending}
           />
         ) : (
           <div
@@ -381,6 +454,7 @@ export function McpServersSection({ mode, servers, onChange }: McpServersSection
               className="shrink-0"
               onClick={() => handleToggle(name)}
               title={srv.enabled !== false ? "Disable" : "Enable"}
+              disabled={saveMutation.isPending}
             >
               {srv.enabled !== false
                 ? <ToggleRight className="h-4 w-4 text-green-600" />
@@ -405,6 +479,7 @@ export function McpServersSection({ mode, servers, onChange }: McpServersSection
               className="text-muted-foreground/60 hover:text-foreground transition-colors"
               onClick={() => setEditing(name)}
               title="Edit"
+              disabled={saveMutation.isPending}
             >
               <Pencil className="h-3 w-3" />
             </button>
@@ -412,6 +487,7 @@ export function McpServersSection({ mode, servers, onChange }: McpServersSection
               className="text-muted-foreground/60 hover:text-destructive transition-colors"
               onClick={() => handleRemove(name)}
               title="Remove"
+              disabled={saveMutation.isPending}
             >
               <Trash2 className="h-3 w-3" />
             </button>
@@ -430,6 +506,7 @@ export function McpServersSection({ mode, servers, onChange }: McpServersSection
             setPresetName("");
           }}
           isNew
+          saving={saveMutation.isPending}
         />
       )}
     </div>

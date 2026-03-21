@@ -31,6 +31,7 @@ import { chatRoutes } from "./routes/chat.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { taskCronRoutes } from "./routes/task-crons.js";
 import { workspaceFileRoutes } from "./routes/workspace-files.js";
+import { mcpServerRoutes } from "./routes/mcp-servers.js";
 import { applyUiBranding } from "./ui-branding.js";
 import type { BetterAuthSessionResult } from "./auth/better-auth.js";
 import { eventRoutingService } from "./services/event-routing.js";
@@ -137,6 +138,7 @@ export async function createApp(
   api.use(webhookRoutes(db));
   api.use(taskCronRoutes(db));
   api.use(workspaceFileRoutes(db));
+  api.use(mcpServerRoutes(db));
   api.use(
     accessRoutes(db, {
       deploymentMode: opts.deploymentMode,

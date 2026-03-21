@@ -8,11 +8,6 @@ import type {
   AdapterExecutionResult,
   AdapterSkill,
 } from "@paperclipai/adapter-utils";
-import {
-  parseMcpServers,
-  expandMcpEnv,
-  toClaudeMcpJson,
-} from "@paperclipai/adapter-utils/mcp";
 import { formatSelfContextBlock } from "@paperclipai/adapter-utils/self-context";
 import {
   asString,
@@ -429,7 +424,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         prompt,
         context,
         skillsInjected: ctx.skills?.map((s) => s.name),
-        mcpServers: mcpServers ?? undefined,
       });
     }
 
@@ -546,60 +540,20 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     };
   };
 
-  const mcpServers = parseMcpServers(config);
-  const cursorMcpPath = path.join(cwd, ".cursor", "mcp.json");
-  let originalMcpContent: string | null = null;
-  let mcpFileExisted = false;
-  if (mcpServers) {
-    const expanded = expandMcpEnv(mcpServers, env);
-    try {
-      originalMcpContent = await fs.readFile(cursorMcpPath, "utf-8");
-      mcpFileExisted = true;
-    } catch {
-      mcpFileExisted = false;
-    }
-    let merged: Record<string, unknown> = {};
-    if (originalMcpContent) {
-      try {
-        merged = JSON.parse(originalMcpContent) as Record<string, unknown>;
-      } catch {
-        merged = {};
-      }
-    }
-    const existingServers =
-      merged.mcpServers && typeof merged.mcpServers === "object" && !Array.isArray(merged.mcpServers)
-        ? (merged.mcpServers as Record<string, unknown>)
-        : {};
-    const claudeFormat = JSON.parse(toClaudeMcpJson(expanded)) as { mcpServers: Record<string, unknown> };
-    merged.mcpServers = { ...existingServers, ...claudeFormat.mcpServers };
-    await fs.mkdir(path.dirname(cursorMcpPath), { recursive: true });
-    await fs.writeFile(cursorMcpPath, JSON.stringify(merged, null, 2), "utf-8");
+  const initial = await runAttempt(sessionId);
+  if (
+    sessionId &&
+    !initial.proc.timedOut &&
+    (initial.proc.exitCode ?? 0) !== 0 &&
+    isCursorUnknownSessionError(initial.proc.stdout, initial.proc.stderr)
+  ) {
+    await onLog(
+      "stderr",
+      `[paperclip] Cursor resume session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
+    );
+    const retry = await runAttempt(null);
+    return toResult(retry, true);
   }
 
-  try {
-    const initial = await runAttempt(sessionId);
-    if (
-      sessionId &&
-      !initial.proc.timedOut &&
-      (initial.proc.exitCode ?? 0) !== 0 &&
-      isCursorUnknownSessionError(initial.proc.stdout, initial.proc.stderr)
-    ) {
-      await onLog(
-        "stderr",
-        `[paperclip] Cursor resume session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
-      );
-      const retry = await runAttempt(null);
-      return toResult(retry, true);
-    }
-
-    return toResult(initial);
-  } finally {
-    if (mcpServers) {
-      if (mcpFileExisted && originalMcpContent !== null) {
-        await fs.writeFile(cursorMcpPath, originalMcpContent, "utf-8").catch(() => {});
-      } else if (!mcpFileExisted) {
-        await fs.unlink(cursorMcpPath).catch(() => {});
-      }
-    }
-  }
+  return toResult(initial);
 }
