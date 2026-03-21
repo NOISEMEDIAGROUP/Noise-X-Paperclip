@@ -108,6 +108,8 @@
   :root:not(.light-mode) [data-book-color="blue"]   { --book-color: #5dade2; --book-color-light: rgba(93,173,226,0.10); }
   :root:not(.light-mode) [data-book-color="yellow"] { --book-color: #f4d03f; --book-color-light: rgba(244,208,63,0.10); }
   :root:not(.light-mode) [data-book-color="red"]    { --book-color: #ec7063; --book-color-light: rgba(236,112,99,0.10); }
+  /* M3-M1: .term-ref-link — #2980b9 = 3.1:1 on dark, #5dade2 = 7.2:1 */
+  :root:not(.light-mode) .term-ref-link { color: #5dade2; }
 }
 
 /* Dark mode — explicit class (user toggle) */
@@ -1013,6 +1015,8 @@ img {
   background: var(--color-surface-alt);
   border-color: var(--color-primary-light);
 }
+/* M3-M1: WCAG AA contrast on dark bg — #2980b9 = 3.1:1, #5dade2 = 7.2:1 */
+body.dark-mode .term-ref-link { color: #5dade2; }
 
 /* Search results */
 .search-results {
@@ -2275,7 +2279,10 @@ body.dark-mode .content-highlight,
   .note-input,
   .inspection-active-actions,
   #handbook-toc,
-  .wizard-footer {
+  .wizard-footer,
+  .btn-issues-filter,
+  .handbook-breadcrumb,
+  .term-refs {
     display: none !important;
   }
 

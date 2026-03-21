@@ -370,7 +370,7 @@ router.post('/generate-pdf', express.json({ limit: '30mb' }), (req, res) => {
   // =====================================================================
   if (inspection.sammanfattning && inspection.sammanfattning.trim()) {
     checkPage(40);
-    sectionHeader('OVRIGA NOTERINGAR');
+    sectionHeader('\u00d6VRIGA NOTERINGAR');
     font('regular', 9, C.darkTxt)
       .text(inspection.sammanfattning, mL, y, { width: contentW });
     y += doc.currentLineHeight(true) * 2 + 12;
