@@ -1683,17 +1683,16 @@ export function agentRoutes(db: Db) {
     }
     await assertCanUpdateAgent(req, existing);
 
-    // Agents cannot terminate themselves or other agents via PATCH (#1334).
-    // Status changes to "terminated" must go through the board-only POST /terminate endpoint.
-    if (req.body.status === "terminated" && req.actor.type !== "board") {
-      res.status(403).json({ error: "Only board users can terminate agents. Use POST /agents/:id/terminate." });
+    // Termination via PATCH is not allowed — it skips heartbeat cancellation and
+    // other cleanup that the dedicated POST /terminate endpoint performs (#1334).
+    if (req.body.status === "terminated") {
+      res.status(422).json({ error: "Use POST /agents/:id/terminate to terminate an agent." });
       return;
     }
 
-    // Prevent removing the last CEO via role change or status change (#1334)
+    // Prevent removing the last CEO via role demotion (#1334)
     const isLosingCEO =
-      (existing.role === "ceo" && req.body.role && req.body.role !== "ceo") ||
-      (existing.role === "ceo" && req.body.status === "terminated");
+      existing.role === "ceo" && req.body.role && req.body.role !== "ceo";
     if (isLosingCEO) {
       const companyAgents = await svc.list(existing.companyId);
       const otherCEOs = companyAgents.filter(
