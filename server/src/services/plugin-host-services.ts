@@ -49,6 +49,31 @@ const DNS_LOOKUP_TIMEOUT_MS = 5_000;
 const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
 
 /**
+ * Hostnames that plugins are allowed to reach even when they resolve to
+ * private/reserved IP addresses.
+ *
+ * Self-hosted deployments often run plugins alongside local services (databases,
+ * APIs, other agents) on the same machine or LAN. Without an allowlist, all
+ * plugin HTTP requests to these services are blocked by SSRF protection.
+ *
+ * Set via the `PAPERCLIP_PLUGIN_ALLOWED_HOSTS` environment variable as a
+ * comma-separated list of hostnames (e.g. `localhost,127.0.0.1,myapi.local`).
+ *
+ * Allowed hosts still go through DNS pinning to prevent rebinding attacks;
+ * only the private-IP filter is bypassed.
+ */
+let _allowedPrivateHosts: Set<string> | undefined;
+function getAllowedPrivateHosts(): Set<string> {
+  if (!_allowedPrivateHosts) {
+    const raw = process.env.PAPERCLIP_PLUGIN_ALLOWED_HOSTS ?? "";
+    _allowedPrivateHosts = new Set(
+      raw.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean),
+    );
+  }
+  return _allowedPrivateHosts;
+}
+
+/**
  * Check if an IP address is in a private/reserved range (RFC 1918, loopback,
  * link-local, etc.) that plugins should never be able to reach.
  *
@@ -145,7 +170,15 @@ async function validateAndResolveFetchUrl(urlString: string): Promise<ValidatedF
     // Filter to only non-private IPs instead of rejecting the entire request
     // when some IPs are private. This handles multi-homed hosts that resolve
     // to both private and public addresses.
-    const safeResults = results.filter((entry) => !isPrivateIP(entry.address));
+    //
+    // Hosts listed in PAPERCLIP_PLUGIN_ALLOWED_HOSTS bypass private-IP
+    // filtering so that self-hosted plugins can reach local services.
+    // DNS pinning still applies to prevent rebinding.
+    const allowedHosts = getAllowedPrivateHosts();
+    const hostIsAllowed = allowedHosts.has(originalHostname.toLowerCase());
+    const safeResults = hostIsAllowed
+      ? results
+      : results.filter((entry) => !isPrivateIP(entry.address));
     if (safeResults.length === 0) {
       throw new Error(
         `All resolved IPs for ${originalHostname} are in private/reserved ranges`,
