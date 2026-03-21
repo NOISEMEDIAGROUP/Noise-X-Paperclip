@@ -39,10 +39,10 @@ bead: bd-2te
 
 ## Phase 4: Tests
 
-- [x] **4.1-4.3** Extracted `isZombieRun` as pure exported function + 5 unit tests (zombie detection regression guard). Full coalescing/reaper integration tests deferred — no DB test infrastructure exists.
-- [x] **4.4-4.6** Covered by `isZombieRun` tests: running+untracked=zombie, queued+untracked=not-zombie, running+tracked=not-zombie, failed=not-zombie, completed=not-zombie.
+- [x] **4.1-4.3** Extracted `isZombieRun` + `filterZombieCoalesceTarget` as pure exported functions + 13 unit tests covering zombie detection and coalescing guard behavior (the critical AC2 path). DB integration tests not feasible — no DB test infrastructure exists in this project.
+- [x] **4.4-4.6** Covered by zombie guard tests: isZombieRun (5 tests — running+untracked=zombie, queued+untracked=not-zombie, running+tracked=not-zombie, failed=not-zombie, completed=not-zombie) + filterZombieCoalesceTarget (8 tests — zombie filtered to null, live passes through, queued passes through, null passes through, terminal states pass through, post-restart multi-zombie scenario, mixed zombie/live discrimination).
 - [x] **4.7** Build and typecheck: `pnpm -r typecheck` — all packages clean
-- [x] **4.8** Run all tests: `pnpm test:run` — 178 passed, 1 skipped, 0 failed
+- [x] **4.8** Run all tests: `pnpm test:run` — 191 passed, 1 skipped, 0 failed
 
 ## Phase 5: Manual verification
 
