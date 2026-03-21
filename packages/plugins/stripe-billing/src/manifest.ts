@@ -24,6 +24,7 @@ const manifest: PaperclipPluginManifestV1 = {
     "webhooks.receive",
     "ui.page.register",
     "ui.dashboardWidget.register",
+    "ui.sidebar.register",
   ],
   entrypoints: {
     worker: "./dist/worker.js",
@@ -87,6 +88,12 @@ const manifest: PaperclipPluginManifestV1 = {
         id: SLOT_IDS.billingWidget,
         displayName: "Billing Summary",
         exportName: EXPORT_NAMES.billingWidget,
+      },
+      {
+        type: "sidebar",
+        id: SLOT_IDS.billingSidebar,
+        displayName: "Billing",
+        exportName: EXPORT_NAMES.billingSidebar,
       },
     ],
   },

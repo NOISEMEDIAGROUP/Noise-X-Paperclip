@@ -6,12 +6,14 @@ export const SLOT_IDS = {
   billingPage: "billing-page",
   billingWidget: "billing-widget",
   companyBillingTab: "company-billing-tab",
+  billingSidebar: "billing-sidebar",
 } as const;
 
 export const EXPORT_NAMES = {
   billingPage: "BillingPage",
   billingWidget: "BillingWidget",
   companyBillingTab: "CompanyBillingTab",
+  billingSidebar: "BillingSidebarLink",
 } as const;
 
 export const PAGE_ROUTE = "billing";
