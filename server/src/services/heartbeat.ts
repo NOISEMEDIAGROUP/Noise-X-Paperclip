@@ -3484,7 +3484,14 @@ export function heartbeatService(db: Db) {
       const running = runningProcesses.get(run.id);
       if (running) {
         running.child.kill("SIGTERM");
-        runningProcesses.delete(run.id);
+        const graceMs = Math.max(1, running.graceSec) * 1000;
+        const runId = run.id;
+        setTimeout(() => {
+          if (!running.child.killed) {
+            running.child.kill("SIGKILL");
+          }
+          runningProcesses.delete(runId);
+        }, graceMs);
       }
       await releaseIssueExecutionAndPromote(run);
     }
