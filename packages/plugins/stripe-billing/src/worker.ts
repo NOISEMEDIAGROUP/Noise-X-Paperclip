@@ -6,7 +6,7 @@ import {
   type PluginHealthDiagnostics,
   type PluginWebhookInput,
 } from "@paperclipai/plugin-sdk";
-import { JOB_KEYS, ENTITY_TYPES, BILLING_NAMESPACE, STATE_KEYS, STRIPE_API_BASE } from "./constants.js";
+import { JOB_KEYS, ENTITY_TYPES } from "./constants.js";
 import type { PluginConfig, BillingAccountData } from "./types.js";
 import { createStripeService } from "./services/stripe.js";
 import { createAccountsService } from "./services/accounts.js";
@@ -17,6 +17,7 @@ import { createReconcileHandler } from "./handlers/reconcile.js";
 
 let webhookHandler: ((input: PluginWebhookInput) => Promise<void>) | null = null;
 let healthCtx: PluginContext | null = null;
+let stripeConfigured = false;
 const inflightRequests = new Set<Promise<unknown>>();
 
 const plugin = definePlugin({
@@ -31,27 +32,44 @@ const plugin = definePlugin({
       reconciliationSchedule: rawConfig.reconciliationSchedule ?? "0 2 * * *",
     };
 
-    const apiKey = await ctx.secrets.resolve(config.stripeSecretKey);
-    const stripe = createStripeService(ctx.http, apiKey);
     const accounts = createAccountsService(ctx.entities, ctx.state);
     const invoices = createInvoicesService(ctx.entities);
 
-    const handleCostEvent = createCostEventHandler(stripe, accounts, ctx.entities, ctx.state, ctx.logger);
-    ctx.events.on("cost_event.created", async (event: PluginEvent) => {
-      const p = handleCostEvent(event.payload as any);
-      inflightRequests.add(p);
-      try { await p; } finally { inflightRequests.delete(p); }
-    });
+    // Wire up Stripe if keys are configured
+    if (config.stripeSecretKey && config.stripeWebhookSecret) {
+      try {
+        const apiKey = await ctx.secrets.resolve(config.stripeSecretKey);
+        const stripe = createStripeService(ctx.http, apiKey);
 
-    const whSecret = await ctx.secrets.resolve(config.stripeWebhookSecret);
-    const resolvedConfig = { ...config, stripeWebhookSecret: whSecret };
-    webhookHandler = createWebhookHandler(stripe, accounts, invoices, ctx.agents, ctx.activity, ctx.logger, resolvedConfig);
+        // Cost event handler
+        const handleCostEvent = createCostEventHandler(stripe, accounts, ctx.entities, ctx.state, ctx.logger);
+        ctx.events.on("cost_event.created", async (event: PluginEvent) => {
+          const p = handleCostEvent(event.payload as any);
+          inflightRequests.add(p);
+          try { await p; } finally { inflightRequests.delete(p); }
+        });
 
-    const reconcile = createReconcileHandler(stripe, ctx.entities, ctx.logger);
-    ctx.jobs.register(JOB_KEYS.reconcile, async () => {
-      await reconcile();
-    });
+        // Webhook handler
+        const whSecret = await ctx.secrets.resolve(config.stripeWebhookSecret);
+        const resolvedConfig = { ...config, stripeWebhookSecret: whSecret };
+        webhookHandler = createWebhookHandler(stripe, accounts, invoices, ctx.agents, ctx.activity, ctx.logger, resolvedConfig);
 
+        // Reconciliation job
+        const reconcile = createReconcileHandler(stripe, ctx.entities, ctx.logger);
+        ctx.jobs.register(JOB_KEYS.reconcile, async () => {
+          await reconcile();
+        });
+
+        stripeConfigured = true;
+        ctx.logger.info("Stripe billing plugin initialized with Stripe integration");
+      } catch (err) {
+        ctx.logger.warn(`Stripe integration disabled: ${err}. Configure secret keys in plugin settings.`);
+      }
+    } else {
+      ctx.logger.info("Stripe billing plugin started without Stripe keys — configure them in plugin settings");
+    }
+
+    // Data handlers always register (UI works without Stripe)
     ctx.data.register("billing-overview", async () => {
       const allAccounts = await accounts.listAll();
       return {
@@ -60,6 +78,7 @@ const plugin = definePlugin({
           externalId: a.externalId,
           ...(a.data as BillingAccountData),
         })),
+        stripeConfigured,
       };
     });
 
@@ -76,10 +95,14 @@ const plugin = definePlugin({
       };
     });
 
+    // Actions that require Stripe check at call time
     ctx.actions.register("create-billing-account", async (params) => {
+      if (!stripeConfigured) throw new Error("Stripe is not configured. Add secret keys in plugin settings.");
       const { name, email, companyIds, markupPercent } = params as {
         name: string; email: string; companyIds: string[]; markupPercent?: number;
       };
+      const apiKey = await ctx.secrets.resolve(config.stripeSecretKey);
+      const stripe = createStripeService(ctx.http, apiKey);
       const customer = await stripe.createCustomer(name, email);
       const account = await accounts.create(customer.id, {
         name,
@@ -109,17 +132,16 @@ const plugin = definePlugin({
       await accounts.unlinkCompany(companyId);
       return { success: true };
     });
-
-    ctx.logger.info("Stripe billing plugin initialized");
   },
 
   async onWebhook(input: PluginWebhookInput): Promise<void> {
-    if (!webhookHandler) throw new Error("Plugin not initialized");
+    if (!webhookHandler) throw new Error("Stripe is not configured. Add secret keys in plugin settings.");
     await webhookHandler(input);
   },
 
   async onHealth(): Promise<PluginHealthDiagnostics> {
     if (!healthCtx) return { status: "error", message: "Plugin not initialized" };
+    if (!stripeConfigured) return { status: "degraded", message: "Stripe keys not configured" };
 
     try {
       const allFailed = await healthCtx.entities.list({

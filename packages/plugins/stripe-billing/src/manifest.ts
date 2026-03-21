@@ -56,7 +56,7 @@ const manifest: PaperclipPluginManifestV1 = {
         default: "0 2 * * *",
       },
     },
-    required: ["stripeSecretKey", "stripeWebhookSecret"],
+    required: [],
   },
   webhooks: [
     {
