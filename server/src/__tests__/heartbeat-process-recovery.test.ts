@@ -4,8 +4,9 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { eq } from "drizzle-orm";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   applyPendingMigrations,
   createDb,
@@ -90,6 +91,33 @@ function spawnAliveProcess() {
   return spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
     stdio: "ignore",
   });
+}
+
+function createMockCancelableChild(options: { exitOnSigterm: boolean }): ChildProcess {
+  const emitter = new EventEmitter() as EventEmitter & ChildProcess;
+  emitter.exitCode = null;
+  emitter.signalCode = null;
+  emitter.killed = false;
+  emitter.kill = vi.fn((signal?: NodeJS.Signals | number) => {
+    if (signal === "SIGTERM") {
+      if (options.exitOnSigterm) {
+        emitter.killed = true;
+        emitter.exitCode = 0;
+        emitter.emit("exit", 0, "SIGTERM");
+        emitter.emit("close", 0, "SIGTERM");
+      }
+      return true;
+    }
+    if (signal === "SIGKILL") {
+      emitter.killed = true;
+      emitter.signalCode = "SIGKILL";
+      emitter.emit("exit", null, "SIGKILL");
+      emitter.emit("close", null, "SIGKILL");
+      return true;
+    }
+    return true;
+  }) as ChildProcess["kill"];
+  return emitter;
 }
 
 describe("heartbeat orphaned process recovery", () => {
@@ -317,5 +345,63 @@ describe("heartbeat orphaned process recovery", () => {
     const run = await heartbeat.getRun(runId);
     expect(run?.errorCode).toBeNull();
     expect(run?.error).toBeNull();
+  });
+
+  it("sends SIGKILL after SIGTERM timeout when cancelling active runs", async () => {
+    vi.useFakeTimers();
+    try {
+      const { agentId, runId } = await seedRunFixture({ includeIssue: false });
+      const heartbeat = heartbeatService(db);
+      const child = createMockCancelableChild({ exitOnSigterm: false });
+      runningProcesses.set(runId, { child, graceSec: 1 });
+
+      const cancellation = heartbeat.cancelActiveForAgent(agentId);
+      await vi.advanceTimersByTimeAsync(1_000);
+      const cancelledCount = await cancellation;
+
+      expect(cancelledCount).toBe(1);
+      expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+      expect(child.kill).toHaveBeenCalledWith("SIGKILL");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not send SIGKILL when process exits on SIGTERM", async () => {
+    vi.useFakeTimers();
+    try {
+      const { agentId, runId } = await seedRunFixture({ includeIssue: false });
+      const heartbeat = heartbeatService(db);
+      const child = createMockCancelableChild({ exitOnSigterm: true });
+      runningProcesses.set(runId, { child, graceSec: 1 });
+
+      const cancellation = heartbeat.cancelActiveForAgent(agentId);
+      await vi.advanceTimersByTimeAsync(1_000);
+      const cancelledCount = await cancellation;
+
+      expect(cancelledCount).toBe(1);
+      expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+      expect(child.kill).not.toHaveBeenCalledWith("SIGKILL");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cleans up runningProcesses tracking after active cancel", async () => {
+    vi.useFakeTimers();
+    try {
+      const { agentId, runId } = await seedRunFixture({ includeIssue: false });
+      const heartbeat = heartbeatService(db);
+      const child = createMockCancelableChild({ exitOnSigterm: false });
+      runningProcesses.set(runId, { child, graceSec: 1 });
+
+      const cancellation = heartbeat.cancelActiveForAgent(agentId);
+      await vi.advanceTimersByTimeAsync(1_000);
+      await cancellation;
+
+      expect(runningProcesses.has(runId)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
