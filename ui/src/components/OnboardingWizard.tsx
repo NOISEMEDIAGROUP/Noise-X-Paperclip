@@ -1,4 +1,11 @@
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  useMemo,
+  type KeyboardEvent as ReactKeyboardEvent
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AdapterEnvironmentTestResult } from "@paperclipai/shared";
 import { useLocation, useNavigate, useParams } from "@/lib/router";
@@ -21,6 +28,11 @@ import {
   extractModelName,
   extractProviderIdWithFallback
 } from "../lib/model-utils";
+import {
+  focusOnboardingStepTab,
+  getNextOnboardingStep,
+  getOnboardingStepTabId
+} from "../lib/onboarding-step-nav";
 import { getUIAdapter } from "../adapters";
 import { defaultCreateValues } from "./agent-config-defaults";
 import { parseOnboardingGoalInput } from "../lib/onboarding-goal";
@@ -264,6 +276,18 @@ export function OnboardingWizard() {
         entries: [...entries].sort((a, b) => a.id.localeCompare(b.id))
       }));
   }, [filteredModels, adapterType]);
+
+  function handleStepTabKeyDown(
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    currentStep: Step
+  ) {
+    const nextStep = getNextOnboardingStep(currentStep, event.key);
+    if (nextStep === null) return;
+
+    event.preventDefault();
+    setStep(nextStep);
+    focusOnboardingStepTab(nextStep);
+  }
 
   function reset() {
     setStep(1);
@@ -602,37 +626,56 @@ export function OnboardingWizard() {
               step === 1 ? "md:w-1/2" : "md:w-full"
             )}
           >
-            <div className="w-full max-w-md mx-auto my-auto px-8 py-12 shrink-0">
+            <div className="w-full max-w-md mx-auto my-auto px-4 sm:px-6 md:px-8 py-8 sm:py-12 shrink-0">
               {/* Progress tabs */}
-              <div className="flex items-center gap-0 mb-8 border-b border-border">
-                {(
-                  [
-                    { step: 1 as Step, label: "Company", icon: Building2 },
-                    { step: 2 as Step, label: "Agent", icon: Bot },
-                    { step: 3 as Step, label: "Task", icon: ListTodo },
-                    { step: 4 as Step, label: "Launch", icon: Rocket }
-                  ] as const
-                ).map(({ step: s, label, icon: Icon }) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setStep(s)}
-                    className={cn(
-                      "flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors cursor-pointer",
-                      s === step
-                        ? "border-foreground text-foreground"
-                        : "border-transparent text-muted-foreground hover:text-foreground/70 hover:border-border"
-                    )}
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                    {label}
-                  </button>
-                ))}
+              <div
+                className="mb-8 -mx-1 border-b border-border px-1 overflow-x-auto"
+                role="tablist"
+                aria-label="Onboarding steps"
+                aria-orientation="horizontal"
+              >
+                <div className="flex min-w-max items-center gap-0">
+                  {(
+                    [
+                      { step: 1 as Step, label: "Company", icon: Building2 },
+                      { step: 2 as Step, label: "Agent", icon: Bot },
+                      { step: 3 as Step, label: "Task", icon: ListTodo },
+                      { step: 4 as Step, label: "Launch", icon: Rocket }
+                    ] as const
+                  ).map(({ step: s, label, icon: Icon }) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setStep(s)}
+                      onKeyDown={(event) => handleStepTabKeyDown(event, s)}
+                      id={getOnboardingStepTabId(s)}
+                      aria-controls={`onboarding-step-${s}-panel`}
+                      role="tab"
+                      aria-selected={s === step}
+                      aria-current={s === step ? "step" : undefined}
+                      tabIndex={s === step ? 0 : -1}
+                      className={cn(
+                        "shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors cursor-pointer",
+                        s === step
+                          ? "border-foreground text-foreground"
+                          : "border-transparent text-muted-foreground hover:text-foreground/70 hover:border-border"
+                      )}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Step content */}
               {step === 1 && (
-                <div className="space-y-5">
+                <div
+                  id="onboarding-step-1-panel"
+                  role="tabpanel"
+                  aria-labelledby="onboarding-step-1-tab"
+                  className="space-y-5"
+                >
                   <div className="flex items-center gap-3 mb-1">
                     <div className="bg-muted/50 p-2">
                       <Building2 className="h-5 w-5 text-muted-foreground" />
@@ -685,7 +728,12 @@ export function OnboardingWizard() {
               )}
 
               {step === 2 && (
-                <div className="space-y-5">
+                <div
+                  id="onboarding-step-2-panel"
+                  role="tabpanel"
+                  aria-labelledby="onboarding-step-2-tab"
+                  className="space-y-5"
+                >
                   <div className="flex items-center gap-3 mb-1">
                     <div className="bg-muted/50 p-2">
                       <Bot className="h-5 w-5 text-muted-foreground" />
@@ -715,7 +763,7 @@ export function OnboardingWizard() {
                     <label className="text-xs text-muted-foreground mb-2 block">
                       Adapter type
                     </label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {[
                         {
                           value: "claude_local" as const,
@@ -779,7 +827,7 @@ export function OnboardingWizard() {
                     </button>
 
                     {showMoreAdapters && (
-                      <div className="grid grid-cols-2 gap-2 mt-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
                         {[
                           {
                             value: "gemini_local" as const,
@@ -1016,7 +1064,11 @@ export function OnboardingWizard() {
                       </div>
 
                       {adapterEnvError && (
-                        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-2 text-[11px] text-destructive">
+                        <div
+                          className="rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-2 text-[11px] text-destructive"
+                          role="alert"
+                          aria-live="polite"
+                        >
                           {adapterEnvError}
                         </div>
                       )}
@@ -1161,7 +1213,12 @@ export function OnboardingWizard() {
               )}
 
               {step === 3 && (
-                <div className="space-y-5">
+                <div
+                  id="onboarding-step-3-panel"
+                  role="tabpanel"
+                  aria-labelledby="onboarding-step-3-tab"
+                  className="space-y-5"
+                >
                   <div className="flex items-center gap-3 mb-1">
                     <div className="bg-muted/50 p-2">
                       <ListTodo className="h-5 w-5 text-muted-foreground" />
@@ -1202,7 +1259,12 @@ export function OnboardingWizard() {
               )}
 
               {step === 4 && (
-                <div className="space-y-5">
+                <div
+                  id="onboarding-step-4-panel"
+                  role="tabpanel"
+                  aria-labelledby="onboarding-step-4-tab"
+                  className="space-y-5"
+                >
                   <div className="flex items-center gap-3 mb-1">
                     <div className="bg-muted/50 p-2">
                       <Rocket className="h-5 w-5 text-muted-foreground" />
@@ -1255,12 +1317,14 @@ export function OnboardingWizard() {
               {/* Error */}
               {error && (
                 <div className="mt-3">
-                  <p className="text-xs text-destructive">{error}</p>
+                  <p role="alert" aria-live="polite" className="text-xs text-destructive">
+                    {error}
+                  </p>
                 </div>
               )}
 
               {/* Footer navigation */}
-              <div className="flex items-center justify-between mt-8">
+              <div className="flex flex-wrap items-center justify-between gap-2 mt-8">
                 <div>
                   {step > 1 && step > (onboardingOptions.initialStep ?? 1) && (
                     <Button
@@ -1274,7 +1338,7 @@ export function OnboardingWizard() {
                     </Button>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 ml-auto">
                   {step === 1 && (
                     <Button
                       size="sm"

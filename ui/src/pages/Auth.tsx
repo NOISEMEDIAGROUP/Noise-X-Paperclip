@@ -72,7 +72,7 @@ export function AuthPage() {
     <div className="fixed inset-0 flex bg-background">
       {/* Left half — form */}
       <div className="w-full md:w-1/2 flex flex-col overflow-y-auto">
-        <div className="w-full max-w-md mx-auto my-auto px-8 py-12">
+        <div className="w-full max-w-md mx-auto my-auto px-4 sm:px-6 md:px-8 py-8 sm:py-12">
           <div className="flex items-center gap-2 mb-8">
             <Sparkles className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">Paperclip</span>
@@ -101,38 +101,73 @@ export function AuthPage() {
           >
             {mode === "sign_up" && (
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Name</label>
+                <label
+                  htmlFor="auth-name"
+                  className="text-xs text-muted-foreground mb-1 block"
+                >
+                  Name
+                </label>
                 <input
+                  id="auth-name"
+                  name="name"
                   className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
+                  required={mode === "sign_up"}
                   autoComplete="name"
                   autoFocus
                 />
               </div>
             )}
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Email</label>
+              <label
+                htmlFor="auth-email"
+                className="text-xs text-muted-foreground mb-1 block"
+              >
+                Email
+              </label>
               <input
+                id="auth-email"
+                name="email"
                 className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
+                required
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? "auth-error" : undefined}
+                inputMode="email"
+                autoCapitalize="none"
                 autoComplete="email"
                 autoFocus={mode === "sign_in"}
               />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Password</label>
+              <label
+                htmlFor="auth-password"
+                className="text-xs text-muted-foreground mb-1 block"
+              >
+                Password
+              </label>
               <input
+                id="auth-password"
+                name="password"
                 className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
+                required
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? "auth-error" : undefined}
+                minLength={mode === "sign_up" ? 8 : undefined}
                 autoComplete={mode === "sign_in" ? "current-password" : "new-password"}
               />
             </div>
-            {error && <p className="text-xs text-destructive">{error}</p>}
+            {error && (
+              <p id="auth-error" role="alert" aria-live="polite" className="text-xs text-destructive">
+                {error}
+              </p>
+            )}
             <Button
               type="submit"
               disabled={mutation.isPending}

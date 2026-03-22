@@ -1,64 +1,29 @@
 #!/usr/bin/env tsx
 /**
- * Paperclip company bootstrap script.
+ * Paperclip seed/import script
  *
  * Usage:
  *   pnpm dlx tsx scripts/add-engineering-team.ts
  *
- * Optional overrides:
- *   --base-url=http://127.0.0.1:3100
- *   --company-id=<existing-company-id>
- *   --company-name="Breath Protocol AI Company"
- *   --company-budget-cents=0
- *   --workspace-root=/absolute/path/to/repo
- *   --instructions-root=/absolute/path/to/agent-instructions
- *   --repo-url=https://github.com/your-org/your-repo
- *   --cookie='better-auth.session_token=...'
+ * What it does:
+ *   1. Creates a project
+ *   2. Creates agents with detailed roles/prompts
+ *   3. Links reporting lines
+ *   4. Creates starter issues assigned to the right agents
  *
- * Behavior:
- *   1. Creates or reuses a company
- *   2. Creates a company goal
- *   3. Creates a project and optional workspace
- *   4. Creates the org tree with current Paperclip agent payloads
- *   5. Creates issue labels and starter issues
+ * Assumptions:
+ *   - Paperclip is running locally
+ *   - A compatible local API is exposed
+ *   - Environment variables below are set if your local URLs differ
+ *
+ * Notes:
+ *   The Paperclip public docs do not currently publish a stable import schema
+ *   for the exact UI shown in your screenshots, so this script is written as a
+ *   pragmatic local seeder against a configurable JSON API. If one endpoint
+ *   name differs in your checkout, adjust only the API path constants below.
  */
 
-import { access } from "node:fs/promises";
-import path from "node:path";
-
 type Id = string;
-
-type CompanyRecord = {
-  id: Id;
-  name: string;
-  issuePrefix: string;
-};
-
-type GoalRecord = {
-  id: Id;
-  title: string;
-};
-
-type ProjectRecord = {
-  id: Id;
-  name: string;
-};
-
-type AgentRecord = {
-  id: Id;
-  name: string;
-};
-
-type IssueRecord = {
-  id: Id;
-  title: string;
-};
-
-type IssueLabelRecord = {
-  id: Id;
-  name: string;
-  color: string;
-};
 
 type AgentSeed = {
   key: string;
@@ -108,337 +73,127 @@ type ProjectSeed = {
   issues: IssueSeed[];
 };
 
-function parseArg(name: string, fallback?: string): string | undefined {
-  const prefix = `--${name}=`;
-  const match = process.argv.find((arg) => arg.startsWith(prefix));
-  return match ? match.slice(prefix.length) : fallback;
-}
+const BASE_URL = process.env.PAPERCLIP_BASE_URL ?? "http://127.0.0.1:3100";
+const API_PREFIX = process.env.PAPERCLIP_API_PREFIX ?? "/api";
+const WORKSPACE_ROOT =
+  process.env.PAPERCLIP_WORKSPACE_ROOT ??
+  "/Users/your-user/path/to/breathing-protocol-mvp";
+const INSTRUCTIONS_ROOT =
+  process.env.PAPERCLIP_INSTRUCTIONS_ROOT ??
+  "/Users/your-user/path/to/paperclip-agent-instructions";
 
-const BASE_URL = parseArg("base-url", process.env.PAPERCLIP_BASE_URL ?? "http://127.0.0.1:3100")!;
-const API_PREFIX = parseArg("api-prefix", process.env.PAPERCLIP_API_PREFIX ?? "/api")!;
-const COOKIE = parseArg("cookie", process.env.PAPERCLIP_COOKIE);
-const EXISTING_COMPANY_ID = parseArg("company-id", process.env.PAPERCLIP_COMPANY_ID)?.trim() || null;
-const COMPANY_NAME_OVERRIDE = parseArg("company-name", process.env.PAPERCLIP_COMPANY_NAME)?.trim() || null;
-const COMPANY_BUDGET_MONTHLY_CENTS = Number(
-  parseArg("company-budget-cents", process.env.PAPERCLIP_COMPANY_BUDGET_CENTS ?? "0"),
-);
-const WORKSPACE_ROOT = path.resolve(
-  parseArg("workspace-root", process.env.PAPERCLIP_WORKSPACE_ROOT ?? process.cwd())!,
-);
-const INSTRUCTIONS_ROOT = path.resolve(
-  parseArg("instructions-root", process.env.PAPERCLIP_INSTRUCTIONS_ROOT ?? path.join(process.cwd(), "agent-instructions"))!,
-);
-const REPO_URL = parseArg("repo-url", process.env.PAPERCLIP_REPO_URL)?.trim() || null;
-
-const AGENT_ROLE_BY_KEY: Record<string, string> = {
-  ceo: "ceo",
-  cto: "cto",
-  cmo: "cmo",
-  coo: "general",
-  cfo: "cfo",
-  cpo: "pm",
-  eng_manager: "engineer",
-  frontend_senior: "engineer",
-  backend_senior: "engineer",
-  ai_senior: "engineer",
-  growth_manager: "cmo",
-  content_senior: "cmo",
-  ops_manager: "general",
-  finance_manager: "cfo",
-  product_manager: "pm",
-  frontend_junior: "engineer",
-  backend_junior: "engineer",
-  marketing_junior: "cmo",
-  data_junior: "researcher",
+const API = {
+  projects: `${BASE_URL}${API_PREFIX}/projects`,
+  agents: `${BASE_URL}${API_PREFIX}/agents`,
+  issues: `${BASE_URL}${API_PREFIX}/issues`,
+  agentRelationships: `${BASE_URL}${API_PREFIX}/agent-relationships`,
 };
 
-const LABEL_COLOR_PALETTE = [
-  "#2563eb",
-  "#7c3aed",
-  "#0f766e",
-  "#0891b2",
-  "#15803d",
-  "#a16207",
-  "#be123c",
-  "#9333ea",
-  "#475569",
-  "#ea580c",
-];
-
-function apiPath(pathname: string) {
-  return `${BASE_URL}${API_PREFIX}${pathname}`;
-}
-
-async function request<T>(pathname: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(apiPath(pathname), {
+async function request<T>(
+  url: string,
+  init?: RequestInit,
+): Promise<T> {
+  const res = await fetch(url, {
     ...init,
     headers: {
-      ...(init?.body !== undefined ? { "content-type": "application/json" } : {}),
-      ...(COOKIE ? { Cookie: COOKIE } : {}),
+      "content-type": "application/json",
       ...(init?.headers ?? {}),
     },
   });
 
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status} on ${pathname}\n${text}`);
-  }
-
-  if (res.status === 204) {
-    return undefined as T;
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} on ${url}\n${text}`);
   }
 
   return (await res.json()) as T;
 }
 
-function companyPath(companyId: string, pathname: string) {
-  return `/companies/${companyId}${pathname}`;
-}
-
-async function fileExists(candidate: string | null | undefined): Promise<string | null> {
-  if (!candidate) return null;
-  const resolved = path.resolve(candidate);
-  try {
-    await access(resolved);
-    return resolved;
-  } catch {
-    return null;
-  }
-}
-
-function buildProjectDescription(seed: ProjectSeed) {
-  return [
-    seed.description,
-    "",
-    `Mission: ${seed.mission}`,
-    `Primary website: ${seed.website}`,
-    "",
-    "Business model",
-    seed.businessModel,
-    "",
-    "Compliance notes",
-    ...seed.complianceNotes.map((note) => `- ${note}`),
-  ].join("\n");
-}
-
-function buildGoalDescription(seed: ProjectSeed) {
-  return [
-    seed.description,
-    "",
-    "Success criteria",
-    `- ${seed.mission}`,
-    `- Build for sustainable revenue, retention, and trust`,
-    `- Respect privacy and medical-safety boundaries`,
-    "",
-    "Business model",
-    seed.businessModel,
-    "",
-    "Compliance notes",
-    ...seed.complianceNotes.map((note) => `- ${note}`),
-  ].join("\n");
-}
-
-function buildCapabilities(seed: AgentSeed) {
-  const responsibilities = seed.initialContext.responsibilities.slice(0, 3).join("; ");
-  return `${seed.initialContext.mission} Core responsibilities: ${responsibilities}.`;
-}
-
-function resolveAgentRole(seed: AgentSeed) {
-  return AGENT_ROLE_BY_KEY[seed.key] ?? "general";
-}
-
-function pickLabelColor(name: string) {
-  let hash = 0;
-  for (const char of name) {
-    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  }
-  return LABEL_COLOR_PALETTE[hash % LABEL_COLOR_PALETTE.length]!;
-}
-
-function buildHeartbeatRuntimeConfig(seed: AgentSeed) {
-  const heartbeatMinutes = seed.adapter.heartbeatMinutes ?? null;
-  const enabled = typeof heartbeatMinutes === "number" && heartbeatMinutes > 0;
-  return {
-    heartbeat: {
-      enabled,
-      intervalSec: enabled ? heartbeatMinutes * 60 : 0,
-      wakeOnDemand: true,
-      cooldownSec: 10,
-      maxConcurrentRuns: 1,
-    },
-  };
-}
-
-async function buildAgentAdapterConfig(seed: AgentSeed) {
-  const instructionsFilePath = await fileExists(seed.adapter.instructionsFile);
-  const env =
-    seed.adapter.env && Object.keys(seed.adapter.env).length > 0
-      ? Object.fromEntries(
-          Object.entries(seed.adapter.env).map(([key, value]) => [key, { type: "plain", value }]),
-        )
-      : undefined;
-
-  if (seed.adapter.instructionsFile && !instructionsFilePath) {
-    console.log(`Skipping missing instructions file for ${seed.name}: ${seed.adapter.instructionsFile}`);
-  }
-
-  return {
-    cwd: path.resolve(seed.adapter.workingDirectory),
-    ...(instructionsFilePath ? { instructionsFilePath } : {}),
-    promptTemplate: seed.adapter.promptTemplate,
-    model: seed.adapter.model,
-    ...(seed.adapter.thinkingEffort && seed.adapter.thinkingEffort !== "auto"
-      ? { modelReasoningEffort: seed.adapter.thinkingEffort }
-      : {}),
-    search: seed.adapter.enableSearch ?? false,
-    dangerouslyBypassApprovalsAndSandbox: seed.adapter.bypassSandbox ?? true,
-    timeoutSec: 0,
-    graceSec: 15,
-    ...(seed.adapter.command ? { command: seed.adapter.command } : {}),
-    ...(seed.adapter.extraArgs && seed.adapter.extraArgs.length > 0 ? { extraArgs: seed.adapter.extraArgs } : {}),
-    ...(env ? { env } : {}),
-  };
-}
-
-async function createCompany(name: string, description: string) {
-  return request<CompanyRecord>("/companies", {
-    method: "POST",
-    body: JSON.stringify({
-      name,
-      description,
-      budgetMonthlyCents: Number.isFinite(COMPANY_BUDGET_MONTHLY_CENTS) ? COMPANY_BUDGET_MONTHLY_CENTS : 0,
-    }),
-  });
-}
-
-async function getCompany(companyId: string) {
-  return request<CompanyRecord>(companyPath(companyId, ""));
-}
-
-async function createGoal(companyId: string, seed: ProjectSeed) {
-  return request<GoalRecord>(companyPath(companyId, "/goals"), {
-    method: "POST",
-    body: JSON.stringify({
-      title: seed.mission,
-      description: buildGoalDescription(seed),
-      level: "company",
-      status: "active",
-    }),
-  });
-}
-
-async function updateGoal(goalId: string, patch: Record<string, unknown>) {
-  return request<GoalRecord>(`/goals/${goalId}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch),
-  });
-}
-
-async function createProject(companyId: string, goalId: string, seed: ProjectSeed) {
-  return request<ProjectRecord>(companyPath(companyId, "/projects"), {
+async function createProject(seed: ProjectSeed): Promise<{ id: Id }> {
+  return request<{ id: Id }>(API.projects, {
     method: "POST",
     body: JSON.stringify({
       name: seed.name,
-      description: buildProjectDescription(seed),
-      goalId,
-      status: "planned",
-      workspace: {
-        name: "Primary Workspace",
-        sourceType: REPO_URL ? "git_repo" : "local_path",
-        cwd: WORKSPACE_ROOT,
-        ...(REPO_URL ? { repoUrl: REPO_URL } : {}),
-        isPrimary: true,
-      },
-    }),
-  });
-}
-
-async function updateProject(projectId: string, patch: Record<string, unknown>) {
-  return request<ProjectRecord>(`/projects/${projectId}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch),
-  });
-}
-
-async function listLabels(companyId: string) {
-  return request<IssueLabelRecord[]>(companyPath(companyId, "/labels"));
-}
-
-async function createLabel(companyId: string, name: string) {
-  return request<IssueLabelRecord>(companyPath(companyId, "/labels"), {
-    method: "POST",
-    body: JSON.stringify({
-      name,
-      color: pickLabelColor(name),
-    }),
-  });
-}
-
-async function ensureLabels(companyId: string, issues: IssueSeed[]) {
-  const existing = await listLabels(companyId);
-  const byName = new Map(existing.map((label) => [label.name.toLowerCase(), label]));
-  const requiredNames = Array.from(
-    new Set(
-      issues.flatMap((issue) => issue.labels ?? []).map((name) => name.trim()).filter(Boolean),
-    ),
-  );
-
-  for (const labelName of requiredNames) {
-    const key = labelName.toLowerCase();
-    if (byName.has(key)) continue;
-    const created = await createLabel(companyId, labelName);
-    byName.set(key, created);
-    console.log(`Created label ${labelName}: ${created.id}`);
-  }
-
-  return byName;
-}
-
-async function createAgent(companyId: string, seed: AgentSeed, managerId?: Id | null) {
-  return request<AgentRecord>(companyPath(companyId, "/agents"), {
-    method: "POST",
-    body: JSON.stringify({
-      name: seed.name,
-      role: resolveAgentRole(seed),
-      title: seed.role,
-      reportsTo: managerId ?? null,
-      capabilities: buildCapabilities(seed),
-      adapterType: seed.adapter.type,
-      adapterConfig: await buildAgentAdapterConfig(seed),
-      runtimeConfig: buildHeartbeatRuntimeConfig(seed),
-      budgetMonthlyCents: 0,
+      description: seed.description,
+      mission: seed.mission,
+      website: seed.website,
       metadata: {
-        seedKey: seed.key,
-        tags: seed.tags ?? [],
-        initialContext: seed.initialContext,
+        businessModel: seed.businessModel,
+        complianceNotes: seed.complianceNotes,
       },
+    }),
+  });
+}
+
+async function createAgent(
+  projectId: Id,
+  seed: AgentSeed,
+): Promise<{ id: Id }> {
+  return request<{ id: Id }>(API.agents, {
+    method: "POST",
+    body: JSON.stringify({
+      projectId,
+      name: seed.name,
+      role: seed.role,
+      reportsToKey: seed.reportsTo ?? null,
+      tags: seed.tags ?? [],
+      adapterType: "codex",
+      adapterConfig: {
+        adapterType: "Codex (local)",
+        command: seed.adapter.command,
+        model: seed.adapter.model,
+        workingDirectory: seed.adapter.workingDirectory,
+        promptTemplate: seed.adapter.promptTemplate,
+        instructionsFile: seed.adapter.instructionsFile ?? null,
+        bypassSandbox: seed.adapter.bypassSandbox ?? true,
+        enableSearch: seed.adapter.enableSearch ?? false,
+        thinkingEffort: seed.adapter.thinkingEffort ?? "auto",
+        extraArgs: seed.adapter.extraArgs ?? [],
+        environmentVariables: seed.adapter.env ?? {},
+        heartbeatMinutes: seed.adapter.heartbeatMinutes ?? null,
+      },
+      metadata: seed.initialContext,
+    }),
+  });
+}
+
+async function linkManagerRelationship(
+  projectId: Id,
+  managerId: Id,
+  reportId: Id,
+): Promise<void> {
+  await request<{ ok: true }>(API.agentRelationships, {
+    method: "POST",
+    body: JSON.stringify({
+      projectId,
+      managerId,
+      reportId,
+      relation: "reports_to",
     }),
   });
 }
 
 async function createIssue(
-  companyId: string,
   projectId: Id,
   assigneeId: Id,
   issue: IssueSeed,
-  labelIds: string[],
-) {
-  return request<IssueRecord>(companyPath(companyId, "/issues"), {
+): Promise<{ id: Id }> {
+  return request<{ id: Id }>(API.issues, {
     method: "POST",
     body: JSON.stringify({
-      title: issue.title,
-      description: issue.body,
-      assigneeAgentId: assigneeId,
       projectId,
+      title: issue.title,
+      body: issue.body,
+      assigneeId,
       priority: issue.priority ?? "medium",
+      labels: issue.labels ?? [],
       status: "todo",
-      labelIds,
     }),
   });
 }
 
 function promptTemplate(
-  _agentName: string,
+  agentName: string,
   role: string,
   summary: string,
   outputs: string[],
@@ -1556,77 +1311,46 @@ const projectSeed: ProjectSeed = {
 };
 
 async function main() {
-  console.log(`Bootstrapping Paperclip company via ${BASE_URL}${API_PREFIX}`);
+  console.log(`Seeding Paperclip company into ${BASE_URL}`);
 
-  const company = EXISTING_COMPANY_ID
-    ? await getCompany(EXISTING_COMPANY_ID)
-    : await createCompany(
-        COMPANY_NAME_OVERRIDE ?? projectSeed.name,
-        projectSeed.description,
-      );
-  console.log(
-    `${EXISTING_COMPANY_ID ? "Using existing" : "Created"} company ${company.name} (${company.issuePrefix}): ${company.id}`,
-  );
-
-  const goal = await createGoal(company.id, projectSeed);
-  console.log(`Created company goal: ${goal.id}`);
-
-  const project = await createProject(company.id, goal.id, projectSeed);
+  const project = await createProject(projectSeed);
   console.log(`Created project: ${project.id}`);
 
-  const labelByName = await ensureLabels(company.id, projectSeed.issues);
   const agentIdByKey = new Map<string, Id>();
-  const createdAgents: AgentRecord[] = [];
 
   for (const agent of projectSeed.agents) {
-    const managerId = agent.reportsTo ? agentIdByKey.get(agent.reportsTo) : null;
-    if (agent.reportsTo && !managerId) {
-      throw new Error(`Missing manager ${agent.reportsTo} before creating ${agent.key}`);
-    }
-
-    const created = await createAgent(company.id, agent, managerId ?? null);
+    const created = await createAgent(project.id, agent);
     agentIdByKey.set(agent.key, created.id);
-    createdAgents.push(created);
     console.log(`Created agent ${agent.name}: ${created.id}`);
   }
 
-  const ceoId = agentIdByKey.get("ceo");
-  if (ceoId) {
-    await Promise.all([
-      updateGoal(goal.id, { ownerAgentId: ceoId }),
-      updateProject(project.id, { leadAgentId: ceoId }),
-    ]);
-    console.log(`Assigned CEO ${ceoId} as goal owner and project lead`);
+  for (const agent of projectSeed.agents) {
+    if (!agent.reportsTo) continue;
+    const managerId = agentIdByKey.get(agent.reportsTo);
+    const reportId = agentIdByKey.get(agent.key);
+
+    if (!managerId || !reportId) {
+      throw new Error(
+        `Missing manager/report link for ${agent.key} -> ${agent.reportsTo}`,
+      );
+    }
+
+    await linkManagerRelationship(project.id, managerId, reportId);
+    console.log(`Linked ${agent.key} -> reports to -> ${agent.reportsTo}`);
   }
 
-  const createdIssues: IssueRecord[] = [];
   for (const issue of projectSeed.issues) {
     const assigneeId = agentIdByKey.get(issue.assignee);
     if (!assigneeId) {
       throw new Error(`Missing assignee key: ${issue.assignee}`);
     }
 
-    const labelIds = (issue.labels ?? [])
-      .map((name) => labelByName.get(name.toLowerCase())?.id ?? null)
-      .filter((value): value is string => Boolean(value));
-
-    const created = await createIssue(company.id, project.id, assigneeId, issue, labelIds);
-    createdIssues.push(created);
+    const created = await createIssue(project.id, assigneeId, issue);
     console.log(`Created issue ${issue.title}: ${created.id}`);
   }
 
-  console.log("\nBootstrap complete.");
-  console.log(JSON.stringify({
-    companyId: company.id,
-    companyName: company.name,
-    companyPrefix: company.issuePrefix,
-    goalId: goal.id,
-    projectId: project.id,
-    workspaceRoot: WORKSPACE_ROOT,
-    repoUrl: REPO_URL,
-    agentCount: createdAgents.length,
-    issueCount: createdIssues.length,
-  }, null, 2));
+  console.log("\nSeed complete.");
+  console.log("If one endpoint differs in your local Paperclip checkout, update the API path constants at the top of the script.");
 }
 
 main().catch((err) => {

@@ -10,8 +10,17 @@ describe("isOnboardingPath", () => {
     expect(isOnboardingPath("/onboarding")).toBe(true);
   });
 
+  it("matches onboarding routes regardless of case and trailing slash", () => {
+    expect(isOnboardingPath("/OnBoarding/")).toBe(true);
+    expect(isOnboardingPath("/pap/OnBoarding/")).toBe(true);
+  });
+
   it("matches a company-prefixed onboarding route", () => {
     expect(isOnboardingPath("/pap/onboarding")).toBe(true);
+  });
+
+  it("ignores nested onboarding paths", () => {
+    expect(isOnboardingPath("/companies/pap/onboarding")).toBe(false);
   });
 
   it("ignores non-onboarding routes", () => {
@@ -47,6 +56,16 @@ describe("resolveRouteOnboardingOptions", () => {
         companies: [],
       }),
     ).toEqual({ initialStep: 1 });
+  });
+
+  it("returns null when the path is not onboarding", () => {
+    expect(
+      resolveRouteOnboardingOptions({
+        pathname: "/pap/issues",
+        companyPrefix: "pap",
+        companies: [{ id: "company-1", issuePrefix: "PAP" }],
+      }),
+    ).toBeNull();
   });
 });
 

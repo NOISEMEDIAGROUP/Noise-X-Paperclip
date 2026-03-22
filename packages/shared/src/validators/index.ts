@@ -154,6 +154,24 @@ export {
 } from "./cost.js";
 
 export {
+  conversionEventNames,
+  conversionEventNameSchema,
+  conversionEventOwnerRoles,
+  conversionEventOwnerRoleSchema,
+  conversionSchemaVersionPolicy,
+  conversionEventOwnershipMap,
+  conversionEventSourceSchema,
+  conversionBillingIntervalSchema,
+  conversionEventIngestSchema,
+  type ConversionEventName,
+  type ConversionEventOwnerRole,
+  type ConversionEventOwnership,
+  type ConversionEventSource,
+  type ConversionBillingInterval,
+  type ConversionEventIngest,
+} from "./conversion.js";
+
+export {
   createFinanceEventSchema,
   type CreateFinanceEvent,
 } from "./finance.js";
