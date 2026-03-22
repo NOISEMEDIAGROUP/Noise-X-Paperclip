@@ -20,7 +20,7 @@ import {
   joinPromptSections,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
-import { parseCodexJsonl, isCodexUnknownSessionError } from "./parse.js";
+import { parseCodexJsonl, isCodexUnknownSessionError, isCodexAuthError } from "./parse.js";
 import { pathExists, prepareManagedCodexHome, resolveManagedCodexHomeDir } from "./codex-home.js";
 import { resolveCodexDesiredSkillNames } from "./skills.js";
 
@@ -598,6 +598,22 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     );
     const retry = await runAttempt(null);
     return toResult(retry, true);
+  }
+
+  // Auth errors (401/unauthorized) should immediately clear the session
+  // to prevent infinite retry loops that burn tokens (GH #1511).
+  if (
+    !initial.proc.timedOut &&
+    (initial.proc.exitCode ?? 0) !== 0 &&
+    isCodexAuthError(initial.proc.stdout, initial.rawStderr)
+  ) {
+    await onLog(
+      "stdout",
+      `[paperclip] Codex run failed with authentication error; clearing session to prevent retry loop.\n`,
+    );
+    const result = toResult(initial, true);
+    result.clearSession = true;
+    return result;
   }
 
   return toResult(initial);
