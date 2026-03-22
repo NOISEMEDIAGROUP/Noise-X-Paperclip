@@ -97,7 +97,7 @@ function CloudAccessGate() {
   if (healthQuery.error) {
     return (
       <div className="mx-auto max-w-xl py-10 text-sm text-destructive">
-        {healthQuery.error instanceof Error ? healthQuery.error.message : "Failed to load app state"}
+        {healthQuery.error instanceof Error ? healthQuery.error.message : "加载应用状态失败"}
       </div>
     );
   }

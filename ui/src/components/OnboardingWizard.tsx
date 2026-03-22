@@ -600,10 +600,10 @@ export function OnboardingWizard() {
               <div className="flex items-center gap-0 mb-8 border-b border-border">
                 {(
                   [
-                    { step: 1 as Step, label: "Company", icon: Building2 },
-                    { step: 2 as Step, label: "Agent", icon: Bot },
-                    { step: 3 as Step, label: "Task", icon: ListTodo },
-                    { step: 4 as Step, label: "Launch", icon: Rocket }
+                    { step: 1 as Step, label: "公司", icon: Building2 },
+                    { step: 2 as Step, label: "智能体", icon: Bot },
+                    { step: 3 as Step, label: "任务", icon: ListTodo },
+                    { step: 4 as Step, label: "启动", icon: Rocket }
                   ] as const
                 ).map(({ step: s, label, icon: Icon }) => (
                   <button
@@ -631,9 +631,9 @@ export function OnboardingWizard() {
                       <Building2 className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <div>
-                      <h3 className="font-medium">Name your company</h3>
+                      <h3 className="font-medium">为您的公司命名</h3>
                       <p className="text-xs text-muted-foreground">
-                        This is the organization your agents will work for.
+                        这是您的智能体将为之工作的组织。
                       </p>
                     </div>
                   </div>
@@ -646,11 +646,11 @@ export function OnboardingWizard() {
                           : "text-muted-foreground group-focus-within:text-foreground"
                       )}
                     >
-                      Company name
+                      公司名称
                     </label>
                     <input
                       className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
-                      placeholder="Acme Corp"
+                      placeholder="示例科技"
                       value={companyName}
                       onChange={(e) => setCompanyName(e.target.value)}
                       autoFocus
@@ -665,11 +665,11 @@ export function OnboardingWizard() {
                           : "text-muted-foreground group-focus-within:text-foreground"
                       )}
                     >
-                      Mission / goal (optional)
+                      使命 / 目标（可选）
                     </label>
                     <textarea
                       className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50 resize-none min-h-[60px]"
-                      placeholder="What is this company trying to achieve?"
+                      placeholder="这家公司想要达成什么目标？"
                       value={companyGoal}
                       onChange={(e) => setCompanyGoal(e.target.value)}
                     />
@@ -706,7 +706,7 @@ export function OnboardingWizard() {
                   {/* Adapter type radio cards */}
                   <div>
                     <label className="text-xs text-muted-foreground mb-2 block">
-                      Adapter type
+                      适配器类型
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                       {[
@@ -714,14 +714,14 @@ export function OnboardingWizard() {
                           value: "claude_local" as const,
                           label: "Claude Code",
                           icon: Sparkles,
-                          desc: "Local Claude agent",
+                          desc: "本地 Claude 智能体",
                           recommended: true
                         },
                         {
                           value: "codex_local" as const,
                           label: "Codex",
                           icon: Code,
-                          desc: "Local Codex agent",
+                          desc: "本地 Codex 智能体",
                           recommended: true
                         }
                       ].map((opt) => (
@@ -746,7 +746,7 @@ export function OnboardingWizard() {
                         >
                           {opt.recommended && (
                             <span className="absolute -top-1.5 right-1.5 bg-green-500 text-white text-[9px] font-semibold px-1.5 py-0.5 rounded-full leading-none">
-                              Recommended
+                              推荐
                             </span>
                           )}
                           <opt.icon className="h-4 w-4" />
@@ -768,7 +768,7 @@ export function OnboardingWizard() {
                           showMoreAdapters ? "rotate-0" : "-rotate-90"
                         )}
                       />
-                      More Agent Adapter Types
+                      更多智能体适配器类型
                     </button>
 
                     {showMoreAdapters && (
@@ -778,33 +778,33 @@ export function OnboardingWizard() {
                             value: "gemini_local" as const,
                             label: "Gemini CLI",
                             icon: Gem,
-                            desc: "Local Gemini agent"
+                            desc: "本地 Gemini 智能体"
                           },
                           {
                             value: "opencode_local" as const,
                             label: "OpenCode",
                             icon: OpenCodeLogoIcon,
-                            desc: "Local multi-provider agent"
+                            desc: "本地多供应商智能体"
                           },
                           {
                             value: "pi_local" as const,
                             label: "Pi",
                             icon: Terminal,
-                            desc: "Local Pi agent"
+                            desc: "本地 Pi 智能体"
                           },
                           {
                             value: "cursor" as const,
                             label: "Cursor",
                             icon: MousePointer2,
-                            desc: "Local Cursor agent"
+                            desc: "本地 Cursor 智能体"
                           },
                           {
                             value: "openclaw_gateway" as const,
                             label: "OpenClaw Gateway",
                             icon: Bot,
-                            desc: "Invoke OpenClaw via gateway protocol",
+                            desc: "通过网关协议调用 OpenClaw",
                             comingSoon: true,
-                            disabledLabel: "Configure OpenClaw within the App"
+                            disabledLabel: "在应用内配置 OpenClaw"
                           }
                         ].map((opt) => (
                           <button
@@ -863,7 +863,7 @@ export function OnboardingWizard() {
                     <div className="space-y-3">
                       <div>
                         <label className="text-xs text-muted-foreground mb-1 block">
-                          Model
+                          模型
                         </label>
                         <Popover
                           open={modelOpen}
@@ -966,11 +966,10 @@ export function OnboardingWizard() {
                       <div className="flex items-center justify-between gap-2">
                         <div>
                           <p className="text-xs font-medium">
-                            Adapter environment check
+                            适配器环境检查
                           </p>
                           <p className="text-[11px] text-muted-foreground">
-                            Runs a live probe that asks the adapter CLI to
-                            respond with hello.
+                            运行实时探测，要求适配器 CLI 响应 hello。
                           </p>
                         </div>
                         <Button
@@ -980,7 +979,7 @@ export function OnboardingWizard() {
                           disabled={adapterEnvLoading}
                           onClick={() => void runAdapterEnvironmentTest()}
                         >
-                          {adapterEnvLoading ? "Testing..." : "Test now"}
+                          {adapterEnvLoading ? "测试中..." : "立即测试"}
                         </Button>
                       </div>
 
@@ -1212,7 +1211,7 @@ export function OnboardingWizard() {
                       disabled={loading}
                     >
                       <ArrowLeft className="h-3.5 w-3.5 mr-1" />
-                      Back
+                      返回
                     </Button>
                   )}
                 </div>
