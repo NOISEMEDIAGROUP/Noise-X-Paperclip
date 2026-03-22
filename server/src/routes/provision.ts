@@ -19,7 +19,7 @@ import { ROLE_PERMISSIONS } from "@paperclipai/shared";
 import { companyService, agentService, accessService, logActivity } from "../services/index.js";
 
 /** Default model for hosted agents routed through the metered gateway. */
-const DEFAULT_GATEWAY_MODEL = "anthropic/claude-sonnet-4-20250514";
+const DEFAULT_GATEWAY_MODEL = "anthropic/claude-sonnet-4";
 
 /** Directory where we persist the OpenCode gateway provider config. */
 const GATEWAY_CONFIG_DIR = path.join(process.env.PAPERCLIP_HOME ?? "/data", ".opencode-gateway");
