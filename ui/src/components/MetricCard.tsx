@@ -44,7 +44,7 @@ export function MetricCard({ icon: Icon, value, label, description, to, onClick 
   if (onClick) {
     return (
       <div
-        className="h-full"
+        className="h-full rounded-lg focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-[-2px]"
         role="button"
         tabIndex={0}
         onClick={onClick}
