@@ -49,6 +49,7 @@ const mockIssueService = vi.hoisted(() => ({
 
 const mockHeartbeatService = vi.hoisted(() => ({
   wakeup: vi.fn(),
+  reportRunActivity: vi.fn().mockResolvedValue(undefined),
 }));
 
 const mockAccessService = vi.hoisted(() => ({
@@ -103,6 +104,7 @@ vi.mock("../services/index.js", () => ({
   executionWorkspaceService: () => mockExecutionWorkspaceService,
   workProductService: () => mockWorkProductService,
   documentService: () => mockDocumentService,
+  routineService: () => ({ syncRunStatusForIssue: vi.fn() }),
   logActivity: mockLogActivity,
 }));
 

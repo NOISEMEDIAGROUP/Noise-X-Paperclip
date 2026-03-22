@@ -8,8 +8,6 @@ describe("agent local JWT", () => {
   const issuerEnv = "PAPERCLIP_AGENT_JWT_ISSUER";
   const audienceEnv = "PAPERCLIP_AGENT_JWT_AUDIENCE";
 
-  const betterAuthEnv = "BETTER_AUTH_SECRET";
-
   const originalEnv = {
     secret: process.env[secretEnv],
     betterAuth: process.env[betterAuthEnv],

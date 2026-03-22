@@ -29,6 +29,7 @@ vi.mock("../services/index.js", () => ({
   issueApprovalService: () => ({}),
   executionWorkspaceService: () => ({}),
   workProductService: () => ({}),
+  routineService: () => ({ syncRunStatusForIssue: vi.fn() }),
   logActivity: mockLogActivity,
 }));
 

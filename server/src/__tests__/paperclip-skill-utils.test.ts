@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   listPaperclipSkillEntries,
   removeMaintainerOnlySkillSymlinks,
-  robustLink,
+  symlinkOrCopy,
   ensurePaperclipSkillSymlink,
 } from "@paperclipai/adapter-utils/server-utils";
 
@@ -62,7 +62,7 @@ describe("paperclip skill utils", () => {
     expect((await fs.lstat(path.join(skillsHome, "release-notes"))).isSymbolicLink()).toBe(true);
   });
 
-  describe("robustLink", () => {
+  describe("symlinkOrCopy", () => {
     it("creates a symlink for a directory", async () => {
       const root = await makeTempDir("robust-link-");
       cleanupDirs.add(root);
@@ -72,7 +72,7 @@ describe("paperclip skill utils", () => {
       await fs.mkdir(source, { recursive: true });
       await fs.writeFile(path.join(source, "file.txt"), "hello");
 
-      await robustLink(source, target);
+      await symlinkOrCopy(source, target);
 
       const stat = await fs.lstat(target);
       expect(stat.isSymbolicLink()).toBe(true);
@@ -85,7 +85,7 @@ describe("paperclip skill utils", () => {
       cleanupDirs.add(root);
 
       await expect(
-        robustLink(path.join(root, "nonexistent"), path.join(root, "sub", "deep", "link")),
+        symlinkOrCopy(path.join(root, "nonexistent"), path.join(root, "sub", "deep", "link")),
       ).rejects.toThrow();
     });
   });
@@ -133,7 +133,7 @@ describe("paperclip skill utils", () => {
       expect(result).toBe("skipped");
     });
 
-    it("uses robustLink as default linker", async () => {
+    it("uses symlinkOrCopy as default linker", async () => {
       const root = await makeTempDir("skill-symlink-robust-");
       cleanupDirs.add(root);
 
@@ -141,7 +141,7 @@ describe("paperclip skill utils", () => {
       const target = path.join(root, "link");
       await fs.mkdir(source, { recursive: true });
 
-      // default linkSkill should be robustLink
+      // default linkSkill should be symlinkOrCopy
       const result = await ensurePaperclipSkillSymlink(source, target);
       expect(result).toBe("created");
       expect((await fs.lstat(target)).isSymbolicLink()).toBe(true);
