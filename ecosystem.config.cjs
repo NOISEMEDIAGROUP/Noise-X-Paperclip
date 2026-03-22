@@ -8,6 +8,8 @@ module.exports = {
     max_restarts: 10,
     min_uptime: '10s',
     restart_delay: 5000,
+    exp_backoff_restart_delay: 1000,
+    kill_timeout: 8000,
     watch: false,
     max_memory_restart: '1G',
     env: {
