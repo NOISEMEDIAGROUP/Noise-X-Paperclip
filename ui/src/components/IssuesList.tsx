@@ -371,7 +371,7 @@ export function IssuesList({
             <PopoverContent align="end" className="w-[min(480px,calc(100vw-2rem))] p-0">
               <div className="p-3 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Filters</span>
+                  <span className="text-sm font-medium">筛选</span>
                   {activeFilterCount > 0 && (
                     <button
                       className="text-xs text-muted-foreground hover:text-foreground"
@@ -586,8 +586,8 @@ export function IssuesList({
       {!isLoading && filtered.length === 0 && viewState.viewMode === "list" && (
         <EmptyState
           icon={CircleDot}
-          message="No issues match the current filters or search."
-          action="Create Issue"
+          message="没有任务匹配当前筛选条件或搜索。"
+          action="创建任务"
           onAction={() => openNewIssue(newIssueDefaults())}
         />
       )}
@@ -750,7 +750,7 @@ export function IssuesList({
                         >
                           <input
                             className="mb-1 w-full border-b border-border bg-transparent px-2 py-1.5 text-xs outline-none placeholder:text-muted-foreground/50"
-                            placeholder="Search assignees..."
+                            placeholder="搜索负责人..."
                             value={assigneeSearch}
                             onChange={(e) => setAssigneeSearch(e.target.value)}
                             autoFocus

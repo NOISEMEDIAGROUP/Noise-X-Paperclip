@@ -672,15 +672,15 @@ export function Inbox() {
               onValueChange={(value) => setAllCategoryFilter(value as InboxCategoryFilter)}
             >
               <SelectTrigger className="h-8 w-[170px] text-xs">
-                <SelectValue placeholder="Category" />
+                <SelectValue placeholder="类别" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="everything">All categories</SelectItem>
-                <SelectItem value="issues_i_touched">My recent issues</SelectItem>
-                <SelectItem value="join_requests">Join requests</SelectItem>
-                <SelectItem value="approvals">Approvals</SelectItem>
-                <SelectItem value="failed_runs">Failed runs</SelectItem>
-                <SelectItem value="alerts">Alerts</SelectItem>
+                <SelectItem value="everything">全部类别</SelectItem>
+                <SelectItem value="issues_i_touched">我最近的任务</SelectItem>
+                <SelectItem value="join_requests">加入请求</SelectItem>
+                <SelectItem value="approvals">审批</SelectItem>
+                <SelectItem value="failed_runs">失败的运行</SelectItem>
+                <SelectItem value="alerts">警报</SelectItem>
               </SelectContent>
             </Select>
 
@@ -690,12 +690,12 @@ export function Inbox() {
                 onValueChange={(value) => setAllApprovalFilter(value as InboxApprovalFilter)}
               >
                 <SelectTrigger className="h-8 w-[170px] text-xs">
-                  <SelectValue placeholder="Approval status" />
+                  <SelectValue placeholder="审批状态" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All approval statuses</SelectItem>
-                  <SelectItem value="actionable">Needs action</SelectItem>
-                  <SelectItem value="resolved">Resolved</SelectItem>
+                  <SelectItem value="all">全部审批状态</SelectItem>
+                  <SelectItem value="actionable">需要处理</SelectItem>
+                  <SelectItem value="resolved">已解决</SelectItem>
                 </SelectContent>
               </Select>
             )}

@@ -956,7 +956,7 @@ export function NewIssueDialog() {
               </PopoverContent>
             </Popover>
             <span className="text-muted-foreground/60">&rsaquo;</span>
-            <span>New issue</span>
+            <span>新建任务</span>
           </div>
           <div className="flex items-center gap-1">
             <Button
@@ -984,7 +984,7 @@ export function NewIssueDialog() {
         <div className="px-4 pt-4 pb-2 shrink-0">
           <textarea
             className="w-full text-lg font-semibold bg-transparent outline-none resize-none overflow-hidden placeholder:text-muted-foreground/50"
-            placeholder="Issue title"
+            placeholder="任务标题"
             rows={1}
             value={title}
             onChange={(e) => {
@@ -1032,7 +1032,7 @@ export function NewIssueDialog() {
                 placeholder="Assignee"
                 disablePortal
                 noneLabel="No assignee"
-                searchPlaceholder="Search assignees..."
+                searchPlaceholder="搜索负责人..."
                 emptyMessage="No assignees found."
                 onChange={(value) => {
                   const nextAssignee = parseAssigneeValue(value);
@@ -1083,7 +1083,7 @@ export function NewIssueDialog() {
                 placeholder="Project"
                 disablePortal
                 noneLabel="No project"
-                searchPlaceholder="Search projects..."
+                searchPlaceholder="搜索项目..."
                 emptyMessage="No projects found."
                 onChange={handleProjectChange}
                 onConfirm={() => {
@@ -1185,7 +1185,7 @@ export function NewIssueDialog() {
                     placeholder="Default model"
                     disablePortal
                     noneLabel="Default model"
-                    searchPlaceholder="Search models..."
+                    searchPlaceholder="搜索模型..."
                     emptyMessage="No models found."
                     onChange={setAssigneeModelOverride}
                   />
@@ -1249,7 +1249,7 @@ export function NewIssueDialog() {
               ref={descriptionEditorRef}
               value={description}
               onChange={setDescription}
-              placeholder="Add description..."
+              placeholder="添加描述..."
               bordered={false}
               mentions={mentionOptions}
               contentClassName={cn("text-sm text-muted-foreground pb-12", expanded ? "min-h-[220px]" : "min-h-[120px]")}
@@ -1451,7 +1451,7 @@ export function NewIssueDialog() {
               {createIssue.isPending ? (
                 <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                   <Loader2 className="h-3 w-3 animate-spin" />
-                  Creating issue...
+                  正在创建任务...
                 </span>
               ) : createIssue.isError ? (
                 <span className="text-xs text-destructive">{createIssueErrorMessage}</span>
@@ -1466,7 +1466,7 @@ export function NewIssueDialog() {
             >
               <span className="inline-flex items-center justify-center gap-1.5">
                 {createIssue.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                <span>{createIssue.isPending ? "Creating..." : "Create Issue"}</span>
+                <span>{createIssue.isPending ? "创建中..." : "创建任务"}</span>
               </span>
             </Button>
           </div>

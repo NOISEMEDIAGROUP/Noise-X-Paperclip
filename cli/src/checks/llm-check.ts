@@ -48,7 +48,7 @@ export async function llmCheck(config: PaperclipConfig): Promise<CheckResult> {
       return {
         name: "LLM provider",
         status: "warn",
-        message: `Claude API returned status ${res.status}`,
+        message: `Claude API 返回状态 ${res.status}`,
       };
     } else {
       const res = await fetch("https://api.openai.com/v1/models", {
@@ -69,7 +69,7 @@ export async function llmCheck(config: PaperclipConfig): Promise<CheckResult> {
       return {
         name: "LLM provider",
         status: "warn",
-        message: `OpenAI API returned status ${res.status}`,
+        message: `OpenAI API 返回状态 ${res.status}`,
       };
     }
   } catch {

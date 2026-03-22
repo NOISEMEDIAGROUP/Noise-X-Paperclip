@@ -218,15 +218,15 @@ export function issueRoutes(db: Db, storage: StorageService) {
         : unreadForUserFilterRaw;
 
     if (assigneeUserFilterRaw === "me" && (!assigneeUserId || req.actor.type !== "board")) {
-      res.status(403).json({ error: "assigneeUserId=me requires board authentication" });
+      res.status(403).json({ error: "assigneeUserId=me 需要董事会认证" });
       return;
     }
     if (touchedByUserFilterRaw === "me" && (!touchedByUserId || req.actor.type !== "board")) {
-      res.status(403).json({ error: "touchedByUserId=me requires board authentication" });
+      res.status(403).json({ error: "touchedByUserId=me 需要董事会认证" });
       return;
     }
     if (unreadForUserFilterRaw === "me" && (!unreadForUserId || req.actor.type !== "board")) {
-      res.status(403).json({ error: "unreadForUserId=me requires board authentication" });
+      res.status(403).json({ error: "unreadForUserId=me 需要董事会认证" });
       return;
     }
 

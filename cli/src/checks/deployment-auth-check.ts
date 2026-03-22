@@ -86,6 +86,6 @@ export function deploymentAuthCheck(config: PaperclipConfig): CheckResult {
   return {
     name: "部署/认证模式",
     status: "pass",
-    message: `Mode ${mode}/${exposure} with auth URL mode ${auth.baseUrlMode}`,
+    message: `模式 ${mode}/${exposure}，认证 URL 模式 ${auth.baseUrlMode}`,
   };
 }

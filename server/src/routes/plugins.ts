@@ -1572,7 +1572,7 @@ export function pluginRoutes(
       const validation = validateInstanceConfig(body.configJson, schema);
       if (!validation.valid) {
         res.status(400).json({
-          error: "Configuration does not match the plugin's instanceConfigSchema",
+          error: "配置不符合插件的 instanceConfigSchema",
           fieldErrors: validation.errors,
         });
         return;
@@ -1679,7 +1679,7 @@ export function pluginRoutes(
       const validation = validateInstanceConfig(body.configJson, schema);
       if (!validation.valid) {
         res.status(400).json({
-          error: "Configuration does not match the plugin's instanceConfigSchema",
+          error: "配置不符合插件的 instanceConfigSchema",
           fieldErrors: validation.errors,
         });
         return;
@@ -1744,7 +1744,7 @@ export function pluginRoutes(
   router.get("/plugins/:pluginId/jobs", async (req, res) => {
     assertBoard(req);
     if (!jobDeps) {
-      res.status(501).json({ error: "Job scheduling is not enabled" });
+      res.status(501).json({ error: "作业调度未启用" });
       return;
     }
 
@@ -1790,7 +1790,7 @@ export function pluginRoutes(
   router.get("/plugins/:pluginId/jobs/:jobId/runs", async (req, res) => {
     assertBoard(req);
     if (!jobDeps) {
-      res.status(501).json({ error: "Job scheduling is not enabled" });
+      res.status(501).json({ error: "作业调度未启用" });
       return;
     }
 
@@ -1803,7 +1803,7 @@ export function pluginRoutes(
 
     const job = await jobDeps.jobStore.getJobByIdForPlugin(plugin.id, jobId);
     if (!job) {
-      res.status(404).json({ error: "Job not found" });
+      res.status(404).json({ error: "作业未找到" });
       return;
     }
 
@@ -1838,7 +1838,7 @@ export function pluginRoutes(
   router.post("/plugins/:pluginId/jobs/:jobId/trigger", async (req, res) => {
     assertBoard(req);
     if (!jobDeps) {
-      res.status(501).json({ error: "Job scheduling is not enabled" });
+      res.status(501).json({ error: "作业调度未启用" });
       return;
     }
 
@@ -1851,7 +1851,7 @@ export function pluginRoutes(
 
     const job = await jobDeps.jobStore.getJobByIdForPlugin(plugin.id, jobId);
     if (!job) {
-      res.status(404).json({ error: "Job not found" });
+      res.status(404).json({ error: "作业未找到" });
       return;
     }
 
@@ -1894,7 +1894,7 @@ export function pluginRoutes(
    */
   router.post("/plugins/:pluginId/webhooks/:endpointKey", async (req, res) => {
     if (!webhookDeps) {
-      res.status(501).json({ error: "Webhook ingestion is not enabled" });
+      res.status(501).json({ error: "Webhook 接收未启用" });
       return;
     }
 
@@ -1918,14 +1918,14 @@ export function pluginRoutes(
     // Step 3: Validate the plugin has webhooks.receive capability
     const manifest = plugin.manifestJson;
     if (!manifest) {
-      res.status(400).json({ error: "Plugin manifest is missing" });
+      res.status(400).json({ error: "插件清单缺失" });
       return;
     }
 
     const capabilities = manifest.capabilities ?? [];
     if (!capabilities.includes("webhooks.receive")) {
       res.status(400).json({
-        error: "Plugin does not have the webhooks.receive capability",
+        error: "插件不具备 webhooks.receive 能力",
       });
       return;
     }
