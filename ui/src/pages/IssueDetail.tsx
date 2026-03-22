@@ -780,6 +780,7 @@ export function IssueDetail() {
               size="icon-xs"
               onClick={copyIssueToClipboard}
               title="Copy issue as markdown"
+              aria-label="Copy issue as markdown"
             >
               {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
             </Button>
@@ -788,6 +789,7 @@ export function IssueDetail() {
               size="icon-xs"
               onClick={() => setMobilePropsOpen(true)}
               title="Properties"
+              aria-label="Show properties"
             >
               <SlidersHorizontal className="h-4 w-4" />
             </Button>
@@ -799,6 +801,7 @@ export function IssueDetail() {
               size="icon-xs"
               onClick={copyIssueToClipboard}
               title="Copy issue as markdown"
+              aria-label="Copy issue as markdown"
             >
               {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
             </Button>
@@ -811,6 +814,7 @@ export function IssueDetail() {
               )}
               onClick={() => setPanelVisible(true)}
               title="Show properties"
+              aria-label="Show properties"
             >
               <SlidersHorizontal className="h-4 w-4" />
             </Button>
@@ -1112,6 +1116,7 @@ export function IssueDetail() {
               ))}
               {visibleActivityCount < activity.length && (
                 <button
+                  type="button"
                   className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
                   onClick={() => setVisibleActivityCount((c) => c + 20)}
                 >
