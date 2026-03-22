@@ -16,5 +16,6 @@ jobs:
       working-directory: '.'
       run-tests: true
       run-docker-build: true
-      docker-registry: 'harbor.spooty.io'
+      # Docker registry can be overridden in your fork
+      # docker-registry: 'your-registry.example.com'
     secrets: inherit
