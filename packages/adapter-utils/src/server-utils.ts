@@ -793,6 +793,8 @@ export async function runChildProcess(
         let stdout = "";
         let stderr = "";
         let logChain: Promise<void> = Promise.resolve();
+        let stdoutFirstChunk = true;
+        let stderrFirstChunk = true;
 
         const timeout =
           opts.timeoutSec > 0
@@ -808,7 +810,13 @@ export async function runChildProcess(
             : null;
 
         child.stdout?.on("data", (chunk: unknown) => {
-          const text = String(chunk);
+          let text = String(chunk);
+          // Strip UTF-8 BOM on first chunk — Windows PowerShell may emit BOM
+          // which corrupts headers and variable names (GH #1511)
+          if (stdoutFirstChunk) {
+            stdoutFirstChunk = false;
+            if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+          }
           stdout = appendWithCap(stdout, text);
           logChain = logChain
             .then(() => opts.onLog("stdout", text))
@@ -816,7 +824,12 @@ export async function runChildProcess(
         });
 
         child.stderr?.on("data", (chunk: unknown) => {
-          const text = String(chunk);
+          let text = String(chunk);
+          // Strip UTF-8 BOM on first chunk (GH #1511)
+          if (stderrFirstChunk) {
+            stderrFirstChunk = false;
+            if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+          }
           stderr = appendWithCap(stderr, text);
           logChain = logChain
             .then(() => opts.onLog("stderr", text))
