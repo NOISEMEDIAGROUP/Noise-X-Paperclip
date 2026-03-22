@@ -100,50 +100,27 @@ export function resolveRuntimeSessionParamsForWorkspace(input: {
   resolvedWorkspace: ResolvedWorkspaceForRun;
 }) {
   const { agentId, previousSessionParams, resolvedWorkspace } = input;
+  const unchanged = { sessionParams: previousSessionParams, warning: null as string | null };
+
   const previousSessionId = readNonEmptyString(previousSessionParams?.sessionId);
   const previousCwd = readNonEmptyString(previousSessionParams?.cwd);
-  if (!previousSessionId || !previousCwd) {
-    return {
-      sessionParams: previousSessionParams,
-      warning: null as string | null,
-    };
-  }
-  if (resolvedWorkspace.source !== "project_primary") {
-    return {
-      sessionParams: previousSessionParams,
-      warning: null as string | null,
-    };
-  }
+  if (!previousSessionId || !previousCwd) return unchanged;
+  if (resolvedWorkspace.source !== "project_primary") return unchanged;
+
   const projectCwd = readNonEmptyString(resolvedWorkspace.cwd);
-  if (!projectCwd) {
-    return {
-      sessionParams: previousSessionParams,
-      warning: null as string | null,
-    };
-  }
+  if (!projectCwd) return unchanged;
+
   const fallbackAgentHomeCwd = resolveDefaultAgentWorkspaceDir(agentId);
-  if (path.resolve(previousCwd) !== path.resolve(fallbackAgentHomeCwd)) {
-    return {
-      sessionParams: previousSessionParams,
-      warning: null as string | null,
-    };
-  }
-  if (path.resolve(projectCwd) === path.resolve(previousCwd)) {
-    return {
-      sessionParams: previousSessionParams,
-      warning: null as string | null,
-    };
-  }
+  if (path.resolve(previousCwd) !== path.resolve(fallbackAgentHomeCwd)) return unchanged;
+  if (path.resolve(projectCwd) === path.resolve(previousCwd)) return unchanged;
+
   const previousWorkspaceId = readNonEmptyString(previousSessionParams?.workspaceId);
   if (
     previousWorkspaceId &&
     resolvedWorkspace.workspaceId &&
     previousWorkspaceId !== resolvedWorkspace.workspaceId
   ) {
-    return {
-      sessionParams: previousSessionParams,
-      warning: null as string | null,
-    };
+    return unchanged;
   }
 
   const migratedSessionParams: Record<string, unknown> = {
@@ -236,6 +213,17 @@ function deriveCommentId(
   );
 }
 
+/** Set a key on contextSnapshot only if it has no existing non-empty value. */
+function setIfMissing(
+  ctx: Record<string, unknown>,
+  key: string,
+  value: string | null | undefined,
+) {
+  if (value && !readNonEmptyString(ctx[key])) {
+    ctx[key] = value;
+  }
+}
+
 function enrichWakeContextSnapshot(input: {
   contextSnapshot: Record<string, unknown>;
   reason: string | null;
@@ -249,30 +237,14 @@ function enrichWakeContextSnapshot(input: {
   const taskKey = deriveTaskKey(contextSnapshot, payload);
   const wakeCommentId = deriveCommentId(contextSnapshot, payload);
 
-  if (!readNonEmptyString(contextSnapshot["wakeReason"]) && reason) {
-    contextSnapshot.wakeReason = reason;
-  }
-  if (!readNonEmptyString(contextSnapshot["issueId"]) && issueIdFromPayload) {
-    contextSnapshot.issueId = issueIdFromPayload;
-  }
-  if (!readNonEmptyString(contextSnapshot["taskId"]) && issueIdFromPayload) {
-    contextSnapshot.taskId = issueIdFromPayload;
-  }
-  if (!readNonEmptyString(contextSnapshot["taskKey"]) && taskKey) {
-    contextSnapshot.taskKey = taskKey;
-  }
-  if (!readNonEmptyString(contextSnapshot["commentId"]) && commentIdFromPayload) {
-    contextSnapshot.commentId = commentIdFromPayload;
-  }
-  if (!readNonEmptyString(contextSnapshot["wakeCommentId"]) && wakeCommentId) {
-    contextSnapshot.wakeCommentId = wakeCommentId;
-  }
-  if (!readNonEmptyString(contextSnapshot["wakeSource"]) && source) {
-    contextSnapshot.wakeSource = source;
-  }
-  if (!readNonEmptyString(contextSnapshot["wakeTriggerDetail"]) && triggerDetail) {
-    contextSnapshot.wakeTriggerDetail = triggerDetail;
-  }
+  setIfMissing(contextSnapshot, "wakeReason", reason);
+  setIfMissing(contextSnapshot, "issueId", issueIdFromPayload);
+  setIfMissing(contextSnapshot, "taskId", issueIdFromPayload);
+  setIfMissing(contextSnapshot, "taskKey", taskKey);
+  setIfMissing(contextSnapshot, "commentId", commentIdFromPayload);
+  setIfMissing(contextSnapshot, "wakeCommentId", wakeCommentId);
+  setIfMissing(contextSnapshot, "wakeSource", source);
+  setIfMissing(contextSnapshot, "wakeTriggerDetail", triggerDetail);
 
   return {
     contextSnapshot,

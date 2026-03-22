@@ -6,12 +6,18 @@ import { typeLabel, typeIcon, defaultTypeIcon, ApprovalPayloadRenderer } from ".
 import { timeAgo } from "../lib/timeAgo";
 import type { Approval, Agent } from "@paperclipai/shared";
 
+const STATUS_ICON_MAP: Record<string, { icon: typeof CheckCircle2; color: string }> = {
+  approved: { icon: CheckCircle2, color: "text-green-600 dark:text-green-400" },
+  rejected: { icon: XCircle, color: "text-red-600 dark:text-red-400" },
+  revision_requested: { icon: Clock, color: "text-amber-600 dark:text-amber-400" },
+  pending: { icon: Clock, color: "text-yellow-600 dark:text-yellow-400" },
+};
+
 function statusIcon(status: string) {
-  if (status === "approved") return <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />;
-  if (status === "rejected") return <XCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />;
-  if (status === "revision_requested") return <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />;
-  if (status === "pending") return <Clock className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400" />;
-  return null;
+  const entry = STATUS_ICON_MAP[status];
+  if (!entry) return null;
+  const Icon = entry.icon;
+  return <Icon className={`h-3.5 w-3.5 ${entry.color}`} />;
 }
 
 export function ApprovalCard({

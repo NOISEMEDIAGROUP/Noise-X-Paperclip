@@ -28,18 +28,10 @@ const CODEX_ROLLOUT_NOISE_RE =
   /^\d{4}-\d{2}-\d{2}T[^\s]+\s+ERROR\s+codex_core::rollout::list:\s+state db missing rollout path for thread\s+[a-z0-9-]+$/i;
 
 function stripCodexRolloutNoise(text: string): string {
-  const parts = text.split(/\r?\n/);
-  const kept: string[] = [];
-  for (const part of parts) {
-    const trimmed = part.trim();
-    if (!trimmed) {
-      kept.push(part);
-      continue;
-    }
-    if (CODEX_ROLLOUT_NOISE_RE.test(trimmed)) continue;
-    kept.push(part);
-  }
-  return kept.join("\n");
+  return text
+    .split(/\r?\n/)
+    .filter((line) => !line.trim() || !CODEX_ROLLOUT_NOISE_RE.test(line.trim()))
+    .join("\n");
 }
 
 function firstNonEmptyLine(text: string): string {

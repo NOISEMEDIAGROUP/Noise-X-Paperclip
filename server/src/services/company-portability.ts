@@ -246,6 +246,17 @@ function isEmptyObject(value: unknown): boolean {
   return isPlainRecord(value) && Object.keys(value).length === 0;
 }
 
+function isYamlScalar(value: unknown): boolean {
+  return (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean" ||
+    typeof value === "number" ||
+    (Array.isArray(value) && value.length === 0) ||
+    isEmptyObject(value)
+  );
+}
+
 function renderYamlBlock(value: unknown, indentLevel: number): string[] {
   const indent = "  ".repeat(indentLevel);
 
@@ -253,19 +264,12 @@ function renderYamlBlock(value: unknown, indentLevel: number): string[] {
     if (value.length === 0) return [`${indent}[]`];
     const lines: string[] = [];
     for (const entry of value) {
-      const scalar =
-        entry === null ||
-        typeof entry === "string" ||
-        typeof entry === "boolean" ||
-        typeof entry === "number" ||
-        Array.isArray(entry) && entry.length === 0 ||
-        isEmptyObject(entry);
-      if (scalar) {
+      if (isYamlScalar(entry)) {
         lines.push(`${indent}- ${renderYamlScalar(entry)}`);
-        continue;
+      } else {
+        lines.push(`${indent}-`);
+        lines.push(...renderYamlBlock(entry, indentLevel + 1));
       }
-      lines.push(`${indent}-`);
-      lines.push(...renderYamlBlock(entry, indentLevel + 1));
     }
     return lines;
   }
@@ -275,19 +279,12 @@ function renderYamlBlock(value: unknown, indentLevel: number): string[] {
     if (entries.length === 0) return [`${indent}{}`];
     const lines: string[] = [];
     for (const [key, entry] of entries) {
-      const scalar =
-        entry === null ||
-        typeof entry === "string" ||
-        typeof entry === "boolean" ||
-        typeof entry === "number" ||
-        Array.isArray(entry) && entry.length === 0 ||
-        isEmptyObject(entry);
-      if (scalar) {
+      if (isYamlScalar(entry)) {
         lines.push(`${indent}${key}: ${renderYamlScalar(entry)}`);
-        continue;
+      } else {
+        lines.push(`${indent}${key}:`);
+        lines.push(...renderYamlBlock(entry, indentLevel + 1));
       }
-      lines.push(`${indent}${key}:`);
-      lines.push(...renderYamlBlock(entry, indentLevel + 1));
     }
     return lines;
   }

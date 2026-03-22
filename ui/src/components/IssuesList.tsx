@@ -119,12 +119,8 @@ function sortIssues(issues: Issue[], state: IssueViewState): Issue[] {
 }
 
 function countActiveFilters(state: IssueViewState): number {
-  let count = 0;
-  if (state.statuses.length > 0) count++;
-  if (state.priorities.length > 0) count++;
-  if (state.assignees.length > 0) count++;
-  if (state.labels.length > 0) count++;
-  return count;
+  return [state.statuses, state.priorities, state.assignees, state.labels]
+    .filter((arr) => arr.length > 0).length;
 }
 
 /* ── Component ── */

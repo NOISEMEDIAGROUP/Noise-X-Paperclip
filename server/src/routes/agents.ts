@@ -340,22 +340,15 @@ export function agentRoutes(db: Db) {
   function redactRevisionSnapshot(snapshot: unknown): Record<string, unknown> {
     if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return {};
     const record = snapshot as Record<string, unknown>;
+    const safeRecord = (value: unknown): Record<string, unknown> =>
+      typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
     return {
       ...record,
-      adapterConfig: redactEventPayload(
-        typeof record.adapterConfig === "object" && record.adapterConfig !== null
-          ? (record.adapterConfig as Record<string, unknown>)
-          : {},
-      ),
-      runtimeConfig: redactEventPayload(
-        typeof record.runtimeConfig === "object" && record.runtimeConfig !== null
-          ? (record.runtimeConfig as Record<string, unknown>)
-          : {},
-      ),
-      metadata:
-        typeof record.metadata === "object" && record.metadata !== null
-          ? redactEventPayload(record.metadata as Record<string, unknown>)
-          : record.metadata ?? null,
+      adapterConfig: redactEventPayload(safeRecord(record.adapterConfig)),
+      runtimeConfig: redactEventPayload(safeRecord(record.runtimeConfig)),
+      metadata: record.metadata != null && typeof record.metadata === "object"
+        ? redactEventPayload(record.metadata as Record<string, unknown>)
+        : record.metadata ?? null,
     };
   }
 

@@ -69,21 +69,13 @@ function jsonEqual(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function sanitizeRecordField(value: unknown, fallback: Record<string, unknown> | null = {}): Record<string, unknown> | null {
+  return isPlainRecord(value) ? sanitizeRecord(value as Record<string, unknown>) : fallback;
+}
+
 function buildConfigSnapshot(
   row: Pick<typeof agents.$inferSelect, ConfigRevisionField>,
 ): AgentConfigSnapshot {
-  const adapterConfig =
-    typeof row.adapterConfig === "object" && row.adapterConfig !== null && !Array.isArray(row.adapterConfig)
-      ? sanitizeRecord(row.adapterConfig as Record<string, unknown>)
-      : {};
-  const runtimeConfig =
-    typeof row.runtimeConfig === "object" && row.runtimeConfig !== null && !Array.isArray(row.runtimeConfig)
-      ? sanitizeRecord(row.runtimeConfig as Record<string, unknown>)
-      : {};
-  const metadata =
-    typeof row.metadata === "object" && row.metadata !== null && !Array.isArray(row.metadata)
-      ? sanitizeRecord(row.metadata as Record<string, unknown>)
-      : row.metadata ?? null;
   return {
     name: row.name,
     role: row.role,
@@ -91,10 +83,10 @@ function buildConfigSnapshot(
     reportsTo: row.reportsTo,
     capabilities: row.capabilities,
     adapterType: row.adapterType,
-    adapterConfig,
-    runtimeConfig,
+    adapterConfig: sanitizeRecordField(row.adapterConfig) ?? {},
+    runtimeConfig: sanitizeRecordField(row.runtimeConfig) ?? {},
     budgetMonthlyCents: row.budgetMonthlyCents,
-    metadata,
+    metadata: sanitizeRecordField(row.metadata, row.metadata ?? null),
   };
 }
 
@@ -116,33 +108,36 @@ function diffConfigSnapshot(
   return CONFIG_REVISION_FIELDS.filter((field) => !jsonEqual(before[field], after[field]));
 }
 
+function assertNonEmptyString(snapshot: Record<string, unknown>, key: string): string {
+  const value = snapshot[key];
+  if (typeof value !== "string" || value.length === 0) {
+    throw unprocessable(`Invalid revision snapshot: ${key}`);
+  }
+  return value;
+}
+
+function asNullableString(value: unknown): string | null {
+  return typeof value === "string" || value === null ? (value as string | null) : null;
+}
+
 function configPatchFromSnapshot(snapshot: unknown): Partial<typeof agents.$inferInsert> {
   if (!isPlainRecord(snapshot)) throw unprocessable("Invalid revision snapshot");
 
-  if (typeof snapshot.name !== "string" || snapshot.name.length === 0) {
-    throw unprocessable("Invalid revision snapshot: name");
-  }
-  if (typeof snapshot.role !== "string" || snapshot.role.length === 0) {
-    throw unprocessable("Invalid revision snapshot: role");
-  }
-  if (typeof snapshot.adapterType !== "string" || snapshot.adapterType.length === 0) {
-    throw unprocessable("Invalid revision snapshot: adapterType");
-  }
+  const name = assertNonEmptyString(snapshot, "name");
+  const role = assertNonEmptyString(snapshot, "role");
+  const adapterType = assertNonEmptyString(snapshot, "adapterType");
+
   if (typeof snapshot.budgetMonthlyCents !== "number" || !Number.isFinite(snapshot.budgetMonthlyCents)) {
     throw unprocessable("Invalid revision snapshot: budgetMonthlyCents");
   }
 
   return {
-    name: snapshot.name,
-    role: snapshot.role,
-    title: typeof snapshot.title === "string" || snapshot.title === null ? snapshot.title : null,
-    reportsTo:
-      typeof snapshot.reportsTo === "string" || snapshot.reportsTo === null ? snapshot.reportsTo : null,
-    capabilities:
-      typeof snapshot.capabilities === "string" || snapshot.capabilities === null
-        ? snapshot.capabilities
-        : null,
-    adapterType: snapshot.adapterType,
+    name,
+    role,
+    title: asNullableString(snapshot.title),
+    reportsTo: asNullableString(snapshot.reportsTo),
+    capabilities: asNullableString(snapshot.capabilities),
+    adapterType,
     adapterConfig: isPlainRecord(snapshot.adapterConfig) ? snapshot.adapterConfig : {},
     runtimeConfig: isPlainRecord(snapshot.runtimeConfig) ? snapshot.runtimeConfig : {},
     budgetMonthlyCents: Math.max(0, Math.floor(snapshot.budgetMonthlyCents)),

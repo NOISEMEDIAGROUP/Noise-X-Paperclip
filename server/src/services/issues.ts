@@ -309,15 +309,13 @@ export function issueService(db: Db) {
       .then((rows) => rows[0] ?? null);
 
     if (!assignee) throw notFound("Assignee agent not found");
-    if (assignee.companyId !== companyId) {
-      throw unprocessable("Assignee must belong to same company");
-    }
-    if (assignee.status === "pending_approval") {
-      throw conflict("Cannot assign work to pending approval agents");
-    }
-    if (assignee.status === "terminated") {
-      throw conflict("Cannot assign work to terminated agents");
-    }
+    if (assignee.companyId !== companyId) throw unprocessable("Assignee must belong to same company");
+    const blockedStatuses: Record<string, string> = {
+      pending_approval: "Cannot assign work to pending approval agents",
+      terminated: "Cannot assign work to terminated agents",
+    };
+    const blockedMsg = blockedStatuses[assignee.status];
+    if (blockedMsg) throw conflict(blockedMsg);
   }
 
   async function assertAssignableUser(companyId: string, userId: string) {
@@ -644,16 +642,10 @@ export function issueService(db: Db) {
         const issueNumber = company.issueCounter;
         const identifier = `${company.issuePrefix}-${issueNumber}`;
 
-        const values = { ...issueData, companyId, issueNumber, identifier } as typeof issues.$inferInsert;
-        if (values.status === "in_progress" && !values.startedAt) {
-          values.startedAt = new Date();
-        }
-        if (values.status === "done") {
-          values.completedAt = new Date();
-        }
-        if (values.status === "cancelled") {
-          values.cancelledAt = new Date();
-        }
+        const values = applyStatusSideEffects(
+          issueData.status,
+          { ...issueData, companyId, issueNumber, identifier } as Partial<typeof issues.$inferInsert>,
+        ) as typeof issues.$inferInsert;
 
         const [issue] = await tx.insert(issues).values(values).returning();
         if (inputLabelIds) {

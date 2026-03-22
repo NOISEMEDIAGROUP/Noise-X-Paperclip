@@ -434,25 +434,11 @@ export function canReplayOpenClawGatewayInviteAccept(input: {
     "requestType" | "adapterType" | "status"
   > | null;
 }): boolean {
-  if (
-    input.requestType !== "agent" ||
-    input.adapterType !== "openclaw_gateway"
-  ) {
-    return false;
-  }
-  if (!input.existingJoinRequest) {
-    return false;
-  }
-  if (
-    input.existingJoinRequest.requestType !== "agent" ||
-    input.existingJoinRequest.adapterType !== "openclaw_gateway"
-  ) {
-    return false;
-  }
-  return (
-    input.existingJoinRequest.status === "pending_approval" ||
-    input.existingJoinRequest.status === "approved"
-  );
+  if (input.requestType !== "agent" || input.adapterType !== "openclaw_gateway") return false;
+  if (!input.existingJoinRequest) return false;
+  const { requestType, adapterType, status } = input.existingJoinRequest;
+  if (requestType !== "agent" || adapterType !== "openclaw_gateway") return false;
+  return status === "pending_approval" || status === "approved";
 }
 
 function summarizeSecretForLog(
