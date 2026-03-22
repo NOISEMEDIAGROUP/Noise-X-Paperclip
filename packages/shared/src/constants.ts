@@ -189,6 +189,9 @@ export const LIVE_EVENT_TYPES = [
   "heartbeat.run.log",
   "agent.status",
   "activity.logged",
+  "integration_block.created",
+  "integration_block.resolved",
+  "integration_recommendation.created",
 ] as const;
 export type LiveEventType = (typeof LIVE_EVENT_TYPES)[number];
 
@@ -222,3 +225,40 @@ export const PERMISSION_KEYS = [
   "joins:approve",
 ] as const;
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
+
+// Governance constants
+export const AGENT_MODES = ["manual", "automated", "hybrid"] as const;
+export type AgentMode = (typeof AGENT_MODES)[number];
+
+export const AGENT_CLASSES = ["observer", "advisor", "operator", "executor", "guardian", "learner"] as const;
+export type AgentClass = (typeof AGENT_CLASSES)[number];
+
+export const POLICY_ENVIRONMENTS = ["sandbox", "staging", "production"] as const;
+export type PolicyEnvironment = (typeof POLICY_ENVIRONMENTS)[number];
+
+export const ACTION_TIERS = [0, 1, 2, 3] as const;
+export type ActionTier = (typeof ACTION_TIERS)[number];
+
+export const CUSTOMER_IMPACT_LEVELS = ["none", "low", "medium", "high"] as const;
+export type CustomerImpactLevel = (typeof CUSTOMER_IMPACT_LEVELS)[number];
+
+export const GOVERNANCE_ACTION_IDS = [
+  "restart_service",
+  "retry_failed_job",
+  "pause_agent",
+  "resume_agent",
+  "open_issue",
+  "open_pr",
+  "deploy_staging",
+  "assign_issue",
+  "send_telegram_alert",
+  "send_email_alert",
+  "sync_metrics",
+  "recompute_kpis",
+  "replay_webhook",
+  "post_content",
+  "create_objective",
+  "update_objective_progress",
+  "request_human_approval",
+] as const;
+export type GovernanceActionId = (typeof GOVERNANCE_ACTION_IDS)[number];

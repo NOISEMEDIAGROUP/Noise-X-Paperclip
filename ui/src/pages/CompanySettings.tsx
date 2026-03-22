@@ -11,9 +11,10 @@ import { modelProvidersApi, type DiscoveredModel } from "../api/modelProviders";
 import { queryKeys } from "../lib/queryKeys";
 import { isAgentCompatibleForProviderKeySync } from "../lib/provider-key-sync";
 import { Button } from "@/components/ui/button";
-import { KeyRound, Settings } from "lucide-react";
+import { KeyRound, Settings, Lightbulb } from "lucide-react";
 import { CompanyPatternIcon } from "../components/CompanyPatternIcon";
 import { Field, ToggleField, HintIcon } from "../components/agent-config-primitives";
+import { RecommendationsSection } from "../components/settings/RecommendationsSection";
 import type { Agent, CompanySecret, EnvBinding } from "@paperclipai/shared";
 
 type ProviderId = "openai" | "anthropic" | "alibaba" | "groq" | "xai" | "minimax";
@@ -754,6 +755,9 @@ export function CompanySettings() {
           </Field>
         </div>
       </div>
+
+      {/* Agent Recommendations */}
+      <RecommendationsSection />
 
       {/* Appearance */}
       <div className="space-y-4">

@@ -137,3 +137,34 @@ export {
   type UpdateMemberPermissions,
   type UpdateUserCompanyAccess,
 } from "./access.js";
+
+export {
+  agentRuntimePolicySchema,
+  governanceActionProposalSchema,
+  type AgentRuntimePolicyInput,
+  type GovernanceActionProposalInput,
+} from "./governance.js";
+
+export {
+  departmentBootstrapSchema,
+  type DepartmentBootstrapInput,
+} from "./department.js";
+
+export {
+  createProductSchema,
+  updateProductSchema,
+  type CreateProductInput,
+  type UpdateProductInput,
+} from "./product.js";
+
+export {
+  businessConfigSchema,
+  createUserMetricsSnapshotSchema,
+  createProductHealthCheckSchema,
+  createBusinessKpiSchema,
+  createNotificationSchema,
+  createInfraCostSchema,
+  type CreateNotification,
+  type CreateInfraCost,
+  type CreateBusinessKpi,
+} from "./business-os.js";

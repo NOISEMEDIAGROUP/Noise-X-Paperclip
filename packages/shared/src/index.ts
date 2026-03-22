@@ -30,6 +30,13 @@ export {
   JOIN_REQUEST_TYPES,
   JOIN_REQUEST_STATUSES,
   PERMISSION_KEYS,
+  // Governance constants
+  AGENT_MODES,
+  AGENT_CLASSES,
+  POLICY_ENVIRONMENTS,
+  ACTION_TIERS,
+  CUSTOMER_IMPACT_LEVELS,
+  GOVERNANCE_ACTION_IDS,
   type CompanyStatus,
   type DeploymentMode,
   type DeploymentExposure,
@@ -60,6 +67,13 @@ export {
   type JoinRequestType,
   type JoinRequestStatus,
   type PermissionKey,
+  // Governance types
+  type AgentMode,
+  type AgentClass,
+  type PolicyEnvironment,
+  type ActionTier,
+  type CustomerImpactLevel,
+  type GovernanceActionId,
 } from "./constants.js";
 
 export type {
@@ -121,6 +135,37 @@ export type {
   AgentEnvConfig,
   CompanySecret,
   SecretProviderDescriptor,
+  // Integration types
+  IntegrationCatalog,
+  IntegrationCategory,
+  SetupDifficulty,
+  IntegrationRecommendation,
+  RecommendationStatus,
+  IntegrationBlock,
+  BlockStatus,
+  CreateRecommendationRequest,
+  GetRecommendationsResponse,
+  GetBlocksResponse,
+  GetCatalogResponse,
+  IntegrationCheckResult,
+  // Governance types
+  AgentRuntimePolicy,
+  ActionCatalogEntry,
+  GovernanceRiskAssessment,
+  GovernanceActionProposal,
+  // Department types
+  DepartmentStatus,
+  DepartmentStatusEntry,
+  DepartmentStatusSummary,
+  DepartmentBootstrapResult,
+  // Product types
+  ProductStatus,
+  ProductType,
+  PrimaryChannel,
+  Product,
+  CreateProduct,
+  UpdateProduct,
+  ProductAnalyticsSummary,
 } from "./types/index.js";
 
 export {
@@ -229,6 +274,29 @@ export {
   type CompanyPortabilityExport,
   type CompanyPortabilityPreview,
   type CompanyPortabilityImport,
+  // Governance validators
+  agentRuntimePolicySchema,
+  governanceActionProposalSchema,
+  type AgentRuntimePolicyInput,
+  type GovernanceActionProposalInput,
+  // Department validators
+  departmentBootstrapSchema,
+  type DepartmentBootstrapInput,
+  // Product validators
+  createProductSchema,
+  updateProductSchema,
+  type CreateProductInput,
+  type UpdateProductInput,
+  // Business OS validators
+  businessConfigSchema,
+  createUserMetricsSnapshotSchema,
+  createProductHealthCheckSchema,
+  createBusinessKpiSchema,
+  createNotificationSchema,
+  createInfraCostSchema,
+  type CreateNotification,
+  type CreateInfraCost,
+  type CreateBusinessKpi,
 } from "./validators/index.js";
 
 export { API_PREFIX, API } from "./api.js";

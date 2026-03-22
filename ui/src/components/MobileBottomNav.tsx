@@ -6,7 +6,7 @@ import {
   CircleDot,
   SquarePen,
   Users,
-  Inbox,
+  Settings,
 } from "lucide-react";
 import { sidebarBadgesApi } from "../api/sidebarBadges";
 import { useCompany } from "../context/CompanyContext";
@@ -52,15 +52,9 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
       { type: "link", to: "/issues", label: "Issues", icon: CircleDot },
       { type: "action", label: "Create", icon: SquarePen, onClick: () => openNewIssue() },
       { type: "link", to: "/agents/all", label: "Agents", icon: Users },
-      {
-        type: "link",
-        to: "/inbox",
-        label: "Inbox",
-        icon: Inbox,
-        badge: sidebarBadges?.inbox,
-      },
+      { type: "link", to: "/settings/company", label: "Settings", icon: Settings },
     ],
-    [openNewIssue, sidebarBadges?.inbox],
+    [openNewIssue],
   );
 
   return (

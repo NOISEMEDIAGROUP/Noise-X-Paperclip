@@ -26,6 +26,9 @@ import { llmRoutes } from "./routes/llms.js";
 import { modelProviderRoutes } from "./routes/model-providers.js";
 import { assetRoutes } from "./routes/assets.js";
 import { accessRoutes } from "./routes/access.js";
+import { integrationRecommendationRoutes } from "./routes/integrationRecommendations.js";
+import { departmentRoutes } from "./routes/departments.js";
+import { productRoutes } from "./routes/products.js";
 import type { BetterAuthSessionResult } from "./auth/better-auth.js";
 
 type UiMode = "none" | "static" | "vite-dev";
@@ -116,6 +119,9 @@ export async function createApp(
   api.use(activityRoutes(db));
   api.use(dashboardRoutes(db));
   api.use(sidebarBadgeRoutes(db));
+  api.use(integrationRecommendationRoutes(db));
+  api.use(departmentRoutes(db));
+  api.use(productRoutes(db));
   api.use(
     accessRoutes(db, {
       deploymentMode: opts.deploymentMode,

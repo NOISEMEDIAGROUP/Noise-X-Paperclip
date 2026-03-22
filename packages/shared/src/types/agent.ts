@@ -2,7 +2,11 @@ import type {
   AgentAdapterType,
   AgentRole,
   AgentStatus,
+  AgentMode,
+  AgentClass,
+  PolicyEnvironment,
 } from "../constants.js";
+import type { AgentRuntimePolicy } from "./governance.js";
 
 export interface AgentPermissions {
   canCreateAgents: boolean;
@@ -22,6 +26,12 @@ export interface Agent {
   adapterType: AgentAdapterType;
   adapterConfig: Record<string, unknown>;
   runtimeConfig: Record<string, unknown>;
+  // Governance fields (computed, may not always be present)
+  mode?: AgentMode;
+  classes?: AgentClass[];
+  runtimeEnvironment?: PolicyEnvironment;
+  runtimePolicy?: AgentRuntimePolicy;
+  // Budget and permissions
   budgetMonthlyCents: number;
   spentMonthlyCents: number;
   permissions: AgentPermissions;

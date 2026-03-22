@@ -23,6 +23,7 @@ import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard } from "lucide
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
 import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
 import { PageSkeleton } from "../components/PageSkeleton";
+import { IntegrationBlockBanner } from "../components/IntegrationBlockBanner";
 import type { Agent, Issue } from "@paperclipai/shared";
 
 function getRecentIssues(issues: Issue[]): Issue[] {
@@ -204,6 +205,9 @@ export function Dashboard() {
           </button>
         </div>
       )}
+
+      {/* Integration blocks banner - shows when agents are waiting for integrations */}
+      <IntegrationBlockBanner />
 
       <ActiveAgentsPanel companyId={selectedCompanyId!} />
 

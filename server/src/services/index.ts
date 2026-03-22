@@ -18,3 +18,5 @@ export { companyPortabilityService } from "./company-portability.js";
 export { logActivity, type LogActivityInput } from "./activity-log.js";
 export { publishLiveEvent, subscribeCompanyLiveEvents } from "./live-events.js";
 export { createStorageServiceFromConfig, getStorageService } from "../storage/index.js";
+export { integrationCheckService, INTEGRATION_REQUIREMENTS } from "./integrationCheck.js";
+export { productService } from "./products.js";

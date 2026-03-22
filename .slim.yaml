@@ -1,0 +1,8 @@
+# Paperclip - AI Agent Company Platform
+# Slim.sh configuration for local HTTPS development
+
+services:
+  - domain: paperclip
+    port: 3100
+    # UI + API served from same port (vite middleware in dev)
+log_mode: minimal

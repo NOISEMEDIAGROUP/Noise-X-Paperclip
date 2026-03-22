@@ -12,6 +12,8 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    host: true,
+    allowedHosts: ["paperclip.test", "localhost"],
     proxy: {
       "/api": {
         target: "http://localhost:3100",

@@ -31,3 +31,10 @@ export { approvalComments } from "./approval_comments.js";
 export { activityLog } from "./activity_log.js";
 export { companySecrets } from "./company_secrets.js";
 export { companySecretVersions } from "./company_secret_versions.js";
+export { integrationCatalog, integrationRecommendations, integrationBlocks } from "./integrationRecommendations.js";
+// Product-related tables
+export { products } from "./products.js";
+export { newsletterSubscribers } from "./newsletter_subscribers.js";
+export { productHealthChecks } from "./product_health_checks.js";
+export { revenueEvents } from "./revenue_events.js";
+export { userMetricsSnapshots } from "./user_metrics_snapshots.js";

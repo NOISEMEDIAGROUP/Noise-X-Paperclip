@@ -1,5 +1,4 @@
 import {
-  Inbox,
   CircleDot,
   Target,
   LayoutDashboard,
@@ -8,9 +7,12 @@ import {
   Search,
   SquarePen,
   Network,
-  Sparkles,
   Settings,
+  ChevronDown,
+  ChevronRight,
+  Shield,
 } from "lucide-react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarSection } from "./SidebarSection";
 import { SidebarNavItem } from "./SidebarNavItem";
@@ -22,10 +24,13 @@ import { sidebarBadgesApi } from "../api/sidebarBadges";
 import { heartbeatsApi } from "../api/heartbeats";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export function Sidebar() {
   const { openNewIssue } = useDialog();
   const { selectedCompanyId, selectedCompany } = useCompany();
+  const [moreExpanded, setMoreExpanded] = useState(false);
+  
   const { data: sidebarBadges } = useQuery({
     queryKey: queryKeys.sidebarBadges(selectedCompanyId!),
     queryFn: () => sidebarBadgesApi.get(selectedCompanyId!),
@@ -76,34 +81,44 @@ export function Sidebar() {
             <SquarePen className="h-4 w-4 shrink-0" />
             <span className="truncate">New Issue</span>
           </button>
+          {/* Phase 5: Primary navigation - Dashboard, Tasks, Projects, Agents */}
           <SidebarNavItem to="/dashboard" label="Dashboard" icon={LayoutDashboard} liveCount={liveRunCount} />
-          <SidebarNavItem
-            to="/inbox"
-            label="Inbox"
-            icon={Inbox}
-            badge={sidebarBadges?.inbox}
-            badgeTone={sidebarBadges?.failedRuns ? "danger" : "default"}
-            alert={(sidebarBadges?.failedRuns ?? 0) > 0}
-          />
+          <SidebarNavItem to="/issues" label="Tasks" icon={CircleDot} />
         </div>
-
-        <SidebarSection label="Work">
-          <SidebarNavItem to="/issues" label="Issues" icon={CircleDot} />
-          <SidebarNavItem to="/goals" label="Goals" icon={Target} />
-        </SidebarSection>
 
         <SidebarProjects />
 
         <SidebarAgents />
 
-        <SidebarSection label="Company">
-          <SidebarNavItem to="/org" label="Org" icon={Network} />
-          <SidebarNavItem to="/skills" label="Skills" icon={Sparkles} />
-          <SidebarNavItem to="/costs" label="Costs" icon={DollarSign} />
-          <SidebarNavItem to="/activity" label="Activity" icon={History} />
-          <SidebarNavItem to="/company/settings" label="Settings" icon={Settings} />
-        </SidebarSection>
+        {/* Phase 5: More section - collapsible for secondary items */}
+        <div className="flex flex-col gap-0.5">
+          <button
+            onClick={() => setMoreExpanded(!moreExpanded)}
+            className="flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+          >
+            {moreExpanded ? (
+              <ChevronDown className="h-4 w-4 shrink-0" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0" />
+            )}
+            <span className="truncate">More</span>
+          </button>
+          {moreExpanded && (
+            <div className="flex flex-col gap-0.5 pl-2">
+              <SidebarNavItem to="/goals" label="Goals" icon={Target} />
+              <SidebarNavItem to="/approvals/pending" label="Approvals" icon={Shield} badge={sidebarBadges?.approvals} />
+              <SidebarNavItem to="/org" label="Org" icon={Network} />
+              <SidebarNavItem to="/costs" label="Costs" icon={DollarSign} />
+              <SidebarNavItem to="/activity" label="Activity" icon={History} />
+            </div>
+          )}
+        </div>
       </nav>
+
+      {/* Phase 5: Settings at fixed bottom position */}
+      <div className="shrink-0 border-t border-border px-3 py-2">
+        <SidebarNavItem to="/settings/company" label="Settings" icon={Settings} />
+      </div>
     </aside>
   );
 }

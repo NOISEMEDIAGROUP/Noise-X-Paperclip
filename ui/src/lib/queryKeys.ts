@@ -71,4 +71,46 @@ export const queryKeys = {
   liveRuns: (companyId: string) => ["live-runs", companyId] as const,
   runIssues: (runId: string) => ["run-issues", runId] as const,
   org: (companyId: string) => ["org", companyId] as const,
+  // Department query keys
+  departments: {
+    status: (companyId: string) => ["departments", "status", companyId] as const,
+  },
+  // Product query keys
+  products: {
+    list: (companyId: string) => ["products", companyId] as const,
+    analytics: (companyId: string, productId: string) => ["products", "analytics", companyId, productId] as const,
+  },
+  // Newsletter query keys
+  newsletter: {
+    subscribers: (companyId: string) => ["newsletter", "subscribers", companyId] as const,
+    summary: (companyId: string) => ["newsletter", "summary", companyId] as const,
+    landing: (companyId: string) => ["newsletter", "landing", companyId] as const,
+  },
+  // Objectives query keys
+  objectives: {
+    list: (companyId: string) => ["objectives", companyId] as const,
+  },
+  // Business OS query keys
+  businessOs: {
+    kpis: (companyId: string) => ["businessOs", "kpis", companyId] as const,
+    costs: (companyId: string) => ["businessOs", "costs", companyId] as const,
+    users: (companyId: string) => ["businessOs", "users", companyId] as const,
+    notifications: (companyId: string) => ["businessOs", "notifications", companyId] as const,
+    finance: (companyId: string) => ["businessOs", "finance", companyId] as const,
+    health: (companyId: string) => ["businessOs", "health", companyId] as const,
+    revenue: (companyId: string) => ["businessOs", "revenue", companyId] as const,
+    integrationStatus: (companyId: string) => ["businessOs", "integrationStatus", companyId] as const,
+    config: (companyId: string) => ["businessOs", "config", companyId] as const,
+  },
+// Portfolio query keys
+  portfolio: ["portfolio"] as const,
+  // Governance query keys
+  governance: {
+    policies: (companyId: string) => ["governance", "policies", companyId] as const,
+    catalog: (companyId: string) => ["governance", "catalog", companyId] as const,
+  },
+  // Integration recommendation query keys
+  integrationBlocks: (companyId: string) => ["integration-blocks", companyId] as const,
+  integrationRecommendations: (companyId: string) => ["integration-recommendations", companyId] as const,
+  integrationCatalog: ["integration-catalog"] as const,
 };

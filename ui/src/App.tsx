@@ -22,6 +22,7 @@ import { Costs } from "./pages/Costs";
 import { Activity } from "./pages/Activity";
 import { Inbox } from "./pages/Inbox";
 import { CompanySettings } from "./pages/CompanySettings";
+import { SettingsPage } from "./pages/Settings";
 import { Skills } from "./pages/Skills";
 import { DesignGuide } from "./pages/DesignGuide";
 import { OrgChart } from "./pages/OrgChart";
@@ -95,7 +96,13 @@ function boardRoutes() {
       <Route index element={<Navigate to="dashboard" replace />} />
       <Route path="dashboard" element={<Dashboard />} />
       <Route path="companies" element={<Companies />} />
-      <Route path="company/settings" element={<CompanySettings />} />
+      {/* Phase 4: Consolidated Settings with tabs */}
+      <Route path="settings" element={<Navigate to="settings/company" replace />} />
+      <Route path="settings/company" element={<SettingsPage />} />
+      <Route path="settings/integrations" element={<SettingsPage />} />
+      <Route path="settings/governance" element={<SettingsPage />} />
+      {/* Legacy redirect for old route */}
+      <Route path="company/settings" element={<Navigate to="../settings/company" replace />} />
       <Route path="skills" element={<Skills />} />
       <Route path="org" element={<OrgChart />} />
       <Route path="agents" element={<Navigate to="/agents/all" replace />} />

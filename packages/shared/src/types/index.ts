@@ -70,3 +70,41 @@ export type {
   CompanyPortabilityImportResult,
   CompanyPortabilityExportRequest,
 } from "./company-portability.js";
+export type {
+  IntegrationCatalog,
+  IntegrationCategory,
+  SetupDifficulty,
+  IntegrationRecommendation,
+  RecommendationStatus,
+  IntegrationBlock,
+  BlockStatus,
+  CreateRecommendationRequest,
+  GetRecommendationsResponse,
+  GetBlocksResponse,
+  GetCatalogResponse,
+  IntegrationCheckResult,
+} from "./integrationRecommendations.js";
+
+export type {
+  AgentRuntimePolicy,
+  ActionCatalogEntry,
+  GovernanceRiskAssessment,
+  GovernanceActionProposal,
+} from "./governance.js";
+
+export type {
+  DepartmentStatus,
+  DepartmentStatusEntry,
+  DepartmentStatusSummary,
+  DepartmentBootstrapResult,
+} from "./department.js";
+
+export type {
+  ProductStatus,
+  ProductType,
+  PrimaryChannel,
+  Product,
+  CreateProduct,
+  UpdateProduct,
+  ProductAnalyticsSummary,
+} from "./product.js";

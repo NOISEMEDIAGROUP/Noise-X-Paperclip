@@ -14,3 +14,6 @@ export { sidebarBadgeRoutes } from "./sidebar-badges.js";
 export { llmRoutes } from "./llms.js";
 export { modelProviderRoutes } from "./model-providers.js";
 export { accessRoutes } from "./access.js";
+export { integrationRecommendationRoutes } from "./integrationRecommendations.js";
+export { departmentRoutes } from "./departments.js";
+export { productRoutes } from "./products.js";

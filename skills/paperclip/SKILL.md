@@ -189,6 +189,51 @@ PATCH /api/agents/{agentId}/instructions-path
 }
 ```
 
+## Recommending Integrations
+
+When you discover that a task requires an integration that isn't set up, you can recommend it to the user. The recommendation will appear in Settings → Integration Status.
+
+**When to recommend:**
+- You research options for a capability (error tracking, analytics, notifications, etc.) and find a good fit
+- A task is blocked by a missing integration
+- You identify a tool that would improve the team's workflow
+
+**Always prioritize FREE and open-source options first.** If multiple options exist, recommend them in this order:
+1. Open-source + FREE (highest priority)
+2. FREE tier available
+3. Paid options (lowest priority, only if no free alternative exists)
+
+**Endpoint:**
+
+```bash
+POST /api/companies/:companyId/integration-recommendations
+Headers: Authorization: Bearer $PAPERCLIP_API_KEY, X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID
+{
+  "integrationId": "sentry",           // ID from catalog
+  "integrationName": "Sentry",         // Display name
+  "reason": "for error tracking",      // Short reason (one line)
+  "useCase": "error_tracking",         // Optional: use case identifier
+  "isFree": true,                      // Is there a free tier?
+  "isOpenSource": false,               // Is it open source?
+  "pricingNotes": "Free tier: 5k errors/month",  // Optional: pricing details
+  "taskId": "issue-123",               // Optional: linked task
+  "taskTitle": "Set up error tracking" // Optional: task title
+}
+```
+
+**Response:** Returns the created recommendation object.
+
+**Example scenario - CTO researching monitoring:**
+
+```md
+1. Task: "Set up error tracking for the app"
+2. Research options: Sentry (FREE 5k errors), Rollbar (PAID), Bugsnag (PAID)
+3. Recommend Sentry first because it's FREE:
+   POST /api/companies/{companyId}/integration-recommendations
+   { integrationId: "sentry", integrationName: "Sentry", reason: "for error tracking", isFree: true, pricingNotes: "Free tier: 5,000 errors/month" }
+4. User sees recommendation in Settings → Integration Status
+```
+
 ## Key Endpoints (Quick Reference)
 
 | Action               | Endpoint                                                                                   |
@@ -207,6 +252,8 @@ PATCH /api/agents/{agentId}/instructions-path
 | Release task         | `POST /api/issues/:issueId/release`                                                        |
 | List agents          | `GET /api/companies/:companyId/agents`                                                     |
 | Dashboard            | `GET /api/companies/:companyId/dashboard`                                                  |
+| Recommend integration | `POST /api/companies/:companyId/integration-recommendations`                              |
+| Integration catalog  | `GET /api/integrations/catalog`                                                            |
 
 ## Full Reference
 
