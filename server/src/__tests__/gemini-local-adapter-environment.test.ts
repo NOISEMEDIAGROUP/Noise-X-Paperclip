@@ -30,7 +30,7 @@ async function writeGeminiWrapper(binDir: string, scriptBody: string): Promise<s
   return commandPath;
 }
 
-async function writeFakeGeminiCommand(binDir: string, argsCapturePath: string): Promise<string> {
+async function writeFakeGeminiCommand(binDir: string): Promise<string> {
   const script = `
 const fs = require("node:fs");
 const outPath = process.env.PAPERCLIP_TEST_ARGS_PATH;
@@ -96,7 +96,7 @@ describe("gemini_local environment diagnostics", () => {
     const cwd = path.join(root, "workspace");
     const argsCapturePath = path.join(root, "args.json");
     await fs.mkdir(binDir, { recursive: true });
-    await writeFakeGeminiCommand(binDir, argsCapturePath);
+    await writeFakeGeminiCommand(binDir);
 
     const result = await testEnvironment({
       companyId: "company-1",
