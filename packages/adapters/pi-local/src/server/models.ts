@@ -137,8 +137,6 @@ export async function discoverPiModels(input: {
   return sortModels(dedupeModels(parseModelsOutput(rawOutput)));
 }
 
-
-
 function normalizeEnv(input: unknown): Record<string, string> {
   const envInput = typeof input === "object" && input !== null && !Array.isArray(input)
     ? (input as Record<string, unknown>)
