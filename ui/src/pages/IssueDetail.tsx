@@ -8,6 +8,7 @@ import { agentsApi } from "../api/agents";
 import { authApi } from "../api/auth";
 import { projectsApi } from "../api/projects";
 import { useCompany } from "../context/CompanyContext";
+import { useToast } from "../context/ToastContext";
 import { usePanel } from "../context/PanelContext";
 import { useToast } from "../context/ToastContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
@@ -196,6 +197,7 @@ function ActorIdentity({ evt, agentMap }: { evt: ActivityEvent; agentMap: Map<st
 export function IssueDetail() {
   const { issueId } = useParams<{ issueId: string }>();
   const { selectedCompanyId } = useCompany();
+  const { pushToast } = useToast();
   const { openPanel, closePanel, panelVisible, setPanelVisible } = usePanel();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
@@ -480,6 +482,13 @@ export function IssueDetail() {
     onSuccess: () => {
       invalidateIssue();
     },
+    onError: (err) => {
+      pushToast({
+        title: "Failed to update issue",
+        body: err instanceof Error ? err.message : "An error occurred",
+        tone: "error",
+      });
+    },
   });
 
   const addComment = useMutation({
@@ -488,6 +497,13 @@ export function IssueDetail() {
     onSuccess: () => {
       invalidateIssue();
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.comments(issueId!) });
+    },
+    onError: (err) => {
+      pushToast({
+        title: "Failed to add comment",
+        body: err instanceof Error ? err.message : "An error occurred",
+        tone: "error",
+      });
     },
   });
 
@@ -510,6 +526,13 @@ export function IssueDetail() {
     onSuccess: () => {
       invalidateIssue();
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.comments(issueId!) });
+    },
+    onError: (err) => {
+      pushToast({
+        title: "Failed to update issue",
+        body: err instanceof Error ? err.message : "An error occurred",
+        tone: "error",
+      });
     },
   });
 
