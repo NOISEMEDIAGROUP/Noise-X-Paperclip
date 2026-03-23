@@ -407,24 +407,48 @@ type PendingRequest = {
 };
 
 class CodexRpcClient {
-  private proc = spawn(
-    "codex",
-    ["-s", "read-only", "-a", "untrusted", "app-server"],
-    { stdio: ["pipe", "pipe", "pipe"], env: process.env },
-  );
+  private proc;
 
   private nextId = 1;
   private buffer = "";
   private pending = new Map<number, PendingRequest>();
   private stderr = "";
 
+  private spawnError: Error | null = null;
+
   constructor() {
+    this.proc = spawn(
+      "codex",
+      ["-s", "read-only", "-a", "untrusted", "app-server"],
+      { stdio: ["pipe", "pipe", "pipe"], env: process.env },
+    );
+
+    const rejectAll = (err: Error) => {
+      this.spawnError = err;
+      for (const request of this.pending.values()) {
+        clearTimeout(request.timer);
+        request.reject(err);
+      }
+      this.pending.clear();
+    };
+
+    this.proc.on("error", rejectAll);
+
+    // Prevent unhandled 'error' events on stdin/stdout/stderr from crashing
+    // the process when the codex binary is missing (ENOENT).
+    this.proc.stdin.on("error", (err: Error) => {
+      if (!this.spawnError) rejectAll(err);
+    });
+
     this.proc.stdout.setEncoding("utf8");
     this.proc.stderr.setEncoding("utf8");
     this.proc.stdout.on("data", (chunk: string) => this.onStdout(chunk));
+    this.proc.stdout.on("error", () => {});
     this.proc.stderr.on("data", (chunk: string) => {
       this.stderr += chunk;
     });
+    this.proc.stderr.on("error", () => {});
+
     this.proc.on("exit", () => {
       for (const request of this.pending.values()) {
         clearTimeout(request.timer);
@@ -459,6 +483,7 @@ class CodexRpcClient {
   }
 
   private request(method: string, params: Record<string, unknown> = {}, timeoutMs = 6_000): Promise<Record<string, unknown>> {
+    if (this.spawnError) return Promise.reject(this.spawnError);
     const id = this.nextId++;
     const payload = JSON.stringify({ id, method, params }) + "\n";
     return new Promise<Record<string, unknown>>((resolve, reject) => {
@@ -467,12 +492,22 @@ class CodexRpcClient {
         reject(new Error(`codex app-server timed out on ${method}`));
       }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
-      this.proc.stdin.write(payload);
+      try {
+        this.proc.stdin.write(payload);
+      } catch (err) {
+        this.pending.delete(id);
+        clearTimeout(timer);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
     });
   }
 
   private notify(method: string, params: Record<string, unknown> = {}) {
-    this.proc.stdin.write(JSON.stringify({ method, params }) + "\n");
+    try {
+      this.proc.stdin.write(JSON.stringify({ method, params }) + "\n");
+    } catch {
+      // ignore — process is dead or stdin is closed
+    }
   }
 
   async initialize() {
@@ -500,7 +535,7 @@ class CodexRpcClient {
   }
 
   async shutdown() {
-    this.proc.kill("SIGTERM");
+    if (!this.spawnError) this.proc.kill("SIGTERM");
   }
 }
 
