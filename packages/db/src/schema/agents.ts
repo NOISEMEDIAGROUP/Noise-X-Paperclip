@@ -37,6 +37,7 @@ export const agents = pgTable(
     capabilityTags: text("capability_tags").array().notNull().default(sql`'{}'::text[]`),
     specialty: text("specialty"),
     currentTaskSummary: text("current_task_summary"),
+    availability: text("availability").default("available"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

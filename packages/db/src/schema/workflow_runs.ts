@@ -16,6 +16,7 @@ export const workflowRuns = pgTable(
     onStepFailure: text("on_step_failure").notNull().default("pause"),
     maxRetries: integer("max_retries").notNull().default(1),
     timeoutPerStepMs: integer("timeout_per_step_ms").notNull().default(300_000),
+    workflowType: text("workflow_type").default("pipeline"),
     result: jsonb("result"),
     error: text("error"),
     startedAt: timestamp("started_at", { withTimezone: true }),

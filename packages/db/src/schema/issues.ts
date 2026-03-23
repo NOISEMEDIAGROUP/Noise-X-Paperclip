@@ -51,6 +51,8 @@ export const issues = pgTable(
     completedAt: timestamp("completed_at", { withTimezone: true }),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     hiddenAt: timestamp("hidden_at", { withTimezone: true }),
+    delegatedFromCompanyId: uuid("delegated_from_company_id").references(() => companies.id),
+    delegatedFromIssueId: uuid("delegated_from_issue_id").references((): AnyPgColumn => issues.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
