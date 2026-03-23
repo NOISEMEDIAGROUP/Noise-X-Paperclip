@@ -40,6 +40,26 @@ export function resolveCircuitBreakerConfig(
   };
 }
 
+const GATEWAY_CIRCUIT_BREAKER: CircuitBreakerConfig = {
+  ...DEFAULT_CIRCUIT_BREAKER,
+  maxConsecutiveFailures: 5,
+};
+
+export function resolveCircuitBreakerConfigForAdapter(
+  agentConfig: Record<string, unknown> | null | undefined,
+  adapterType: string | null,
+): CircuitBreakerConfig {
+  const base = resolveCircuitBreakerConfig(agentConfig);
+  // Gateway agents get a more lenient threshold since timeouts are often transient
+  if (
+    adapterType === "openclaw_gateway" &&
+    !(agentConfig && typeof (agentConfig as Record<string, unknown>).maxConsecutiveFailures === "number")
+  ) {
+    return { ...base, maxConsecutiveFailures: GATEWAY_CIRCUIT_BREAKER.maxConsecutiveFailures };
+  }
+  return base;
+}
+
 export interface CircuitBreakerEvaluation {
   tripped: boolean;
   reason: string | null;

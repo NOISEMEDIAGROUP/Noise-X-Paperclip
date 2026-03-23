@@ -62,19 +62,20 @@ async function main() {
   }
   console.log();
 
-  // 2. Patch: set authToken + url in adapterConfig, preserving existing fields
+  // 2. Patch: set authToken + url + expectedCompanyId in adapterConfig, preserving existing fields
   const patched = await sql`
     UPDATE agents
     SET
       adapter_config = adapter_config || jsonb_build_object(
         'authToken', ${token}::text,
-        'url', COALESCE(adapter_config->>'url', ${OPENCLAW_GATEWAY_URL}::text)
+        'url', COALESCE(adapter_config->>'url', ${OPENCLAW_GATEWAY_URL}::text),
+        'expectedCompanyId', ${COMPANY_ID}::text
       ),
       updated_at = NOW()
     WHERE company_id = ${COMPANY_ID}
       AND adapter_type = 'openclaw_gateway'
   `;
-  console.log(`[1] Patched ${patched.count} openclaw_gateway agents with authToken`);
+  console.log(`[1] Patched ${patched.count} openclaw_gateway agents with authToken + expectedCompanyId`);
 
   // 3. Verify
   const after = await sql`

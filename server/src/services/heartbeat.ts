@@ -33,7 +33,7 @@ import { resolveDefaultAgentWorkspaceDir, resolveManagedProjectWorkspaceDir } fr
 import { summarizeHeartbeatRunResultJson } from "./heartbeat-run-summary.js";
 import {
   evaluateCircuitBreaker,
-  resolveCircuitBreakerConfig,
+  resolveCircuitBreakerConfigForAdapter,
   tripCircuitBreaker,
 } from "./circuit-breaker.js";
 import {
@@ -2850,7 +2850,7 @@ export function heartbeatService(db: Db) {
 
       // Circuit breaker evaluation after run completes
       try {
-        const cbConfig = resolveCircuitBreakerConfig(agent.circuitBreakerConfig as Record<string, unknown> | null);
+        const cbConfig = resolveCircuitBreakerConfigForAdapter(agent.circuitBreakerConfig as Record<string, unknown> | null, agent.adapterType);
         if (cbConfig.enabled) {
           const cbEval = await evaluateCircuitBreaker(db, agent.id, cbConfig);
           if (cbEval.tripped) {
@@ -2930,7 +2930,7 @@ export function heartbeatService(db: Db) {
 
       // Circuit breaker evaluation after failure
       try {
-        const cbConfig = resolveCircuitBreakerConfig(agent.circuitBreakerConfig as Record<string, unknown> | null);
+        const cbConfig = resolveCircuitBreakerConfigForAdapter(agent.circuitBreakerConfig as Record<string, unknown> | null, agent.adapterType);
         if (cbConfig.enabled) {
           const cbEval = await evaluateCircuitBreaker(db, agent.id, cbConfig);
           if (cbEval.tripped) {

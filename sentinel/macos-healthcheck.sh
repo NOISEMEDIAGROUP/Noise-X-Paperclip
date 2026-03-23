@@ -81,6 +81,18 @@ else
   FINDINGS="$FINDINGS | TAILSCALE: binary not found"
 fi
 
+# 7. OPENCLAW GATEWAY CHECK
+GW_HTTP=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "http://127.0.0.1:18789/" 2>/dev/null || echo "000")
+if [ "$GW_HTTP" = "000" ] || [ "$GW_HTTP" = "502" ] || [ "$GW_HTTP" = "503" ]; then
+  STATUS="CRITICAL"
+  FINDINGS="$FINDINGS | OPENCLAW_GATEWAY: DOWN (HTTP=$GW_HTTP)"
+  # Attempt auto-restart via OpenClaw's LaunchAgent
+  launchctl kickstart -k "gui/$(id -u)/ai.openclaw.gateway" 2>/dev/null || true
+elif [ "$GW_HTTP" != "200" ] && [ "$GW_HTTP" != "426" ]; then
+  [ "$STATUS" = "OK" ] && STATUS="WARNING"
+  FINDINGS="$FINDINGS | OPENCLAW_GATEWAY: DEGRADED (HTTP=$GW_HTTP)"
+fi
+
 # LOG RESULT
 RESULT="[$TIMESTAMP] MACHINE=$MACHINE_NAME STATUS=$STATUS DISK=${DISK_PCT}% SWAP=${SWAP_USED_MB}MB LOAD=${LOAD_1M} NODE=${NODE_COUNT} PYTHON=${PYTHON_COUNT}${FINDINGS}"
 echo "$RESULT" >> "$LOG_DIR/mac-health.log"

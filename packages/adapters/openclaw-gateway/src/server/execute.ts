@@ -86,6 +86,9 @@ const DEFAULT_CLIENT_MODE = "backend";
 const DEFAULT_CLIENT_VERSION = "paperclip";
 const DEFAULT_ROLE = "operator";
 
+const MAX_EXECUTION_RETRIES = 2;
+const RETRY_DELAY_MS = 3_000;
+
 const SENSITIVE_LOG_KEY_PATTERN =
   /(^|[_-])(auth|authorization|token|secret|password|api[_-]?key|private[_-]?key)([_-]|$)|^x-openclaw-(auth|token)$/i;
 
@@ -1046,6 +1049,41 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     };
   }
 
+  // Cross-company credential guard
+  const expectedCompanyId = nonEmpty(ctx.config.expectedCompanyId);
+  if (expectedCompanyId && ctx.agent.companyId !== expectedCompanyId) {
+    return {
+      exitCode: 1,
+      signal: null,
+      timedOut: false,
+      errorMessage: `Cross-company access denied: agent company ${ctx.agent.companyId} does not match gateway expected company ${expectedCompanyId}`,
+      errorCode: "openclaw_gateway_company_mismatch",
+    };
+  }
+
+  // Pre-flight health probe — fast-fail if gateway is unreachable
+  const healthProbeUrl = `http${parsedUrl.protocol === "wss:" ? "s" : ""}://${parsedUrl.host}/`;
+  try {
+    const probe = await fetch(healthProbeUrl, { signal: AbortSignal.timeout(5_000) });
+    if (!probe.ok && probe.status !== 426) {
+      return {
+        exitCode: 1,
+        signal: null,
+        timedOut: false,
+        errorMessage: `Gateway health probe failed: HTTP ${probe.status}`,
+        errorCode: "openclaw_gateway_unhealthy",
+      };
+    }
+  } catch (probeErr) {
+    return {
+      exitCode: 1,
+      signal: null,
+      timedOut: false,
+      errorMessage: `Gateway unreachable: ${probeErr instanceof Error ? probeErr.message : String(probeErr)}`,
+      errorCode: "openclaw_gateway_unreachable",
+    };
+  }
+
   const timeoutSec = Math.max(0, Math.floor(asNumber(ctx.config.timeoutSec, 120)));
   const timeoutMs = timeoutSec > 0 ? timeoutSec * 1000 : 0;
   const connectTimeoutMs = timeoutMs > 0 ? Math.min(timeoutMs, 15_000) : 10_000;
@@ -1152,6 +1190,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const autoPairOnFirstConnect = parseBoolean(ctx.config.autoPairOnFirstConnect, true);
   let autoPairAttempted = false;
   let latestResultPayload: unknown = null;
+  let executionRetryCount = 0;
 
   while (true) {
     const trackedRunIds = new Set<string>([ctx.runId]);
@@ -1439,6 +1478,17 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
           "stderr",
           `[openclaw-gateway] auto-pairing failed: ${pairResult.reason}\n`,
         );
+      }
+
+      // Timeout retry — transient LLM/network failures
+      if (timedOut && executionRetryCount < MAX_EXECUTION_RETRIES) {
+        executionRetryCount++;
+        await ctx.onLog(
+          "stdout",
+          `[openclaw-gateway] timeout retry ${executionRetryCount}/${MAX_EXECUTION_RETRIES} after ${RETRY_DELAY_MS}ms\n`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+        continue;
       }
 
       const detailedMessage = pairingRequired
