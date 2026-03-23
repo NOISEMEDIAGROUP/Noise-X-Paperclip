@@ -545,6 +545,10 @@ export function shouldResetTaskSessionForWake(
   return false;
 }
 
+export function isPendingIssueStatusForTimerWake(status: string): boolean {
+  return status === "todo" || status === "in_progress";
+}
+
 export function formatRuntimeWorkspaceWarningLog(warning: string) {
   return {
     stream: "stdout" as const,
