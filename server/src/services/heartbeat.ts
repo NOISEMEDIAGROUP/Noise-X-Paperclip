@@ -2562,27 +2562,35 @@ export function heartbeatService(db: Db) {
           "local agent jwt secret missing or invalid; running without injected PAPERCLIP_API_KEY",
         );
       }
-      // Inject vault snapshot for cross-platform context awareness
-      try {
-        context.vaultSnapshot = await getVaultSnapshot();
-      } catch { /* non-fatal: vault may be unavailable */ }
+      // Inject vault snapshot — only for agents that opt-in via runtimeConfig
+      const heartbeatCfg = parseObject(agent.runtimeConfig)?.heartbeat as Record<string, unknown> | undefined;
+      const injectVault = heartbeatCfg?.injectVaultSnapshot === true;
+      if (injectVault) {
+        try {
+          context.vaultSnapshot = await getVaultSnapshot();
+        } catch { /* non-fatal: vault may be unavailable */ }
+      }
 
-      // Inject knowledge digest — task-relevant knowledge from knowledge_store
-      try {
-        const taskQuery = readNonEmptyString(context.issueDescription)
-          ?? readNonEmptyString(context.taskKey)
-          ?? agent.name;
-        if (taskQuery && knowledgeSvc) {
-          const digest = await knowledgeSvc.getRelevantForTask({
-            query: taskQuery,
-            companyId: agent.companyId,
-            limit: 5,
-          });
-          if (digest.length > 0) {
-            context.knowledgeDigest = digest;
+      // Inject knowledge digest — only when agent has an actual task
+      const hasTask = Boolean(readNonEmptyString(context.issueDescription) || readNonEmptyString(context.taskKey));
+      if (hasTask) {
+        try {
+          const taskQuery = readNonEmptyString(context.issueDescription)
+            ?? readNonEmptyString(context.taskKey)
+            ?? agent.name;
+          const isTimerRun = run.invocationSource === "timer";
+          if (taskQuery && knowledgeSvc) {
+            const digest = await knowledgeSvc.getRelevantForTask({
+              query: taskQuery,
+              companyId: agent.companyId,
+              limit: isTimerRun ? 2 : 5,
+            });
+            if (digest.length > 0) {
+              context.knowledgeDigest = digest;
+            }
           }
-        }
-      } catch { /* non-fatal: knowledge_store may be unavailable */ }
+        } catch { /* non-fatal: knowledge_store may be unavailable */ }
+      }
 
       // Heartbeat model override — use cheap model for timer invocations
       const hbModel = (parseObject(agent.runtimeConfig)?.heartbeat as Record<string, unknown> | undefined)?.model;
@@ -3203,6 +3211,28 @@ export function heartbeatService(db: Db) {
     if (source !== "timer" && !policy.wakeOnDemand) {
       await writeSkippedRequest("heartbeat.wakeOnDemand.disabled");
       return null;
+    }
+
+    // Skip timer heartbeat when agent has no pending tasks (opt-in via runtimeConfig)
+    if (source === "timer" && !issueId) {
+      const hbCfg = parseObject(parseObject(agent.runtimeConfig).heartbeat);
+      if (asBoolean(hbCfg.skipIfNoPendingTasks, false)) {
+        const pendingIssues = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(issues)
+          .where(
+            and(
+              eq(issues.companyId, agent.companyId),
+              eq(issues.assigneeAgentId, agent.id),
+              inArray(issues.status, ["open", "in_progress"]),
+            ),
+          )
+          .then((rows) => Number(rows[0]?.count ?? 0));
+        if (pendingIssues === 0) {
+          await writeSkippedRequest("heartbeat.no_pending_tasks");
+          return null;
+        }
+      }
     }
 
     const bypassIssueExecutionLock =
