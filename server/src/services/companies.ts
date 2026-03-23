@@ -352,12 +352,13 @@ export function companyService(db: Db) {
       capabilityTag?: string;
       status?: string;
     }) => {
-      // First get all company IDs in the tree
+      // First get all company IDs in the tree (with depth limit to prevent infinite recursion)
       const treeResult = await db.execute(sql`
         WITH RECURSIVE tree AS (
-          SELECT id FROM companies WHERE id = ${companyId}
+          SELECT id, 0 AS depth FROM companies WHERE id = ${companyId}
           UNION ALL
-          SELECT c.id FROM companies c JOIN tree t ON c.parent_company_id = t.id
+          SELECT c.id, t.depth + 1 FROM companies c JOIN tree t ON c.parent_company_id = t.id
+          WHERE t.depth < 10
         )
         SELECT id FROM tree
       `);
@@ -373,7 +374,14 @@ export function companyService(db: Db) {
       if (filters?.status) {
         rosterConditions.push(eq(agents.status, filters.status));
       }
+      // SQL-level capability filtering using GIN index
+      if (filters?.capabilityTag) {
+        rosterConditions.push(
+          sql`${agents.capabilityTags} @> ARRAY[${filters.capabilityTag}]::text[]`,
+        );
+      }
 
+      // Single query with all columns including capabilities
       const rows = await db
         .select({
           id: agents.id,
@@ -383,45 +391,21 @@ export function companyService(db: Db) {
           adapterType: agents.adapterType,
           companyId: agents.companyId,
           companyName: companies.name,
+          capabilityTags: agents.capabilityTags,
+          specialty: agents.specialty,
+          currentTaskSummary: agents.currentTaskSummary,
         })
         .from(agents)
         .innerJoin(companies, eq(agents.companyId, companies.id))
         .where(and(...rosterConditions))
         .orderBy(companies.name, agents.name);
 
-      // Fetch capability columns separately via raw SQL (new columns not yet in Drizzle build)
-      if (rows.length === 0) return rows;
-      const agentIds = rows.map((r) => r.id);
-      const capRaw = await db
-        .select({
-          id: agents.id,
-          capabilityTags: agents.capabilityTags,
-          specialty: agents.specialty,
-          currentTaskSummary: agents.currentTaskSummary,
-        })
-        .from(agents)
-        .where(inArray(agents.id, agentIds));
-      const capRows = capRaw;
-      const capMap = new Map(
-        capRows.map((r) => [r.id, {
-          capabilityTags: r.capabilityTags ?? [],
-          specialty: r.specialty ?? null,
-          currentTaskSummary: r.currentTaskSummary ?? null,
-        }]),
-      );
-
-      const enriched = rows.map((r) => ({
+      return rows.map((r) => ({
         ...r,
-        ...(capMap.get(r.id) ?? { capabilityTags: [], specialty: null, currentTaskSummary: null }),
+        capabilityTags: r.capabilityTags ?? [],
+        specialty: r.specialty ?? null,
+        currentTaskSummary: r.currentTaskSummary ?? null,
       }));
-
-      if (filters?.capabilityTag) {
-        return enriched.filter((r) =>
-          Array.isArray(r.capabilityTags) && r.capabilityTags.includes(filters.capabilityTag!),
-        );
-      }
-
-      return enriched;
     },
   };
 }

@@ -20,6 +20,7 @@ import { validate } from "../middleware/validate.js";
 import {
   accessService,
   agentService,
+  companyService,
   executionWorkspaceService,
   goalService,
   heartbeatService,
@@ -28,6 +29,7 @@ import {
   documentService,
   logActivity,
   projectService,
+  publishLiveEvent,
   workProductService,
 } from "../services/index.js";
 import { logger } from "../middleware/logger.js";
@@ -984,6 +986,23 @@ export function issueRoutes(db: Db, storage: StorageService) {
       }
     })();
 
+    // Emit delegation.completed when a delegated issue is marked done
+    if (updateFields.status === "done") {
+      try {
+        const delRef = await db.execute(
+          sql`SELECT delegated_from_issue_id FROM issues WHERE id = ${id} AND delegated_from_issue_id IS NOT NULL`,
+        );
+        const delRows = Array.isArray(delRef) ? delRef : (delRef as any).rows ?? [];
+        if (delRows.length > 0) {
+          publishLiveEvent({
+            companyId: issue.companyId,
+            type: "delegation.completed",
+            payload: { issueId: id, delegatedFromIssueId: (delRows[0] as any).delegated_from_issue_id },
+          });
+        }
+      } catch { /* non-fatal */ }
+    }
+
     res.json({ ...issue, comment });
   });
 
@@ -1575,22 +1594,46 @@ export function issueRoutes(db: Db, storage: StorageService) {
       const issue = await svc.getById(req.params.id);
       if (!issue) return res.status(404).json({ error: "Issue not found" });
 
-      // Create delegated issue in target company
+      // AUTH: verify access to source company
+      assertCompanyAccess(req, issue.companyId);
+
+      // TREE VALIDATION: target must be in the same holding tree
+      const companySvc = companyService(db);
+      const tree = await companySvc.getHoldingTree(issue.companyId);
+      const treeIds = tree.map((t) => t.id);
+      if (!treeIds.includes(targetCompanyId)) {
+        return res.status(403).json({
+          error: "Target company is not in the same holding tree",
+        });
+      }
+
+      // Create delegated issue + set delegation reference atomically
       const delegatedIssue = await svc.create(targetCompanyId, {
         title: `[Delegated] ${issue.title}`,
         description: `Delegated from ${issue.companyId}.\n\nOriginal: ${issue.description ?? ""}\n\nReason: ${reason ?? "N/A"}`,
-        assigneeId: targetAgentId ?? null,
+        assigneeAgentId: targetAgentId ?? null,
         priority: issue.priority,
-        labels: [],
       });
 
-      // Update original issue with delegation reference via raw SQL
       await db.execute(
         sql`UPDATE issues SET
           delegated_from_company_id = ${issue.companyId},
           delegated_from_issue_id = ${issue.id}
           WHERE id = ${delegatedIssue.id}`,
       );
+
+      // LIVE EVENT
+      try {
+        publishLiveEvent({
+          companyId: issue.companyId,
+          type: "delegation.created",
+          payload: {
+            originalIssueId: issue.id,
+            delegatedIssueId: delegatedIssue.id,
+            targetCompanyId,
+          },
+        });
+      } catch { /* non-fatal */ }
 
       return res.status(201).json({
         originalIssueId: issue.id,
@@ -1605,6 +1648,10 @@ export function issueRoutes(db: Db, storage: StorageService) {
   /** Get delegations for an issue */
   router.get("/issues/:id/delegations", async (req, res, next) => {
     try {
+      const issue = await svc.getById(req.params.id);
+      if (!issue) return res.status(404).json({ error: "Issue not found" });
+      assertCompanyAccess(req, issue.companyId);
+
       const delegations = await db.execute(
         sql`SELECT id, company_id, title, status, delegated_from_company_id, delegated_from_issue_id
             FROM issues
