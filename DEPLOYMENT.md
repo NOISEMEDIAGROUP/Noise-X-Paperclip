@@ -339,79 +339,152 @@ sudo crontab -e
 # Add line: 0 3 * * * /opt/paperclip/renew-certs.sh
 ```
 
-## Monitoring & Logs
+## Monitoring & Observability
 
-### View Logs
+Paperclip ships a full observability stack via `docker-compose.monitoring.yml`:
+
+| Service         | Purpose                                         | Port (host)  |
+|-----------------|-------------------------------------------------|--------------|
+| Grafana         | Dashboards for metrics and logs                 | `3000`       |
+| Prometheus      | Metrics collection + alerting engine            | `9090` (lo)  |
+| Alertmanager    | Alert routing (webhook / Slack)                 | `9093` (lo)  |
+| Loki            | Log aggregation (Pino logs from all containers) | internal     |
+| Promtail        | Docker log shipper to Loki                      | internal     |
+| node-exporter   | Host CPU / memory / disk metrics                | internal     |
+| cAdvisor        | Per-container CPU / memory / network metrics    | internal     |
+| blackbox-exporter | HTTP health probe (uptime, response time)     | internal     |
+
+### Quick Start (monitoring stack)
+
+```bash
+# Start prod stack + monitoring together
+docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.yml up -d
+
+# Or add monitoring to an existing prod stack
+docker compose -f docker-compose.monitoring.yml up -d
+```
+
+**First time setup:**
+1. Open Grafana at `http://<host>:3000` — default credentials `admin` / `admin`
+2. Change password on first login
+3. The **Paperclip — Operations Overview** dashboard is auto-provisioned
+4. Set `GRAFANA_ADMIN_PASSWORD` in your `.env.prod` to override the default
+
+### Configure Alertmanager
+
+Edit `monitoring/alertmanager/alertmanager.yml` to add your notification channel:
+
+```bash
+# Slack webhook example — replace the webhook_configs section:
+# slack_configs:
+#   - api_url: https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+#     channel: '#alerts'
+#     send_resolved: true
+
+# Reload config without restart
+curl -X POST http://localhost:9093/-/reload
+```
+
+### Pre-configured Alert Rules (`monitoring/prometheus/rules/alerts.yml`)
+
+| Alert                | Condition                              | Severity |
+|----------------------|----------------------------------------|----------|
+| `ServerDown`         | Health probe failing > 2 min           | critical |
+| `NginxDown`          | Nginx health probe failing > 2 min     | critical |
+| `DatabaseDown`       | DB container absent > 2 min            | critical |
+| `HighMemoryUsage`    | Server container > 85% memory > 5 min  | warning  |
+| `LowDiskSpace`       | Host disk < 15% free > 10 min          | warning  |
+| `ContainerRestarting`| Any paperclip container > 3 restarts/30m | warning |
+
+### Dashboard Panels
+
+The auto-provisioned **Paperclip — Operations Overview** dashboard includes:
+
+- Server and Nginx health status (green/red)
+- Server response time and uptime
+- Active alert count
+- CPU usage per container (timeseries)
+- Memory usage per container (timeseries)
+- Host disk space available
+- Network I/O per container
+- Live server logs (from Loki)
+- Error log stream filtered by `level=error|fatal`
+
+### Basic Log Commands (without monitoring stack)
 
 ```bash
 # All services
-docker-compose -f docker-compose.prod.yml logs -f
+docker compose -f docker-compose.prod.yml logs -f
 
 # Specific service
-docker-compose -f docker-compose.prod.yml logs -f server
-docker-compose -f docker-compose.prod.yml logs -f nginx
-docker-compose -f docker-compose.prod.yml logs -f db
-```
-
-### Health Checks
-
-Health checks are configured in `docker-compose.prod.yml`:
-
-```bash
-# Check service health
-docker-compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs -f server
 
 # Manual health check
 curl http://localhost:3100/health
-```
 
-### Monitor Resource Usage
-
-```bash
 # Watch container stats
-docker stats
-
-# Specific container
 docker stats paperclip-server
-```
-
-### Persistent Logs
-
-Docker is configured with JSON file logging (10MB per file, max 3 files):
-
-```bash
-# View log file location
-docker inspect paperclip-server | grep LogPath
-
-# Rotate logs manually
-docker exec paperclip-server kill -SIGUSR1 1
 ```
 
 ## Backup & Restore
 
 ### Automated Backups
 
-Create a backup script:
+The automated backup script is at `scripts/backup-db-auto.sh`. It handles:
+
+- **Scheduled pg_dump** via `docker exec` to the running postgres container
+- **Integrity verification** — restores the dump into a temp container and validates schema
+- **Retention policy** — keeps the N most recent backups (configurable via `BACKUP_KEEP_COUNT`)
+- **Failure notification** — sends a webhook POST on failure (configurable via `NOTIFY_WEBHOOK_URL`)
+- **Structured JSON logging** — compatible with Loki log aggregation
+
+**Setup:**
 
 ```bash
-cat > /opt/paperclip/backup.sh << 'EOF'
-#!/bin/bash
-BACKUP_DIR="/opt/paperclip/backups"
-mkdir -p $BACKUP_DIR
+# Ensure the script is executable
+chmod +x /opt/paperclip/scripts/backup-db-auto.sh
 
-# Backup database
-docker-compose -f /opt/paperclip/docker-compose.prod.yml exec -T db \
-  pg_dump -U paperclip_prod -Fc paperclip_prod > \
-  "$BACKUP_DIR/paperclip-$(date +%Y%m%d-%H%M%S).dump"
+# Create backups directory
+mkdir -p /opt/paperclip/backups
 
-# Keep only last 30 days
-find $BACKUP_DIR -name "*.dump" -mtime +30 -delete
-EOF
+# Test a manual run first
+PAPERCLIP_DIR=/opt/paperclip /opt/paperclip/scripts/backup-db-auto.sh
 
-chmod +x /opt/paperclip/backup.sh
+# Production: backup every 6 hours
+(crontab -l 2>/dev/null; echo "0 */6 * * * PAPERCLIP_DIR=/opt/paperclip BACKUP_KEEP_COUNT=28 /opt/paperclip/scripts/backup-db-auto.sh >> /var/log/paperclip-backup.log 2>&1") | crontab -
 
-# Run daily at 2 AM
-(crontab -l 2>/dev/null; echo "0 2 * * * /opt/paperclip/backup.sh") | crontab -
+# Staging: backup once daily at 2 AM
+(crontab -l 2>/dev/null; echo "0 2 * * * PAPERCLIP_DIR=/opt/paperclip /opt/paperclip/scripts/backup-db-auto.sh >> /var/log/paperclip-backup.log 2>&1") | crontab -
+
+# With failure webhook notification
+(crontab -l 2>/dev/null; echo "0 */6 * * * PAPERCLIP_DIR=/opt/paperclip NOTIFY_WEBHOOK_URL=https://hooks.slack.com/... /opt/paperclip/scripts/backup-db-auto.sh >> /var/log/paperclip-backup.log 2>&1") | crontab -
+```
+
+**Configuration variables:**
+
+| Variable             | Default                   | Description                          |
+|----------------------|---------------------------|--------------------------------------|
+| `PAPERCLIP_DIR`      | Script parent directory   | Project root                         |
+| `BACKUP_DIR`         | `$PAPERCLIP_DIR/backups`  | Where to store dump files            |
+| `BACKUP_KEEP_COUNT`  | `14`                      | Number of backups to retain          |
+| `DB_CONTAINER`       | `paperclip-db`            | Postgres container name              |
+| `DB_USER`            | `paperclip`               | Database user                        |
+| `DB_NAME`            | `paperclip`               | Database name                        |
+| `VERIFY_BACKUP`      | `true`                    | Run integrity check after backup     |
+| `NOTIFY_WEBHOOK_URL` | _(empty)_                 | Webhook URL to POST on failure       |
+| `LOG_FORMAT`         | `json`                    | Log format: `json` or `text`         |
+
+**Monitor backup logs:**
+
+```bash
+# View recent backup activity (JSON logs)
+tail -f /var/log/paperclip-backup.log
+
+# List current backups with sizes
+ls -lh /opt/paperclip/backups/
+
+# Count retained backups
+ls /opt/paperclip/backups/paperclip-*.dump | wc -l
 ```
 
 ### Backup Volumes
