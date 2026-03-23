@@ -29,6 +29,8 @@ services:
       BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}"
     volumes:
       - paperclip-data:/paperclip
+      - /Users/darshanbathija_1/Downloads/PC Admin:/Users/darshanbathija_1/Downloads/PC Admin
+      - /Users/darshanbathija_1/Downloads/PCFolder:/Users/darshanbathija_1/Downloads/PCFolder
     depends_on:
       db:
         condition: service_healthy
