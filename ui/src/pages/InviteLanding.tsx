@@ -20,6 +20,7 @@ const adapterLabels: Record<string, string> = {
   pi_local: "Pi (local)",
   openclaw_gateway: "OpenClaw Gateway",
   cursor: "Cursor (local)",
+  copilot_cli: "Copilot (local)",
   process: "Process",
   http: "HTTP",
 };
