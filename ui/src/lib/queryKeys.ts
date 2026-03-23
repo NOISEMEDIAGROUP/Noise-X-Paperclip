@@ -37,12 +37,21 @@ export const queryKeys = {
     list: (companyId: string) => ["goals", companyId] as const,
     detail: (id: string) => ["goals", "detail", id] as const,
   },
+  missions: {  // Add missions query keys
+    list: (companyId: string) => ["missions", companyId] as const,
+    detail: (id: string) => ["missions", "detail", id] as const,
+    active: (companyId: string) => ["missions", "active", companyId] as const,
+  },
   approvals: {
     list: (companyId: string, status?: string) =>
       ["approvals", companyId, status] as const,
     detail: (approvalId: string) => ["approvals", "detail", approvalId] as const,
     comments: (approvalId: string) => ["approvals", "comments", approvalId] as const,
     issues: (approvalId: string) => ["approvals", "issues", approvalId] as const,
+  },
+  agentTools: {  // Add agent tools query keys
+    activeMission: (companyId: string) => ["agent-tools", "active-mission", companyId] as const,
+    metrics: (companyId: string) => ["agent-tools", "metrics", companyId] as const,
   },
   access: {
     joinRequests: (companyId: string, status: string = "pending_approval") =>
@@ -102,7 +111,7 @@ export const queryKeys = {
     integrationStatus: (companyId: string) => ["businessOs", "integrationStatus", companyId] as const,
     config: (companyId: string) => ["businessOs", "config", companyId] as const,
   },
-// Portfolio query keys
+  // Portfolio query keys
   portfolio: ["portfolio"] as const,
   // Governance query keys
   governance: {

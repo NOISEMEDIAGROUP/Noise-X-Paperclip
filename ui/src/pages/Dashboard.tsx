@@ -6,11 +6,14 @@ import { activityApi } from "../api/activity";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
 import { projectsApi } from "../api/projects";
+import { missionsApi } from "../api/missions"; // Add API import for missions
+import { agentToolsApi } from "../api/agent-tools"; // For active mission 
 import { heartbeatsApi } from "../api/heartbeats";
 import { useCompany } from "../context/CompanyContext";
 import { useDialog } from "../context/DialogContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
+import { MissionStatusCard } from "../components/MissionStatusCard"; // Add import for mission card
 import { MetricCard } from "../components/MetricCard";
 import { EmptyState } from "../components/EmptyState";
 import { StatusIcon } from "../components/StatusIcon";
@@ -19,7 +22,7 @@ import { ActivityRow } from "../components/ActivityRow";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { cn, formatCents } from "../lib/utils";
-import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard } from "lucide-react";
+import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, Rocket } from "lucide-react"; // Add Rocket for missions
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
 import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
 import { PageSkeleton } from "../components/PageSkeleton";
@@ -79,6 +82,28 @@ export function Dashboard() {
     queryFn: () => heartbeatsApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
   });
+
+  // New queries for missions
+  const { data: missions } = useQuery({
+    queryKey: queryKeys.missions.list(selectedCompanyId!),
+    queryFn: () => missionsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+    staleTime: 60 * 1000, // 1 minute cache
+  });
+
+  const { data: activeMissionData } = useQuery({
+    queryKey: queryKeys.agentTools.activeMission(selectedCompanyId!), 
+    queryFn: () => agentToolsApi.getActiveMission(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+    staleTime: 30 * 1000, // 30 second cache for near real-time updates
+  });
+
+  const activeMission = useMemo(() => {
+    if (!activeMissionData?.active || !missions) return null;
+    
+    // Find the active mission from the mission list
+    return missions.find(m => m.id === activeMissionData.missionId) || null;
+  }, [activeMissionData, missions]);
 
   const recentIssues = issues ? getRecentIssues(issues) : [];
   const recentActivity = useMemo(() => (activity ?? []).slice(0, 10), [activity]);
@@ -263,9 +288,83 @@ export function Dashboard() {
                 </span>
               }
             />
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-1 sm:gap-2">
+            <MetricCard
+              icon={Bot}
+              value={data.agents.active + data.agents.running + data.agents.paused + data.agents.error}
+              label="Agents Enabled"
+              to="/agents"
+              description={
+                <span>
+                  {data.agents.running} running{", "}
+                  {data.agents.paused} paused{", "}
+                  {data.agents.error} errors
+                </span>
+              }
+            />
+            <MetricCard
+              icon={CircleDot}
+              value={data.tasks.inProgress}
+              label="Tasks In Progress"
+              to="/issues"
+              description={
+                <span>
+                  {data.tasks.open} open{", "}
+                  {data.tasks.blocked} blocked
+                </span>
+              }
+            />
+            <MetricCard
+              icon={DollarSign}
+              value={formatCents(data.costs.monthSpendCents)}
+              label="Month Spend"
+              to="/costs"
+              description={
+                <span>
+                  {data.costs.monthBudgetCents > 0
+                    ? `${data.costs.monthUtilizationPercent}% of ${formatCents(data.costs.monthBudgetCents)} budget`
+                    : "Unlimited budget"}
+                </span>
+              }
+            />
+            <MetricCard
+              icon={ShieldCheck}
+              value={data.pendingApprovals}
+              label="Pending Approvals"
+              to="/approvals"
+               description={
+                <span>
+                  {data.staleTasks} stale tasks
+                </span>
+              }
+            />
+          </div>
+
+          {/* Mission Status Card - show current active mission or offer to create one */}
+          <div className="mt-2">
+            <MissionStatusCard 
+              mission={activeMission} 
+              isPending={
+                (!missions && !!activeMissionData) || 
+                (activeMissionData?.active && !activeMission)
+              }
+            />
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <ChartCard title="Run Activity" subtitle="Last 14 days">
+              <RunActivityChart runs={runs ?? []} />
+            </ChartCard>
+            <ChartCard title="Issues by Priority" subtitle="Last 14 days">
+              <PriorityChart issues={issues ?? []} />
+            </ChartCard>
+            <ChartCard title="Issues by Status" subtitle="Last 14 days">
+              <IssueStatusChart issues={issues ?? []} />
+            </ChartCard>
+            <ChartCard title="Success Rate" subtitle="Last 14 days">
+              <SuccessRateChart runs={runs ?? []} />
+            </ChartCard>
+          </div>
             <ChartCard title="Run Activity" subtitle="Last 14 days">
               <RunActivityChart runs={runs ?? []} />
             </ChartCard>

@@ -83,6 +83,22 @@ export function agentMetricsService(db: Db) {
         missionId,
       }).returning();
 
+      // AFTER creating the approval, send notifications to subscribed channels
+      try {
+        // Dynamically import the notification service to avoid circular dependencies
+        const { notificationService } = await import("./notification-service.js");
+        const notificationSvc = notificationService(db);
+        
+        // Get platform URL for building resolve links
+        const companyUrlOrigin = await notificationSvc.getCompanyUrlOrigin(companyId);
+        
+        // Send notification to all registered adapters
+        await notificationSvc.sendApprovalNotification(approval, companyUrlOrigin);
+      } catch (error) {
+        console.error("Failed to send approval notification:", error);
+        // Don't fail the action if notifications fail - just log the error
+      }
+
       if (autoApproveAt && autoApproveAfterMin) {
         const { enqueueApproveTimer } = await import("../services/jobs/approve-timer.js");
         await enqueueApproveTimer(approval.id, companyId, autoApproveAfterMin);

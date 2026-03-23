@@ -20,3 +20,4 @@ export { publishLiveEvent, subscribeCompanyLiveEvents } from "./live-events.js";
 export { createStorageServiceFromConfig, getStorageService } from "../storage/index.js";
 export { integrationCheckService, INTEGRATION_REQUIREMENTS } from "./integrationCheck.js";
 export { productService } from "./products.js";
+export { notificationService } from "./notification-service.js";
