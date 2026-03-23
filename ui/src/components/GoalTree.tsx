@@ -28,8 +28,10 @@ function GoalNode({ goal, children, allGoals, depth, goalLink, onSelect }: GoalN
   const inner = (
     <>
       {hasChildren ? (
-        <button
+        <button type="button"
           className="p-0.5"
+          aria-label={expanded ? "Collapse" : "Expand"}
+          aria-expanded={expanded}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -67,7 +69,15 @@ function GoalNode({ goal, children, allGoals, depth, goalLink, onSelect }: GoalN
         <div
           className={classes}
           style={{ paddingLeft: `${depth * 16 + 12}px` }}
+          role="button"
+          tabIndex={0}
           onClick={() => onSelect?.(goal)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onSelect?.(goal);
+            }
+          }}
         >
           {inner}
         </div>

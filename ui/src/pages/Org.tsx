@@ -49,8 +49,10 @@ function OrgTreeNode({
         style={{ paddingLeft: `${depth * 16 + 12}px` }}
       >
         {hasChildren ? (
-          <button
+          <button type="button"
             className="p-0.5"
+            aria-label={expanded ? "Collapse" : "Expand"}
+            aria-expanded={expanded}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();

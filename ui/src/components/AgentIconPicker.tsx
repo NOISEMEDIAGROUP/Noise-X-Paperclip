@@ -145,7 +145,7 @@ export function AgentIconPicker({ value, onChange, children }: AgentIconPickerPr
         />
         <div className="grid grid-cols-7 gap-1 max-h-48 overflow-y-auto">
           {filtered.map(([name, Icon]) => (
-            <button
+            <button type="button"
               key={name}
               onClick={() => {
                 onChange(name);
@@ -157,6 +157,7 @@ export function AgentIconPicker({ value, onChange, children }: AgentIconPickerPr
                 (value ?? DEFAULT_ICON) === name && "bg-accent ring-1 ring-primary"
               )}
               title={name}
+              aria-label={name}
             >
               <Icon className="h-4 w-4" />
             </button>
