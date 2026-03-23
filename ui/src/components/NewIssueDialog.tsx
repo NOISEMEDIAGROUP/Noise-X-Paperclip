@@ -21,6 +21,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -450,6 +451,13 @@ export function NewIssueDialog() {
       reset();
       closeNewIssue();
     },
+    onError: (err) => {
+      pushToast({
+        title: "Failed to create issue",
+        body: err instanceof Error ? err.message : "An unexpected error occurred.",
+        tone: "error",
+      });
+    },
   });
 
   const uploadDescriptionImage = useMutation({
@@ -870,6 +878,7 @@ export function NewIssueDialog() {
       <DialogContent
         showCloseButton={false}
         aria-describedby={undefined}
+        aria-labelledby="new-issue-dialog-title"
         className={cn(
           "p-0 gap-0 flex flex-col max-h-[calc(100dvh-2rem)]",
           expanded
@@ -899,12 +908,13 @@ export function NewIssueDialog() {
           }
         }}
       >
+        <DialogTitle id="new-issue-dialog-title" className="sr-only">Create new issue</DialogTitle>
         {/* Header bar */}
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Popover open={companyOpen} onOpenChange={setCompanyOpen}>
               <PopoverTrigger asChild>
-                <button
+                <button type="button"
                   className={cn(
                     "px-1.5 py-0.5 rounded text-xs font-semibold cursor-pointer hover:opacity-80 transition-opacity",
                     !dialogCompany?.brandColor && "bg-muted",
@@ -923,7 +933,7 @@ export function NewIssueDialog() {
               </PopoverTrigger>
               <PopoverContent className="w-48 p-1" align="start">
                 {companies.filter((c) => c.status !== "archived").map((c) => (
-                  <button
+                  <button type="button"
                     key={c.id}
                     className={cn(
                       "flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50",
@@ -965,6 +975,7 @@ export function NewIssueDialog() {
               className="text-muted-foreground"
               onClick={() => setExpanded(!expanded)}
               disabled={createIssue.isPending}
+              aria-label={expanded ? "Minimize" : "Maximize"}
             >
               {expanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
             </Button>
@@ -974,6 +985,7 @@ export function NewIssueDialog() {
               className="text-muted-foreground"
               onClick={() => closeNewIssue()}
               disabled={createIssue.isPending}
+              aria-label="Close"
             >
               <span className="text-lg leading-none">&times;</span>
             </Button>
@@ -1129,6 +1141,7 @@ export function NewIssueDialog() {
               </div>
               <select
                 className="w-full rounded border border-border bg-transparent px-2 py-1.5 text-xs outline-none"
+                aria-label="Execution workspace mode"
                 value={executionWorkspaceMode}
                 onChange={(e) => {
                   setExecutionWorkspaceMode(e.target.value);
@@ -1146,6 +1159,7 @@ export function NewIssueDialog() {
               {executionWorkspaceMode === "reuse_existing" && (
                 <select
                   className="w-full rounded border border-border bg-transparent px-2 py-1.5 text-xs outline-none"
+                  aria-label="Select existing workspace"
                   value={selectedExecutionWorkspaceId}
                   onChange={(e) => setSelectedExecutionWorkspaceId(e.target.value)}
                 >
@@ -1168,7 +1182,7 @@ export function NewIssueDialog() {
 
         {supportsAssigneeOverrides && (
           <div className="px-4 pb-2 shrink-0">
-            <button
+            <button type="button"
               className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
               onClick={() => setAssigneeOptionsOpen((open) => !open)}
             >
@@ -1188,13 +1202,14 @@ export function NewIssueDialog() {
                     searchPlaceholder="Search models..."
                     emptyMessage="No models found."
                     onChange={setAssigneeModelOverride}
+                    allowCustomValue
                   />
                 </div>
                 <div className="space-y-1.5">
                   <div className="text-xs text-muted-foreground">Thinking effort</div>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {thinkingEffortOptions.map((option) => (
-                      <button
+                      <button type="button"
                         key={option.value || "default"}
                         className={cn(
                           "px-2 py-1 rounded-md text-xs border border-border hover:bg-accent/50 transition-colors",
@@ -1210,7 +1225,7 @@ export function NewIssueDialog() {
                 {assigneeAdapterType === "claude_local" && (
                   <div className="flex items-center justify-between rounded-md border border-border px-2 py-1.5">
                     <div className="text-xs text-muted-foreground">Enable Chrome (--chrome)</div>
-                    <button
+                    <button type="button"
                       className={cn(
                         "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
                         assigneeChrome ? "bg-green-600" : "bg-muted"
@@ -1288,6 +1303,7 @@ export function NewIssueDialog() {
                           onClick={() => removeStagedFile(file.id)}
                           disabled={createIssue.isPending}
                           title="Remove document"
+                          aria-label="Remove document"
                         >
                           <X className="h-3.5 w-3.5" />
                         </Button>
@@ -1319,6 +1335,7 @@ export function NewIssueDialog() {
                           onClick={() => removeStagedFile(file.id)}
                           disabled={createIssue.isPending}
                           title="Remove attachment"
+                          aria-label="Remove attachment"
                         >
                           <X className="h-3.5 w-3.5" />
                         </Button>
@@ -1336,14 +1353,14 @@ export function NewIssueDialog() {
           {/* Status chip */}
           <Popover open={statusOpen} onOpenChange={setStatusOpen}>
             <PopoverTrigger asChild>
-              <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/50 transition-colors">
+              <button type="button" className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/50 transition-colors">
                 <CircleDot className={cn("h-3 w-3", currentStatus.color)} />
                 {currentStatus.label}
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-36 p-1" align="start">
               {statuses.map((s) => (
-                <button
+                <button type="button"
                   key={s.value}
                   className={cn(
                     "flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50",
@@ -1361,7 +1378,7 @@ export function NewIssueDialog() {
           {/* Priority chip */}
           <Popover open={priorityOpen} onOpenChange={setPriorityOpen}>
             <PopoverTrigger asChild>
-              <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/50 transition-colors">
+              <button type="button" className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/50 transition-colors">
                 {currentPriority ? (
                   <>
                     <currentPriority.icon className={cn("h-3 w-3", currentPriority.color)} />
@@ -1377,7 +1394,7 @@ export function NewIssueDialog() {
             </PopoverTrigger>
             <PopoverContent className="w-36 p-1" align="start">
               {priorities.map((p) => (
-                <button
+                <button type="button"
                   key={p.value}
                   className={cn(
                     "flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50",
@@ -1393,7 +1410,7 @@ export function NewIssueDialog() {
           </Popover>
 
           {/* Labels chip (placeholder) */}
-          <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/50 transition-colors text-muted-foreground">
+          <button type="button" className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/50 transition-colors text-muted-foreground">
             <Tag className="h-3 w-3" />
             Labels
           </button>
@@ -1406,7 +1423,7 @@ export function NewIssueDialog() {
             onChange={handleStageFilesPicked}
             multiple
           />
-          <button
+          <button type="button"
             className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/50 transition-colors text-muted-foreground"
             onClick={() => stageFileInputRef.current?.click()}
             disabled={createIssue.isPending}
@@ -1418,16 +1435,16 @@ export function NewIssueDialog() {
           {/* More (dates) */}
           <Popover open={moreOpen} onOpenChange={setMoreOpen}>
             <PopoverTrigger asChild>
-              <button className="inline-flex items-center justify-center rounded-md border border-border p-1 text-xs hover:bg-accent/50 transition-colors text-muted-foreground">
+              <button type="button" aria-label="More date options" className="inline-flex items-center justify-center rounded-md border border-border p-1 text-xs hover:bg-accent/50 transition-colors text-muted-foreground">
                 <MoreHorizontal className="h-3 w-3" />
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-44 p-1" align="start">
-              <button className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 text-muted-foreground">
+              <button type="button" className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 text-muted-foreground">
                 <Calendar className="h-3 w-3" />
                 Start date
               </button>
-              <button className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 text-muted-foreground">
+              <button type="button" className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 text-muted-foreground">
                 <Calendar className="h-3 w-3" />
                 Due date
               </button>
