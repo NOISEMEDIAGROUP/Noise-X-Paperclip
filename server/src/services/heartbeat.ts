@@ -1250,8 +1250,12 @@ export function heartbeatService(db: Db) {
       }
     }
 
-    const cwd = resolveDefaultAgentWorkspaceDir(agent.id);
-    await fs.mkdir(cwd, { recursive: true });
+    const cwd = agent.adapterType === "cloud_sandbox"
+      ? `/workspaces/${resolvedProjectId || "default"}`
+      : resolveDefaultAgentWorkspaceDir(agent.id);
+    if (agent.adapterType !== "cloud_sandbox") {
+      await fs.mkdir(cwd, { recursive: true });
+    }
     const warnings: string[] = [];
     if (sessionCwd) {
       warnings.push(
@@ -2281,6 +2285,10 @@ export function heartbeatService(db: Db) {
       branchName: executionWorkspace.branchName,
       worktreePath: executionWorkspace.worktreePath,
       agentHome: await (async () => {
+        if (agent.adapterType === "cloud_sandbox") {
+          // Cloud sandbox: agent home lives inside the pod, not on the server filesystem
+          return `/home/agents/${agent.id}`;
+        }
         const home = resolveDefaultAgentWorkspaceDir(agent.id);
         await fs.mkdir(home, { recursive: true });
         return home;
