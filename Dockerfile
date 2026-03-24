@@ -1,7 +1,7 @@
 FROM node:lts-trixie-slim AS base
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl git tini \
-  && apt-get clean
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
 RUN corepack enable
 
 FROM base AS deps
