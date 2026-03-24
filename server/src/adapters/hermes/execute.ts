@@ -84,18 +84,18 @@ async function syncSkillsToHermes(skills: AdapterSkill[]): Promise<string[]> {
         if (existing.isSymbolicLink()) {
           const currentTarget = await fs.readlink(linkPath);
           if (currentTarget === skill.path) {
-            synced.push(skill.name);
+            synced.push(`${PAPERCLIP_SKILL_CATEGORY}/${skill.name}`);
             continue;
           }
           await fs.unlink(linkPath);
         } else {
-          synced.push(skill.name);
+          synced.push(`${PAPERCLIP_SKILL_CATEGORY}/${skill.name}`);
           continue;
         }
       }
 
       await fs.symlink(skill.path, linkPath);
-      synced.push(skill.name);
+      synced.push(`${PAPERCLIP_SKILL_CATEGORY}/${skill.name}`);
     }
   }
 
