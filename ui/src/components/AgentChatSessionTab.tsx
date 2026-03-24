@@ -237,10 +237,10 @@ export function AgentChatSessionTab({
           appendAssistantMessage(payload.message);
           setCompletedMessageId(payload.message.id);
         }
-        if (autoExpandedRunIdRef.current === payload.runId) {
-          autoExpandedRunIdRef.current = null;
-          setExpandedRunId((current) => (current === payload.runId ? null : current));
-        }
+        // Clear the auto-expand ref but keep the panel open so the user
+        // can review run details. It collapses when the next stream starts
+        // or when the user clicks "Hide run details".
+        autoExpandedRunIdRef.current = null;
         setStreamState((current) =>
           current && current.sourceMessageId === result.message.id
             ? { ...current, runId: payload.runId, status: payload.status }
