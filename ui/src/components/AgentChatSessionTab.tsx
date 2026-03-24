@@ -795,13 +795,15 @@ export function AgentChatSessionTab({
                     )}
                     {message.runId && (
                       <div className="mt-2 flex items-center gap-3 text-[11px]">
-                        <button
-                          type="button"
-                          onClick={() => toggleRunDetails(message.runId)}
-                          className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                        >
-                          {detailsOpen ? "Hide run details" : "Show run details"}
-                        </button>
+                        {!isUser && (
+                          <button
+                            type="button"
+                            onClick={() => toggleRunDetails(message.runId)}
+                            className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                          >
+                            {detailsOpen ? "Hide run details" : "Show run details"}
+                          </button>
+                        )}
                         <Link
                           to={runUrlFor(message.runId)}
                           className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
@@ -820,7 +822,7 @@ export function AgentChatSessionTab({
                         )}
                       </div>
                     )}
-                    {renderInlineRunDetails(message.runId)}
+                    {!isUser && renderInlineRunDetails(message.runId)}
                   </div>
                 </div>
               );
