@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "../lib/utils";
+import { t } from "../lib/locale";
 import {
   ChevronDown,
   ChevronRight,
@@ -150,18 +151,18 @@ export function parseFrontmatter(content: string): { data: FrontmatterData; body
 }
 
 export const FRONTMATTER_FIELD_LABELS: Record<string, string> = {
-  name: "Name",
-  title: "Title",
-  kind: "Kind",
-  reportsTo: "Reports to",
-  skills: "Skills",
-  status: "Status",
-  description: "Description",
-  priority: "Priority",
-  assignee: "Assignee",
-  project: "Project",
-  recurring: "Recurring",
-  targetDate: "Target date",
+  name: t("Name"),
+  title: t("Title"),
+  kind: t("Kind"),
+  reportsTo: t("Reports to"),
+  skills: t("Skills"),
+  status: t("Status"),
+  description: t("Description"),
+  priority: t("Priority"),
+  assignee: t("Assignee"),
+  project: t("Project"),
+  recurring: t("Recurring"),
+  targetDate: t("Target date"),
 };
 
 // ── File tree component ───────────────────────────────────────────────

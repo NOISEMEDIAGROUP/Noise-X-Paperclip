@@ -1,16 +1,17 @@
 import { useCallback, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { t } from "../lib/locale";
 
 interface CopyTextProps {
   text: string;
   /** What to display. Defaults to `text`. */
   children?: React.ReactNode;
   className?: string;
-  /** Tooltip message shown after copying. Default: "Copied!" */
+  /** Tooltip message shown after copying. Default: t("Copied!") */
   copiedLabel?: string;
 }
 
-export function CopyText({ text, children, className, copiedLabel = "Copied!" }: CopyTextProps) {
+export function CopyText({ text, children, className, copiedLabel = t("Copied!") }: CopyTextProps) {
   const [visible, setVisible] = useState(false);
   const [label, setLabel] = useState(copiedLabel);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -21,7 +22,7 @@ export function CopyText({ text, children, className, copiedLabel = "Copied!" }:
       await navigator.clipboard.writeText(text);
       setLabel(copiedLabel);
     } catch {
-      setLabel("Copy failed");
+      setLabel(t("Copy failed"));
     }
     clearTimeout(timerRef.current);
     setVisible(true);

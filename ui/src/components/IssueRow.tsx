@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { Issue } from "@paperclipai/shared";
 import { Link } from "@/lib/router";
 import { cn } from "../lib/utils";
+import { t } from "../lib/locale";
 import { StatusIcon } from "./StatusIcon";
 
 type UnreadState = "hidden" | "visible" | "fading";
@@ -104,7 +105,7 @@ export function IssueRow({
                 }
               }}
               className="inline-flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-blue-500/20"
-              aria-label="Mark as read"
+              aria-label={t("Mark as read")}
             >
               <span
                 className={cn(
