@@ -3,15 +3,24 @@ import type { Db } from "@paperclipai/db";
 import {
   companies,
   companyLogos,
+  companySkills,
   assets,
   agents,
   agentApiKeys,
+  agentConfigRevisions,
   agentRuntimeState,
   agentTaskSessions,
   agentWakeupRequests,
   issues,
+  issueApprovals,
+  issueAttachments,
   issueComments,
+  issueDocuments,
+  issueReadStates,
+  issueWorkProducts,
   projects,
+  projectGoals,
+  projectWorkspaces,
   goals,
   heartbeatRuns,
   heartbeatRunEvents,
@@ -20,11 +29,19 @@ import {
   approvalComments,
   approvals,
   activityLog,
+  budgetIncidents,
+  budgetPolicies,
   companySecrets,
+  documents,
+  documentRevisions,
+  executionWorkspaces,
   joinRequests,
   invites,
   principalPermissionGrants,
   companyMemberships,
+  routines,
+  workspaceOperations,
+  workspaceRuntimeServices,
 } from "@paperclipai/db";
 import { notFound, unprocessable } from "../errors.js";
 
@@ -263,30 +280,30 @@ export function companyService(db: Db) {
         await tx.delete(heartbeatRuns).where(eq(heartbeatRuns.companyId, id));
         await tx.delete(agentWakeupRequests).where(eq(agentWakeupRequests.companyId, id));
         // --- Tables referencing issues (must go before issues) ---
-        await tx.execute(sql`DELETE FROM issue_read_states WHERE company_id = ${id}`);
-        await tx.execute(sql`DELETE FROM issue_approvals WHERE company_id = ${id}`);
-        await tx.execute(sql`DELETE FROM issue_work_products WHERE company_id = ${id}`);
-        await tx.execute(sql`DELETE FROM issue_documents WHERE company_id = ${id}`);
-        await tx.execute(sql`DELETE FROM issue_attachments WHERE company_id = ${id}`);
+        await tx.delete(issueReadStates).where(eq(issueReadStates.companyId, id));
+        await tx.delete(issueApprovals).where(eq(issueApprovals.companyId, id));
+        await tx.delete(issueWorkProducts).where(eq(issueWorkProducts.companyId, id));
+        await tx.delete(issueDocuments).where(eq(issueDocuments.companyId, id));
+        await tx.delete(issueAttachments).where(eq(issueAttachments.companyId, id));
         await tx.delete(issueComments).where(eq(issueComments.companyId, id));
         // --- Tables referencing approvals (must go before approvals) ---
-        await tx.execute(sql`DELETE FROM budget_incidents WHERE company_id = ${id}`);
+        await tx.delete(budgetIncidents).where(eq(budgetIncidents.companyId, id));
         await tx.delete(approvalComments).where(eq(approvalComments.companyId, id));
         await tx.delete(approvals).where(eq(approvals.companyId, id));
         // --- Clear self-referencing FKs, then delete ---
-        await tx.execute(sql`UPDATE issues SET parent_id = NULL WHERE company_id = ${id}`);
+        await tx.update(issues).set({ parentId: null }).where(eq(issues.companyId, id));
         await tx.delete(issues).where(eq(issues.companyId, id));
-        await tx.execute(sql`DELETE FROM execution_workspaces WHERE company_id = ${id}`);
-        await tx.execute(sql`DELETE FROM project_workspaces WHERE company_id = ${id}`);
-        await tx.execute(sql`DELETE FROM project_goals WHERE company_id = ${id}`);
+        await tx.delete(executionWorkspaces).where(eq(executionWorkspaces.companyId, id));
+        await tx.delete(projectWorkspaces).where(eq(projectWorkspaces.companyId, id));
+        await tx.delete(projectGoals).where(eq(projectGoals.companyId, id));
         await tx.delete(projects).where(eq(projects.companyId, id));
-        await tx.execute(sql`UPDATE goals SET parent_id = NULL WHERE company_id = ${id}`);
+        await tx.update(goals).set({ parentId: null }).where(eq(goals.companyId, id));
         await tx.delete(goals).where(eq(goals.companyId, id));
         // --- Remaining tables ---
-        await tx.execute(sql`DELETE FROM budget_policies WHERE company_id = ${id}`);
-        await tx.execute(sql`DELETE FROM document_revisions WHERE company_id = ${id}`);
-        await tx.execute(sql`DELETE FROM documents WHERE company_id = ${id}`);
-        await tx.execute(sql`DELETE FROM agent_config_revisions WHERE company_id = ${id}`);
+        await tx.delete(budgetPolicies).where(eq(budgetPolicies.companyId, id));
+        await tx.delete(documentRevisions).where(eq(documentRevisions.companyId, id));
+        await tx.delete(documents).where(eq(documents.companyId, id));
+        await tx.delete(agentConfigRevisions).where(eq(agentConfigRevisions.companyId, id));
         await tx.delete(companySecrets).where(eq(companySecrets.companyId, id));
         await tx.delete(joinRequests).where(eq(joinRequests.companyId, id));
         await tx.delete(invites).where(eq(invites.companyId, id));
@@ -296,13 +313,13 @@ export function companyService(db: Db) {
         await tx.delete(agentRuntimeState).where(eq(agentRuntimeState.companyId, id));
         await tx.delete(companyLogos).where(eq(companyLogos.companyId, id));
         await tx.delete(assets).where(eq(assets.companyId, id));
-        await tx.execute(sql`DELETE FROM routines WHERE company_id = ${id}`);
-        await tx.execute(sql`UPDATE agents SET reports_to = NULL WHERE company_id = ${id}`);
+        await tx.delete(routines).where(eq(routines.companyId, id));
+        await tx.update(agents).set({ reportsTo: null }).where(eq(agents.companyId, id));
         await tx.delete(agents).where(eq(agents.companyId, id));
         // --- Tables only referencing companies (safe to delete in any order) ---
-        await tx.execute(sql`DELETE FROM workspace_operations WHERE company_id = ${id}`);
-        await tx.execute(sql`DELETE FROM workspace_runtime_services WHERE company_id = ${id}`);
-        await tx.execute(sql`DELETE FROM company_skills WHERE company_id = ${id}`);
+        await tx.delete(workspaceOperations).where(eq(workspaceOperations.companyId, id));
+        await tx.delete(workspaceRuntimeServices).where(eq(workspaceRuntimeServices.companyId, id));
+        await tx.delete(companySkills).where(eq(companySkills.companyId, id));
         const rows = await tx
           .delete(companies)
           .where(eq(companies.id, id))
