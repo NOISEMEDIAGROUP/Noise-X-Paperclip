@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+"""
+json2toon — Convert JSON from stdin to TOON (Token-Oriented Object Notation).
+
+TOON compresses uniform arrays of objects into tabular format, significantly
+reducing token usage when large lists pass through Claude's context window.
+
+Usage:
+  curl ... | json2toon
+  echo '{"items":[{"a":1},{"a":2}]}' | json2toon
+"""
+
+import json
+import sys
+
+
+def _escape(v) -> str:
+    """Render a scalar value as a TOON cell (no quotes for simple strings)."""
+    if v is None:
+        return "null"
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return str(v)
+    s = str(v)
+    # Quote strings containing comma, newline, colon, or leading/trailing space
+    if any(c in s for c in (",", "\n", "\r")) or s != s.strip() or s == "null":
+        return json.dumps(s)
+    return s
+
+
+def _uniform_keys(arr: list) -> list | None:
+    """Return shared keys if all items are dicts with the same key set, else None."""
+    if not arr or not all(isinstance(x, dict) for x in arr):
+        return None
+    first_keys = list(arr[0].keys())
+    key_set = set(first_keys)
+    if all(set(x.keys()) == key_set for x in arr):
+        return first_keys
+    return None
+
+
+def encode(obj, _depth: int = 0) -> str:
+    pad = "  " * _depth
+    child_pad = "  " * (_depth + 1)
+
+    if isinstance(obj, dict):
+        if not obj:
+            return "{}"
+        lines = []
+        for k, v in obj.items():
+            if isinstance(v, list):
+                keys = _uniform_keys(v)
+                if keys and len(v) > 1:
+                    # Tabular format: key[n]{col1,col2}:\n  v1,v2\n  v3,v4
+                    header = f"{k}[{len(v)}]{{{','.join(keys)}}}:"
+                    rows = []
+                    for row in v:
+                        rows.append(",".join(_escape(row.get(c)) for c in keys))
+                    lines.append(header)
+                    for r in rows:
+                        lines.append(f"{child_pad}{r}")
+                elif v:
+                    lines.append(f"{k}[{len(v)}]:")
+                    for item in v:
+                        encoded = encode(item, _depth + 1)
+                        lines.append(f"{child_pad}{encoded}")
+                else:
+                    lines.append(f"{k}: []")
+            elif isinstance(v, dict):
+                inner = encode(v, _depth + 1)
+                lines.append(f"{k}:\n{child_pad}{inner}")
+            else:
+                lines.append(f"{k}: {_escape(v)}")
+        return f"\n{pad}".join(lines)
+
+    elif isinstance(obj, list):
+        keys = _uniform_keys(obj)
+        if keys and len(obj) > 1:
+            header = f"[{len(obj)}]{{{','.join(keys)}}}:"
+            rows = [",".join(_escape(row.get(c)) for c in keys) for row in obj]
+            body = "\n".join(f"{child_pad}{r}" for r in rows)
+            return f"{header}\n{body}"
+        elif obj:
+            items = ", ".join(_escape(x) if not isinstance(x, (dict, list)) else encode(x, _depth) for x in obj)
+            return f"[{len(obj)}]: {items}"
+        else:
+            return "[]"
+
+    else:
+        return _escape(obj)
+
+
+def main():
+    try:
+        data = json.load(sys.stdin)
+    except json.JSONDecodeError as e:
+        # Not JSON — pass through unchanged
+        sys.stderr.write(f"json2toon: not valid JSON ({e}), passing through\n")
+        sys.exit(1)
+
+    print(encode(data))
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# pcurl — curl wrapper that converts JSON responses to TOON format.
+#
+# Reduces LLM context window token usage by ~50-70% for Paperclip API responses
+# (lists of issues, agents, runs, etc.) by converting uniform JSON arrays to
+# TOON tabular notation.
+#
+# Usage: pcurl [curl options] <url>
+# Drop-in replacement for: curl -s $PAPERCLIP_API_URL/api/issues | jq .
+# Instead use:              pcurl $PAPERCLIP_API_URL/api/issues
+#
+# Automatically adds:
+#   -s (silent)
+#   -H "Authorization: Bearer $PAPERCLIP_API_KEY"
+#   -H "X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID"  (if set)
+#
+# Options:
+#   --raw   Skip TOON conversion, output raw JSON (for programmatic use)
+#   --jq    Same as --raw (pipe through jq yourself)
+
+set -euo pipefail
+
+RAW=0
+EXTRA_ARGS=()
+URL_ARGS=()
+
+for arg in "$@"; do
+  case "$arg" in
+    --raw|--jq) RAW=1 ;;
+    *) EXTRA_ARGS+=("$arg") ;;
+  esac
+done
+
+# Build auth headers
+AUTH_HEADERS=()
+if [ -n "${PAPERCLIP_API_KEY:-}" ]; then
+  AUTH_HEADERS+=(-H "Authorization: Bearer $PAPERCLIP_API_KEY")
+fi
+if [ -n "${PAPERCLIP_RUN_ID:-}" ]; then
+  AUTH_HEADERS+=(-H "X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID")
+fi
+
+if [ "$RAW" = "1" ]; then
+  curl -s "${AUTH_HEADERS[@]}" "${EXTRA_ARGS[@]}"
+else
+  curl -s "${AUTH_HEADERS[@]}" "${EXTRA_ARGS[@]}" | json2toon 2>/dev/null || \
+    curl -s "${AUTH_HEADERS[@]}" "${EXTRA_ARGS[@]}"
+fi
