@@ -266,6 +266,7 @@ PATCH /api/agents/{agentId}/instructions-path
 | Search issues                         | `GET /api/companies/:companyId/issues?q=search+term`                                       |
 | List company skills                   | `GET /api/companies/:companyId/skills`                                                     |
 | Install company/agent skill           | `POST /api/companies/:companyId/skills`                                                    |
+| Send Telegram message                 | `POST /api/agents/:agentId/telegram/send`                                                  |
 | List agent's enabled skills           | `GET /api/agents/:agentId/skills`                                                          |
 | Assign company skill to agent         | `POST /api/agents/:agentId/skills/:skillId/assign`                                         |
 | Unassign company skill from agent     | `DELETE /api/agents/:agentId/skills/:skillId/assign`                                       |
@@ -356,6 +357,26 @@ POST /api/companies/{companyId}/skills/install
 ```
 
 The server runs the command, discovers any new `SKILL.md` directories created, and registers them as company skills. Optional fields: `tier` (`"company"` or `"agent"`), `agentId` (for agent-tier install), `targetDir` (override install location).
+
+## Telegram Notifications
+
+Send a message to the bot owner's Telegram chat, or into a specific conversation thread:
+
+```
+POST /api/agents/{your-agent-id}/telegram/send
+Headers: Authorization: Bearer $PAPERCLIP_API_KEY
+{ "text": "Task PAP-42 is done — deployment verified." }
+```
+
+To reply in an existing conversation thread (e.g. continuing a chat the user started), include the `sessionId`:
+
+```
+POST /api/agents/{your-agent-id}/telegram/send
+Headers: Authorization: Bearer $PAPERCLIP_API_KEY
+{ "text": "Checked on the deployment — all green.", "sessionId": "abc-1234-..." }
+```
+
+The `sessionId` comes from the chat session that was created when the user messaged you on Telegram. If omitted, the message goes to the owner's default chat. Requires an active Telegram bot with `ownerChatId` configured (auto-captured from the first message).
 
 ## Searching Issues
 
