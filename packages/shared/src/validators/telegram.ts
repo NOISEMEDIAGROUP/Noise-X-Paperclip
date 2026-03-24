@@ -15,6 +15,7 @@ export const updateTelegramConfigSchema = z.object({
 
 export const sendTelegramMessageSchema = z.object({
   text: z.string().trim().min(1, "Message text is required"),
+  sessionId: z.string().uuid().optional(),
 });
 
 export type UpsertTelegramConfig = z.infer<typeof upsertTelegramConfigSchema>;

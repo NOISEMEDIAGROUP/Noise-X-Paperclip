@@ -105,7 +105,9 @@ export function telegramRoutes(db: Db) {
       if (!agent) return;
 
       try {
-        const sent = await telegram.sendNotification(agent.id, req.body.text);
+        const sent = await telegram.sendNotification(agent.id, req.body.text, {
+          sessionId: req.body.sessionId,
+        });
         if (!sent) {
           res.status(422).json({ error: "Bot is not active or no owner chat ID is configured" });
           return;

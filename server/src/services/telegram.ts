@@ -564,16 +564,39 @@ export function telegramService(db: Db) {
     return activeBots.size;
   }
 
-  async function sendNotification(agentId: string, text: string): Promise<boolean> {
+  async function sendNotification(
+    agentId: string,
+    text: string,
+    opts?: { sessionId?: string },
+  ): Promise<boolean> {
     const config = await getConfig(agentId);
-    if (!config?.ownerChatId || !config.enabled) return false;
+    if (!config?.enabled) return false;
 
     const instance = activeBots.get(agentId);
     if (!instance) return false;
 
+    let targetChatId: string | null = null;
+
+    if (opts?.sessionId) {
+      const session = await db
+        .select()
+        .from(chatSessions)
+        .where(eq(chatSessions.id, opts.sessionId))
+        .then((rows) => rows[0] ?? null);
+      if (session?.telegramChatId) {
+        targetChatId = session.telegramChatId;
+      }
+    }
+
+    if (!targetChatId) {
+      targetChatId = config.ownerChatId;
+    }
+
+    if (!targetChatId) return false;
+
     const parts = splitMessage(text);
     for (const part of parts) {
-      await instance.bot.api.sendMessage(Number(config.ownerChatId), part);
+      await instance.bot.api.sendMessage(Number(targetChatId), part);
     }
     return true;
   }
