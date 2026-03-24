@@ -46,3 +46,12 @@ jobs:
           git checkout -B master HEAD
           git checkout -- pnpm-lock.yaml
           ./scripts/release.sh canary --skip-verify --dry-run
+
+      - name: Post PR comment
+        if: always()
+        run: |
+          STATUS="${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }}"
+          RUN_LINK="https://github.com/paperclipai/paperclip/actions/runs/${{ github.run_id }}"
+          gh pr comment ${{ github.event.pull_request.number }} --body "CI Run: $STATUS - $RUN_LINK"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

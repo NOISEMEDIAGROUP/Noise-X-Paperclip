@@ -47,3 +47,12 @@ jobs:
           if printf '%s\n' "$changed" | grep -Eq "$manifest_pattern"; then
             pnpm install --lockfile-only --ignore-scripts --no-frozen-lockfile
           fi
+
+      - name: Post PR comment
+        if: always()
+        run: |
+          STATUS="${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }}"
+          RUN_LINK="https://github.com/paperclipai/paperclip/actions/runs/${{ github.run_id }}"
+          gh pr comment ${{ github.event.pull_request.number }} --body "Policy Check: $STATUS - $RUN_LINK"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
