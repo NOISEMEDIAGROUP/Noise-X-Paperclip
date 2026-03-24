@@ -56,35 +56,47 @@ const PAPERCLIP_SKILL_CATEGORY = "paperclip";
 async function syncSkillsToHermes(skills: AdapterSkill[]): Promise<string[]> {
   if (!skills || skills.length === 0) return [];
 
-  const targetDir = path.join(hermesHome(), "skills", PAPERCLIP_SKILL_CATEGORY);
-  await fs.mkdir(targetDir, { recursive: true });
-
   const synced: string[] = [];
+  const paperclipSkills: AdapterSkill[] = [];
 
   for (const skill of skills) {
-    const stat = await fs.stat(skill.path).catch(() => null);
-    if (!stat?.isDirectory()) continue;
+    if (skill.name.startsWith("hermes/")) {
+      // Hermes-native skill — already on disk under ~/.hermes/skills/.
+      // Just pass the native name (strip the hermes/ prefix) so Hermes loads it.
+      synced.push(skill.name.slice("hermes/".length));
+    } else {
+      paperclipSkills.push(skill);
+    }
+  }
 
-    const linkPath = path.join(targetDir, skill.name);
-    const existing = await fs.lstat(linkPath).catch(() => null);
+  if (paperclipSkills.length > 0) {
+    const targetDir = path.join(hermesHome(), "skills", PAPERCLIP_SKILL_CATEGORY);
+    await fs.mkdir(targetDir, { recursive: true });
 
-    if (existing) {
-      if (existing.isSymbolicLink()) {
-        const currentTarget = await fs.readlink(linkPath);
-        if (currentTarget === skill.path) {
+    for (const skill of paperclipSkills) {
+      const stat = await fs.stat(skill.path).catch(() => null);
+      if (!stat?.isDirectory()) continue;
+
+      const linkPath = path.join(targetDir, skill.name);
+      const existing = await fs.lstat(linkPath).catch(() => null);
+
+      if (existing) {
+        if (existing.isSymbolicLink()) {
+          const currentTarget = await fs.readlink(linkPath);
+          if (currentTarget === skill.path) {
+            synced.push(skill.name);
+            continue;
+          }
+          await fs.unlink(linkPath);
+        } else {
           synced.push(skill.name);
           continue;
         }
-        await fs.unlink(linkPath);
-      } else {
-        // Real dir exists with same name — don't overwrite
-        synced.push(skill.name);
-        continue;
       }
-    }
 
-    await fs.symlink(skill.path, linkPath);
-    synced.push(skill.name);
+      await fs.symlink(skill.path, linkPath);
+      synced.push(skill.name);
+    }
   }
 
   return synced;
