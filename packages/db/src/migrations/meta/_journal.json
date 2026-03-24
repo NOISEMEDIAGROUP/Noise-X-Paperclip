@@ -330,6 +330,13 @@
       "when": 1742842800000,
       "tag": "0046_acl_bootstrap_existing_companies",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1742929200000,
+      "tag": "0047_ceo_board_principal_grants",
+      "breakpoints": true
     }
   ]
 }

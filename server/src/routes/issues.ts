@@ -77,7 +77,14 @@ export function issueRoutes(db: Db, storage: StorageService) {
 
   async function assertCanManageIssueApprovalLinks(req: Request, res: Response, companyId: string) {
     assertCompanyAccess(req, companyId);
-    if (req.actor.type === "board") return true;
+    if (req.actor.type === "board") {
+      const allowed = await access.canUser(companyId, req.actor.userId, "agents:create");
+      if (!allowed) {
+        res.status(403).json({ error: "Missing permission to link approvals" });
+        return false;
+      }
+      return true;
+    }
     if (!req.actor.agentId) {
       res.status(403).json({ error: "Agent authentication required" });
       return false;
@@ -87,13 +94,12 @@ export function issueRoutes(db: Db, storage: StorageService) {
       res.status(403).json({ error: "Forbidden" });
       return false;
     }
-    if (actorAgent.role === "ceo" || Boolean(actorAgent.permissions?.canCreateAgents)) return true;
+    if (Boolean(actorAgent.permissions?.canCreateAgents)) return true;
     res.status(403).json({ error: "Missing permission to link approvals" });
     return false;
   }
 
   function canCreateAgentsLegacy(agent: { permissions: Record<string, unknown> | null | undefined; role: string }) {
-    if (agent.role === "ceo") return true;
     if (!agent.permissions || typeof agent.permissions !== "object") return false;
     return Boolean((agent.permissions as Record<string, unknown>).canCreateAgents);
   }
@@ -101,7 +107,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
   async function assertCanAssignTasks(req: Request, companyId: string) {
     assertCompanyAccess(req, companyId);
     if (req.actor.type === "board") {
-      if (req.actor.source === "local_implicit" || req.actor.isInstanceAdmin) return;
+      if (!req.actor.userId) throw unauthorized();
       const allowed = await access.canUser(companyId, req.actor.userId, "tasks:assign");
       if (!allowed) throw forbidden("Missing permission: tasks:assign");
       return;
@@ -123,9 +129,6 @@ export function issueRoutes(db: Db, storage: StorageService) {
     companyId: string,
     permission: "assign" | "comment",
   ) {
-    const granteeAgent = await agentsSvc.getById(granteeAgentId);
-    if (granteeAgent && granteeAgent.role === "ceo") return;
-
     const grants = await agentAclSvc.listGrants(companyId, {
       granteeId: granteeAgentId,
       agentId: targetAgentId,
