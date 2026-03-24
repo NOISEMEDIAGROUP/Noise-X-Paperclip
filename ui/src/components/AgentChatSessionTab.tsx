@@ -40,6 +40,12 @@ function isTerminalStreamStatus(status: StreamStatus) {
   return status === "completed" || status === "failed" || status === "cancelled" || status === "timed_out";
 }
 
+/** True while the SSE stream is still active (pending or receiving logs). Refs do not re-render — use this for UI, not eventSourceRef. */
+function isStreamInProgress(streamState: StreamState | null): boolean {
+  if (!streamState) return false;
+  return streamState.status === "pending" || streamState.status === "streaming";
+}
+
 function deriveAssistantPreview(streamState: StreamState | null, adapterType: string) {
   if (!streamState) return "";
   const transcript = buildTranscript(streamState.logs, getUIAdapter(adapterType).parseStdoutLine);
@@ -246,7 +252,9 @@ export function AgentChatSessionTab({
             ? { ...current, runId: payload.runId, status: payload.status }
             : current,
         );
-        queryClient.invalidateQueries({ queryKey: queryKeys.chatMessages(agentId, sessionId) });
+        // Do not invalidate messages here — appendAssistantMessage already merged the
+        // assistant row. A refetch can briefly return data without that row and retrigger
+        // the reconnect effect (second EventSource → footer / streaming UI flicker).
         closeStream();
       });
 
@@ -264,7 +272,7 @@ export function AgentChatSessionTab({
         closeStream();
       });
     },
-    [agentId, appendAssistantMessage, closeStream, queryClient],
+    [agentId, appendAssistantMessage, closeStream],
   );
 
   useEffect(() => () => closeStream(), [closeStream]);
@@ -292,9 +300,9 @@ export function AgentChatSessionTab({
   }, [selectedSessionId, scrollToTranscriptBottom]);
 
   useEffect(() => {
-    if (!eventSourceRef.current) return;
+    if (!isStreamInProgress(streamState)) return;
     scrollToTranscriptBottom("smooth");
-  }, [messages.length, scrollToTranscriptBottom, streamState?.logs.length]);
+  }, [messages.length, scrollToTranscriptBottom, streamState, streamState?.logs.length]);
 
   useEffect(() => {
     if (!completedMessageId) return;
@@ -394,11 +402,13 @@ export function AgentChatSessionTab({
   });
 
   const assistantPreview = useMemo(() => deriveAssistantPreview(streamState, adapterType), [adapterType, streamState]);
+  const streamInProgress = useMemo(() => isStreamInProgress(streamState), [streamState]);
   const activeRunId = streamState?.runId ?? null;
   const hasPersistedAssistantForActiveRun = Boolean(
     activeRunId && messages.some((message) => message.role === "assistant" && message.runId === activeRunId),
   );
-  const canSend = draft.trim().length > 0 && !sendMessage.isPending && !eventSourceRef.current && !selectedSession?.archivedAt;
+  const canSend =
+    draft.trim().length > 0 && !sendMessage.isPending && !streamInProgress && !selectedSession?.archivedAt;
 
   const { data: runDetail } = useQuery({
     queryKey: expandedRunId ? queryKeys.runDetail(expandedRunId) : ["heartbeat-run", "none"],
@@ -874,13 +884,15 @@ export function AgentChatSessionTab({
                     sendMessage.mutate(draft.trim());
                   }
                 }}
-                disabled={!selectedSessionId || sendMessage.isPending || Boolean(eventSourceRef.current) || Boolean(selectedSession?.archivedAt)}
+                disabled={
+                  !selectedSessionId || sendMessage.isPending || streamInProgress || Boolean(selectedSession?.archivedAt)
+                }
               />
               <div className="flex items-center justify-between gap-3">
                 <div className="text-xs text-muted-foreground">
                   {selectedSession?.archivedAt
                     ? "Restore this conversation from the sidebar to continue chatting."
-                    : eventSourceRef.current
+                    : streamInProgress
                       ? "Wait for the current response to finish before sending another message."
                       : "Press Enter to send. Use Shift+Enter for a new line."}
                 </div>
