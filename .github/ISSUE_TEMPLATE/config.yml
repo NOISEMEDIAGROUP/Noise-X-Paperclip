@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "\U0001F4AC Discord Community"
+    url: https://discord.gg/paperclip
+    about: Join the Paperclip Discord for general questions and discussions
+  - name: "\U0001F4D6 Documentation"
+    url: https://paperclip.ing/docs
+    about: Check the official documentation for guides and API reference
+  - name: "\U0001F393 Getting Started"
+    url: https://paperclip.ing/docs/start/quickstart
+    about: New to Paperclip? Start here with the quickstart guide

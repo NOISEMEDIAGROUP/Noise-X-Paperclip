@@ -1,0 +1,48 @@
+name: "\U0001F4D3 Documentation Improvement"
+description: Report an issue or suggest improvements to the documentation
+labels: ["documentation", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us improve the Paperclip documentation!
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type of Issue
+      description: What kind of documentation improvement is needed?
+      options:
+        - Missing documentation
+        - Incorrect information
+        - Unclear or confusing content
+        - Outdated content
+        - Typo or formatting issue
+        - New guide or tutorial request
+    validations:
+      required: true
+
+  - type: input
+    id: page
+    attributes:
+      label: Affected Page
+      description: Link to the documentation page or file path.
+      placeholder: e.g., docs/guides/local-setup.md or https://paperclip.ing/docs/start/quickstart
+    validations:
+      required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe what needs to be changed or added.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested Change
+      description: If you have a specific suggestion for the improvement, describe it here.
+    validations:
+      required: false
