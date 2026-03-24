@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ChatMessage, ChatSession, CreateChatMessageResponse, HeartbeatRun, HeartbeatRunEvent } from "@paperclipai/shared";
@@ -402,6 +402,8 @@ export function AgentChatSessionTab({
   });
 
   const assistantPreview = useMemo(() => deriveAssistantPreview(streamState, adapterType), [adapterType, streamState]);
+  /** Hermes emits many log chunks/sec — defer Markdown so the UI doesn't thrash. */
+  const deferredAssistantPreview = useDeferredValue(assistantPreview);
   const streamInProgress = useMemo(() => isStreamInProgress(streamState), [streamState]);
   const activeRunId = streamState?.runId ?? null;
   const hasPersistedAssistantForActiveRun = Boolean(
@@ -415,6 +417,7 @@ export function AgentChatSessionTab({
     queryFn: () => heartbeatsApi.get(expandedRunId!),
     enabled: Boolean(expandedRunId),
     refetchInterval: (query) => {
+      if (streamInProgress) return false;
       const run = query.state.data as HeartbeatRun | undefined;
       if (!run) return false;
       return run.status === "running" || run.status === "queued" ? 2000 : false;
@@ -425,7 +428,10 @@ export function AgentChatSessionTab({
     queryKey: expandedRunId ? ["heartbeat-run-events", expandedRunId] : ["heartbeat-run-events", "none"],
     queryFn: () => heartbeatsApi.events(expandedRunId!, 0, 200),
     enabled: Boolean(expandedRunId),
-    refetchInterval: runDetail && (runDetail.status === "running" || runDetail.status === "queued") ? 2000 : false,
+    refetchInterval:
+      streamInProgress || !runDetail || (runDetail.status !== "running" && runDetail.status !== "queued")
+        ? false
+        : 2000,
   });
 
   const { data: persistedRunLogs = [] } = useQuery({
@@ -443,7 +449,10 @@ export function AgentChatSessionTab({
       }
       return records;
     },
-    refetchInterval: runDetail && (runDetail.status === "running" || runDetail.status === "queued") ? 2000 : false,
+    refetchInterval:
+      streamInProgress || !runDetail || (runDetail.status !== "running" && runDetail.status !== "queued")
+        ? false
+        : 2000,
   });
 
   const runLogEvents = useMemo(() => {
@@ -451,6 +460,16 @@ export function AgentChatSessionTab({
       expandedRunId &&
       streamState?.runId === expandedRunId &&
       (streamState.status === "pending" || streamState.status === "streaming")
+    ) {
+      return streamState.logs;
+    }
+    if (
+      expandedRunId &&
+      streamState?.runId === expandedRunId &&
+      streamState &&
+      isTerminalStreamStatus(streamState.status) &&
+      persistedRunLogs.length === 0 &&
+      streamState.logs.length > 0
     ) {
       return streamState.logs;
     }
@@ -847,7 +866,7 @@ export function AgentChatSessionTab({
                       {streamState.status === "streaming" || streamState.status === "pending" ? "Streaming..." : streamState.status}
                     </span>
                   </div>
-                  <MarkdownBody>{assistantPreview}</MarkdownBody>
+                  <MarkdownBody>{streamInProgress ? deferredAssistantPreview : assistantPreview}</MarkdownBody>
                   {streamState.runId && (
                     <div className="mt-2 flex items-center gap-3 text-[11px]">
                       <button
