@@ -1,0 +1,28 @@
+{
+  "startup": {
+    "banner": {
+      "paperclip": "Paperclip",
+      "version": "v{{version}}",
+      "serverReady": "Сервер готов",
+      "listeningOn": "Прослушивает {{url}}",
+      "database": "База данных",
+      "connected": "подключена",
+      "notConfigured": "не настроена",
+      "agents": "Агенты",
+      "companies": "Компании",
+      "migrations": "Миграции"
+    }
+  },
+  "heartbeat": {
+    "agentNotFound": "Агент для heartbeat не найден",
+    "runCreated": "Запуск heartbeat создан",
+    "runCompleted": "Запуск heartbeat завершён",
+    "runFailed": "Запуск heartbeat не удался",
+    "budgetExceeded": "Бюджет агента превышен"
+  },
+  "workspaces": {
+    "notFound": "Рабочее пространство не найдено",
+    "cloneFailed": "Клонирование репозитория не удалось: {{message}}",
+    "checkoutFailed": "Переключение ветки не удалось: {{message}}"
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "auth": {
+    "loading": "Загрузка…",
+    "brandName": "Paperclip",
+    "signIn": {
+      "title": "Войти в Paperclip",
+      "subtitle": "Используйте электронную почту и пароль для доступа к этому экземпляру.",
+      "submitButton": "Войти",
+      "switchPrompt": "Нет учётной записи?",
+      "switchAction": "Создать"
+    },
+    "signUp": {
+      "title": "Создать учётную запись Paperclip",
+      "subtitle": "Создайте учётную запись для этого экземпляра. Подтверждение электронной почты не требуется в v1.",
+      "submitButton": "Создать учётную запись",
+      "switchPrompt": "Уже есть учётная запись?",
+      "switchAction": "Войти"
+    },
+    "fields": {
+      "name": "Имя",
+      "email": "Электронная почта",
+      "password": "Пароль"
+    },
+    "working": "Выполняется…",
+    "error": {
+      "default": "Ошибка аутентификации"
+    }
+  },
+  "notFound": {
+    "breadcrumb": "Не найдено",
+    "companyNotFound": {
+      "title": "Компания не найдена",
+      "description": "Компания с префиксом \"{{prefix}}\" не найдена."
+    },
+    "pageNotFound": {
+      "title": "Страница не найдена",
+      "description": "Этот маршрут не существует."
+    },
+    "requestedPath": "Запрошенный путь:",
+    "openDashboard": "Открыть панель управления",
+    "goHome": "На главную"
+  },
+  "sidebar": {
+    "selectCompany": "Выбрать компанию",
+    "newIssue": "Новая задача",
+    "nav": {
+      "dashboard": "Панель управления",
+      "inbox": "Входящие",
+      "issues": "Задачи",
+      "goals": "Цели",
+      "org": "Организация",
+      "costs": "Расходы",
+      "activity": "Активность",
+      "settings": "Настройки"
+    },
+    "sections": {
+      "work": "Работа",
+      "company": "Компания"
+    }
+  }
+}

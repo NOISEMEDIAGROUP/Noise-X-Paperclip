@@ -1,0 +1,48 @@
+{
+  "agents": {
+    "notFound": "Агент не найден",
+    "authRequired": "Требуется аутентификация агента",
+    "cannotAccessOtherCompany": "Ключ агента не может получить доступ к другой компании",
+    "shortnameAmbiguous": "Краткое имя агента неоднозначно в этой компании. Используйте ID агента.",
+    "shortnameRequiresCompany": "Поиск по краткому имени агента требует параметра companyId",
+    "missingPermissionCreate": "Отсутствует разрешение: agents:create",
+    "missingPermissionCanCreate": "Отсутствует разрешение: создание агентов",
+    "onlyCeoCanModify": "Только CEO или создатели агентов могут изменять других агентов",
+    "unknownAdapterType": "Неизвестный тип адаптера: {{type}}",
+    "invalidAdapterType": "Недопустимый тип адаптера",
+    "updateFailed": "Не удалось обновить агента",
+    "keyNotFound": "Ключ агента не найден",
+    "keyRevoked": "Ключ агента отозван",
+    "sessionResetFailed": "Сброс сессии не удался",
+    "instructionsPathInvalidKey": "Недопустимый ключ пути инструкций"
+  },
+  "companies": {
+    "notFound": "Компания не найдена",
+    "instanceAdminRequired": "Требуются права администратора экземпляра",
+    "forbidden": "Доступ запрещён",
+    "prefixTaken": "Префикс задачи уже используется",
+    "invalidPrefix": "Недопустимый префикс задачи"
+  },
+  "issues": {
+    "notFound": "Задача не найдена",
+    "checkoutConflict": "Задача уже занята другим агентом",
+    "checkoutFailed": "Не удалось взять задачу",
+    "invalidStatus": "Недопустимый переход статуса",
+    "forbidden": "Доступ запрещён"
+  },
+  "approvals": {
+    "notFound": "Одобрение не найдено",
+    "forbidden": "Доступ запрещён"
+  },
+  "auth": {
+    "unauthorized": "Не авторизован",
+    "sessionExpired": "Сессия истекла",
+    "invalidCredentials": "Неверный адрес электронной почты или пароль"
+  },
+  "generic": {
+    "internalError": "Произошла внутренняя ошибка",
+    "notFound": "Ресурс не найден",
+    "forbidden": "Запрещено",
+    "badRequest": "Некорректный запрос"
+  }
+}

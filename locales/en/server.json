@@ -1,0 +1,28 @@
+{
+  "startup": {
+    "banner": {
+      "paperclip": "Paperclip",
+      "version": "v{{version}}",
+      "serverReady": "Server ready",
+      "listeningOn": "Listening on {{url}}",
+      "database": "Database",
+      "connected": "connected",
+      "notConfigured": "not configured",
+      "agents": "Agents",
+      "companies": "Companies",
+      "migrations": "Migrations"
+    }
+  },
+  "heartbeat": {
+    "agentNotFound": "Agent not found for heartbeat",
+    "runCreated": "Heartbeat run created",
+    "runCompleted": "Heartbeat run completed",
+    "runFailed": "Heartbeat run failed",
+    "budgetExceeded": "Agent budget exceeded"
+  },
+  "workspaces": {
+    "notFound": "Workspace not found",
+    "cloneFailed": "Repository clone failed: {{message}}",
+    "checkoutFailed": "Branch checkout failed: {{message}}"
+  }
+}

@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { t } from "./i18n.js";
 import { onboard } from "./commands/onboard.js";
 import { doctor } from "./commands/doctor.js";
 import { envCommand } from "./commands/env.js";
@@ -21,12 +22,11 @@ import { registerWorktreeCommands } from "./commands/worktree.js";
 import { registerPluginCommands } from "./commands/client/plugin.js";
 
 const program = new Command();
-const DATA_DIR_OPTION_HELP =
-  "Paperclip data directory root (isolates state from ~/.paperclip)";
+const DATA_DIR_OPTION_HELP = t("options.dataDir");
 
 program
   .name("paperclipai")
-  .description("Paperclip CLI — setup, diagnose, and configure your instance")
+  .description(t("program.description"))
   .version("0.2.7");
 
 program.hook("preAction", (_thisCommand, actionCommand) => {
@@ -41,21 +41,21 @@ program.hook("preAction", (_thisCommand, actionCommand) => {
 
 program
   .command("onboard")
-  .description("Interactive first-run setup wizard")
-  .option("-c, --config <path>", "Path to config file")
+  .description(t("commands.onboard.description"))
+  .option("-c, --config <path>", t("options.config"))
   .option("-d, --data-dir <path>", DATA_DIR_OPTION_HELP)
-  .option("-y, --yes", "Accept defaults (quickstart + start immediately)", false)
-  .option("--run", "Start Paperclip immediately after saving config", false)
+  .option("-y, --yes", t("options.yes"), false)
+  .option("--run", t("options.run"), false)
   .action(onboard);
 
 program
   .command("doctor")
-  .description("Run diagnostic checks on your Paperclip setup")
-  .option("-c, --config <path>", "Path to config file")
+  .description(t("commands.doctor.description"))
+  .option("-c, --config <path>", t("options.config"))
   .option("-d, --data-dir <path>", DATA_DIR_OPTION_HELP)
-  .option("--repair", "Attempt to repair issues automatically")
+  .option("--repair", t("options.repair"))
   .alias("--fix")
-  .option("-y, --yes", "Skip repair confirmation prompts")
+  .option("-y, --yes", t("options.skipConfirmation"))
   .action(async (opts) => {
     await doctor(opts);
   });

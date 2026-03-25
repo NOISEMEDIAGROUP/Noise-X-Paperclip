@@ -1,0 +1,43 @@
+{
+  "program": {
+    "description": "Paperclip CLI — setup, diagnose, and configure your instance"
+  },
+  "options": {
+    "dataDir": "Paperclip data directory root (isolates state from ~/.paperclip)",
+    "config": "Path to config file",
+    "yes": "Accept defaults (quickstart + start immediately)",
+    "run": "Start Paperclip immediately after saving config",
+    "repair": "Attempt to repair issues automatically",
+    "skipConfirmation": "Skip repair confirmation prompts",
+    "companyId": "Company ID",
+    "agentId": "Agent ID",
+    "output": "Output format (json, table, plain)",
+    "limit": "Maximum number of results"
+  },
+  "commands": {
+    "onboard": {
+      "description": "Interactive first-run setup wizard"
+    },
+    "doctor": {
+      "description": "Run diagnostic checks on your Paperclip setup"
+    },
+    "env": {
+      "description": "Manage environment variables"
+    },
+    "configure": {
+      "description": "Configure your Paperclip instance"
+    },
+    "heartbeatRun": {
+      "description": "Trigger a heartbeat run for an agent"
+    },
+    "run": {
+      "description": "Start the Paperclip server"
+    }
+  },
+  "output": {
+    "success": "Done.",
+    "error": "Error: {{message}}",
+    "notFound": "Not found.",
+    "noResults": "No results found."
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "agents": {
+    "notFound": "Agent not found",
+    "authRequired": "Agent authentication required",
+    "cannotAccessOtherCompany": "Agent key cannot access another company",
+    "shortnameAmbiguous": "Agent shortname is ambiguous in this company. Use the agent ID.",
+    "shortnameRequiresCompany": "Agent shortname lookup requires companyId query parameter",
+    "missingPermissionCreate": "Missing permission: agents:create",
+    "missingPermissionCanCreate": "Missing permission: can create agents",
+    "onlyCeoCanModify": "Only CEO or agent creators can modify other agents",
+    "unknownAdapterType": "Unknown adapter type: {{type}}",
+    "invalidAdapterType": "Invalid adapter type",
+    "updateFailed": "Failed to update agent",
+    "keyNotFound": "Agent key not found",
+    "keyRevoked": "Agent key has been revoked",
+    "sessionResetFailed": "Session reset failed",
+    "instructionsPathInvalidKey": "Invalid instructions path key"
+  },
+  "companies": {
+    "notFound": "Company not found",
+    "instanceAdminRequired": "Instance admin required",
+    "forbidden": "Access denied",
+    "prefixTaken": "Issue prefix already in use",
+    "invalidPrefix": "Invalid issue prefix"
+  },
+  "issues": {
+    "notFound": "Issue not found",
+    "checkoutConflict": "Issue is already checked out by another agent",
+    "checkoutFailed": "Checkout failed",
+    "invalidStatus": "Invalid status transition",
+    "forbidden": "Access denied"
+  },
+  "approvals": {
+    "notFound": "Approval not found",
+    "forbidden": "Access denied"
+  },
+  "auth": {
+    "unauthorized": "Unauthorized",
+    "sessionExpired": "Session has expired",
+    "invalidCredentials": "Invalid email or password"
+  },
+  "generic": {
+    "internalError": "An internal error occurred",
+    "notFound": "Resource not found",
+    "forbidden": "Forbidden",
+    "badRequest": "Bad request"
+  }
+}

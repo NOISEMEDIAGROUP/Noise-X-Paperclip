@@ -1,0 +1,61 @@
+{
+  "auth": {
+    "loading": "Loading…",
+    "brandName": "Paperclip",
+    "signIn": {
+      "title": "Sign in to Paperclip",
+      "subtitle": "Use your email and password to access this instance.",
+      "submitButton": "Sign In",
+      "switchPrompt": "Need an account?",
+      "switchAction": "Create one"
+    },
+    "signUp": {
+      "title": "Create your Paperclip account",
+      "subtitle": "Create an account for this instance. Email confirmation is not required in v1.",
+      "submitButton": "Create Account",
+      "switchPrompt": "Already have an account?",
+      "switchAction": "Sign in"
+    },
+    "fields": {
+      "name": "Name",
+      "email": "Email",
+      "password": "Password"
+    },
+    "working": "Working…",
+    "error": {
+      "default": "Authentication failed"
+    }
+  },
+  "notFound": {
+    "breadcrumb": "Not Found",
+    "companyNotFound": {
+      "title": "Company not found",
+      "description": "No company matches prefix \"{{prefix}}\"."
+    },
+    "pageNotFound": {
+      "title": "Page not found",
+      "description": "This route does not exist."
+    },
+    "requestedPath": "Requested path:",
+    "openDashboard": "Open dashboard",
+    "goHome": "Go home"
+  },
+  "sidebar": {
+    "selectCompany": "Select company",
+    "newIssue": "New Issue",
+    "nav": {
+      "dashboard": "Dashboard",
+      "inbox": "Inbox",
+      "issues": "Issues",
+      "goals": "Goals",
+      "org": "Org",
+      "costs": "Costs",
+      "activity": "Activity",
+      "settings": "Settings"
+    },
+    "sections": {
+      "work": "Work",
+      "company": "Company"
+    }
+  }
+}
