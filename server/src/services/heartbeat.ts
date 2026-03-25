@@ -10,6 +10,7 @@ import {
   agentRuntimeState,
   agentTaskSessions,
   agentWakeupRequests,
+  goals,
   heartbeatRunEvents,
   heartbeatRuns,
   issues,
@@ -1976,6 +1977,7 @@ export function heartbeatService(db: Db) {
             id: issues.id,
             identifier: issues.identifier,
             title: issues.title,
+            goalId: issues.goalId,
             projectId: issues.projectId,
             projectWorkspaceId: issues.projectWorkspaceId,
             executionWorkspaceId: issues.executionWorkspaceId,
@@ -2065,12 +2067,30 @@ export function heartbeatService(db: Db) {
           id: issueContext.id,
           identifier: issueContext.identifier,
           title: issueContext.title,
+          goalId: issueContext.goalId,
           projectId: issueContext.projectId,
           projectWorkspaceId: issueContext.projectWorkspaceId,
           executionWorkspaceId: issueContext.executionWorkspaceId,
           executionWorkspacePreference: issueContext.executionWorkspacePreference,
         }
       : null;
+
+    // Resolve the goal linked to the current issue so adapters can include
+    // strategic context in the agent prompt.
+    const issueGoal = issueRef?.goalId
+      ? await db
+          .select({
+            id: goals.id,
+            title: goals.title,
+            description: goals.description,
+            level: goals.level,
+            status: goals.status,
+          })
+          .from(goals)
+          .where(and(eq(goals.id, issueRef.goalId), eq(goals.companyId, agent.companyId)))
+          .then((rows) => rows[0] ?? null)
+      : null;
+
     const existingExecutionWorkspace =
       issueRef?.executionWorkspaceId ? await executionWorkspacesSvc.getById(issueRef.executionWorkspaceId) : null;
     const workspaceOperationRecorder = workspaceOperationsSvc.createRecorder({
@@ -2292,6 +2312,24 @@ export function heartbeatService(db: Db) {
     }
     if (executionWorkspace.projectId && !readNonEmptyString(context.projectId)) {
       context.projectId = executionWorkspace.projectId;
+    }
+
+    // Inject goal context so adapters (and prompt templates) can reference
+    // the strategic goal this issue is aligned to.  When no goal is linked,
+    // explicitly clear any stale fields that may have been persisted in a
+    // previous run's contextSnapshot.
+    if (issueGoal) {
+      context.goalId = issueGoal.id;
+      context.goalTitle = issueGoal.title;
+      context.goalDescription = issueGoal.description ?? null;
+      context.goalLevel = issueGoal.level;
+      context.goalStatus = issueGoal.status;
+    } else {
+      delete context.goalId;
+      delete context.goalTitle;
+      delete context.goalDescription;
+      delete context.goalLevel;
+      delete context.goalStatus;
     }
     const runtimeSessionFallback = taskKey || resetTaskSession ? null : runtime.sessionId;
     let previousSessionDisplayId = truncateDisplayId(
