@@ -1,5 +1,7 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { AdapterExecutionContext, AdapterExecutionResult } from "@paperclipai/adapter-utils";
 import {
   asBoolean,
@@ -8,10 +10,13 @@ import {
   asStringArray,
   buildPaperclipEnv,
   ensureAbsoluteDirectory,
+  ensurePaperclipSkillSymlink,
   ensureCommandResolvable,
   ensurePathInEnv,
   joinPromptSections,
+  listPaperclipSkillEntries,
   parseObject,
+  readInstalledSkillTargets,
   redactEnvForLogs,
   renderTemplate,
   runChildProcess,
@@ -22,6 +27,34 @@ import {
   parseOzOutput,
 } from "./parse.js";
 import { resolveProfileByName } from "./profiles.js";
+
+const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
+
+// Note injected into every prompt to steer the agent away from `curl` (which
+// is blocked by the Paperclip profile denylist) toward `pcurl`, a thin wrapper
+// injected into PATH that calls curl with auth headers pre-set and compresses
+// JSON responses to TOON format for token efficiency.
+const PCURL_NOTE = `
+## Paperclip API Access
+
+IMPORTANT: Do NOT use \`curl\` to call the Paperclip API — it is blocked by the agent profile denylist.
+
+Use \`pcurl\` instead. It is available in your PATH and:
+- Automatically injects \`Authorization: Bearer $PAPERCLIP_API_KEY\` and \`X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID\`
+- Resolves the base URL automatically (no need to reference \`$PAPERCLIP_API_URL\` manually)
+- Compresses JSON responses to TOON format (60-70% fewer tokens)
+- Supports \`--raw\` flag for plain JSON when you need to pipe to \`jq\`
+
+Examples:
+  pcurl /api/agents/me
+  pcurl /api/agents/me/inbox-lite
+  pcurl /api/companies/{companyId}/issues?status=todo
+  pcurl -X PATCH -H 'Content-Type: application/json' -d '{"status":"done"}' /api/issues/{issueId}
+  pcurl --raw /api/companies/{companyId}/issues | jq '.[0].id'
+
+When using psql directly, always set PAGER=cat to avoid the interactive pager:
+  PAGER=cat psql -h 127.0.0.1 -p 54329 -U paperclip -d paperclip -c "SELECT ..."
+`.trim();
 
 export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
   const { runId, agent, runtime, config, context, onLog, onMeta, onSpawn, authToken } = ctx;
@@ -148,7 +181,38 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   await ensureCommandResolvable(command, cwd, runtimeEnv);
 
   // -------------------------------------------------------------------------
-  // 2b. Resolve agent profile
+  // 2b. Auto-sync Paperclip skills to ~/.warp/skills/
+  // -------------------------------------------------------------------------
+  const ozSkillsHome = path.join(
+    env.HOME ?? process.env.HOME ?? os.homedir(),
+    ".warp",
+    "skills",
+  );
+  let autoSkillSpec: string | null = null;
+  try {
+    const availableSkills = await listPaperclipSkillEntries(__moduleDir);
+    if (availableSkills.length > 0) {
+      await fs.mkdir(ozSkillsHome, { recursive: true });
+      const installed = await readInstalledSkillTargets(ozSkillsHome);
+      for (const skill of availableSkills) {
+        const target = path.join(ozSkillsHome, skill.runtimeName);
+        await ensurePaperclipSkillSymlink(skill.source, target);
+        await onLog("stdout", `[paperclip] Skill synced: ${skill.runtimeName} → ${target}\n`);
+      }
+      // Use the first required skill (typically "paperclip") as the default --skill spec
+      const requiredSkill = availableSkills.find((s) => s.required) ?? availableSkills[0];
+      if (requiredSkill && !skillSpec) {
+        autoSkillSpec = requiredSkill.runtimeName;
+      }
+      void installed; // used for future stale-link cleanup
+    }
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    await onLog("stdout", `[paperclip] Warning: could not sync skills to ${ozSkillsHome}: ${reason}\n`);
+  }
+
+  // -------------------------------------------------------------------------
+  // 2c. Resolve agent profile
   // -------------------------------------------------------------------------
   let profile = profileId;
   if (!profile && profileName) {
@@ -244,6 +308,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
   const prompt = joinPromptSections([
     instructionsPrefix,
+    PCURL_NOTE,
     renderedBootstrapPrompt,
     sessionHandoffNote,
     renderedPrompt,
@@ -273,8 +338,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     if (profile) args.push("--profile", profile);
     // MCP servers
     if (mcpSpec) args.push("--mcp", mcpSpec);
-    // Skill
-    if (skillSpec) args.push("--skill", skillSpec);
+    // Skill — use explicit config value, fall back to auto-resolved required skill
+    const effectiveSkillSpec = skillSpec || autoSkillSpec || "";
+    if (effectiveSkillSpec) args.push("--skill", effectiveSkillSpec);
     // Name for traceability
     if (agentName) {
       args.push("--name", agentName);
@@ -292,7 +358,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     "Prompt is passed via --prompt for non-interactive execution.",
     ...(conversationId ? [`Resuming conversation: ${conversationId}`] : ["Starting a new conversation."]),
     ...(mcpSpec ? [`MCP spec: ${mcpSpec}`] : []),
-    ...(skillSpec ? [`Skill: ${skillSpec}`] : []),
+    ...(skillSpec || autoSkillSpec ? [`Skill: ${skillSpec || autoSkillSpec}`] : []),
     ...(instructionsFilePath && instructionsPrefix
       ? [`Loaded agent instructions from ${instructionsFilePath}`]
       : []),
@@ -351,10 +417,42 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     );
     const retry = await runAttempt(null);
     const retryParsed = parseOzOutput(retry.stdout, retry.stderr);
-    return toResult(retry, retryParsed, cwd, model, workspaceId, workspaceRepoUrl, workspaceRepoRef, timeoutSec, true, true);
+    const retryCredits = await fetchOzRunCredits(command, retryParsed.runId, envWithScripts);
+    return toResult(retry, retryParsed, cwd, model, workspaceId, workspaceRepoUrl, workspaceRepoRef, timeoutSec, true, true, retryCredits);
   }
 
-  return toResult(initial, initialParsed, cwd, model, workspaceId, workspaceRepoUrl, workspaceRepoRef, timeoutSec, false, false);
+  const initialCredits = await fetchOzRunCredits(command, initialParsed.runId, envWithScripts);
+  return toResult(initial, initialParsed, cwd, model, workspaceId, workspaceRepoUrl, workspaceRepoRef, timeoutSec, false, false, initialCredits);
+}
+
+/**
+ * After a run completes, fetch its credit usage via `oz run get <runId> --output-format json`.
+ * Returns total credits consumed (inference + compute), or null if unavailable.
+ */
+async function fetchOzRunCredits(
+  command: string,
+  runId: string | null,
+  env: Record<string, string>,
+): Promise<number | null> {
+  if (!runId) return null;
+  try {
+    const proc = await runChildProcess(
+      `oz-run-get-${Date.now()}`,
+      command,
+      ["run", "get", runId, "--output-format", "json"],
+      { cwd: process.cwd(), env, timeoutSec: 15, graceSec: 5, onLog: async () => {} },
+    );
+    if ((proc.exitCode ?? 1) !== 0 || !proc.stdout.trim()) return null;
+    const data = JSON.parse(proc.stdout.trim()) as Record<string, unknown>;
+    const usage = data.request_usage as Record<string, unknown> | null | undefined;
+    if (!usage) return null;
+    const inference = typeof usage.inference_cost === "number" ? usage.inference_cost : 0;
+    const compute = typeof usage.compute_cost === "number" ? usage.compute_cost : 0;
+    const total = inference + compute;
+    return total > 0 ? total : null;
+  } catch {
+    return null;
+  }
 }
 
 function toResult(
@@ -368,6 +466,7 @@ function toResult(
   timeoutSec: number,
   clearSessionOnMissingConversation: boolean,
   isRetry: boolean,
+  costCredits: number | null = null,
 ): AdapterExecutionResult {
   if (proc.timedOut) {
     return {
@@ -407,10 +506,14 @@ function toResult(
     sessionId: resolvedConversationId,
     sessionDisplayId: resolvedConversationId,
     provider: "warp",
+    biller: "warp",
+    billingType: "credits",
     model,
+    ...(costCredits !== null ? { costUsd: costCredits } : {}),
     resultJson: {
       stdout: proc.stdout,
       stderr: proc.stderr,
+      ...(parsed.runId ? { ozRunId: parsed.runId, ozRunUrl: parsed.runUrl } : {}),
     },
     summary: parsed.summary,
     clearSession: clearSessionOnMissingConversation && !resolvedConversationId,
