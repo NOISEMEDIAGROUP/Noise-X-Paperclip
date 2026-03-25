@@ -36,6 +36,8 @@ export { integrationCatalog, integrationRecommendations, integrationBlocks } fro
 export { missions } from "./missions.js";
 export { missionApprovalRules } from "./mission_approval_rules.js";
 export { missionNotificationChannels } from "./mission_notification_channels.js";
+// OKRs - Objectives and Key Results (From Wave 3 CEO Engine)
+export { companyObjectives, keyResults } from "./company_objectives.js";
 // Product-related tables
 export { products } from "./products.js";
 export { newsletterSubscribers } from "./newsletter_subscribers.js";

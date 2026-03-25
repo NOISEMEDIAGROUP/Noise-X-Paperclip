@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { useNavigate } from "@/lib/router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -7,6 +8,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "../compone
 
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import { useCompany } from "../context/CompanyContext";
 import { missionsApi } from "../api/missions";
 import { queryKeys } from "../lib/queryKeys";
 import { 
@@ -32,6 +34,7 @@ export function MissionDetail() {
   const { missionId } = useParams<{ missionId: string }>();
   
   const navigate = useNavigate();
+  const { selectedCompany } = useCompany();
   const queryClient = useQueryClient();
   
   const { 
@@ -90,7 +93,7 @@ export function MissionDetail() {
             <Button 
               className="mt-4" 
               variant="outline" 
-              onClick={() => navigate("/")}
+              onClick={() => navigate(`/${selectedCompany?.issuePrefix || 'dashboard'}`)}
             >
               Back to Dashboard
             </Button>
@@ -439,7 +442,7 @@ export function MissionDetail() {
               <Button 
                 variant="outline" 
                 className="w-full justify-start" 
-                onClick={() => navigate('/agents')}
+                onClick={() => navigate(`/${selectedCompany?.issuePrefix || 'dashboard'}/agents`)}
               >
                 <Bot className="w-4 h-4 mr-2" />
                 View working agents
@@ -448,7 +451,7 @@ export function MissionDetail() {
               <Button 
                 variant="outline" 
                 className="w-full justify-start"
-                onClick={() => navigate('/approvals')}
+                onClick={() => navigate(`/${selectedCompany?.issuePrefix || 'dashboard'}/approvals`)}
               >
                 <MessageCircle className="w-4 h-4 mr-2" />
                 View pending approvals
@@ -457,7 +460,7 @@ export function MissionDetail() {
               <Button 
                 variant="outline" 
                 className="w-full justify-start"
-                onClick={() => navigate('/issues')}
+                onClick={() => navigate(`/${selectedCompany?.issuePrefix || 'dashboard'}/issues`)}
               >
                 <Eye className="w-4 h-4 mr-2" />
                 View related tasks

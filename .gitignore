@@ -37,3 +37,6 @@ tmp/
 .vscode/
 .claude/settings.local.json
 .paperclip-local/
+# Doppler
+.doppler.env
+.doppler/

@@ -1,4 +1,4 @@
-CREATE TABLE "newsletter_subscribers" (
+CREATE TABLE IF NOT EXISTS "newsletter_subscribers" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "company_id" uuid NOT NULL,
   "email" text NOT NULL,
@@ -15,13 +15,22 @@ CREATE TABLE "newsletter_subscribers" (
   "unsubscribed_at" timestamp with time zone,
   "total_revenue_cents" integer DEFAULT 0 NOT NULL,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-  CONSTRAINT "newsletter_subscribers_company_id_companies_id_fk"
-    FOREIGN KEY ("company_id") REFERENCES "public"."companies"("id") ON DELETE no action ON UPDATE no action
+  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  -- FK constraint added separately to allow idempotency
 );
 --> statement-breakpoint
-CREATE INDEX "newsletter_subscribers_company_created_idx" ON "newsletter_subscribers" USING btree ("company_id", "created_at");
+CREATE INDEX IF NOT EXISTS "newsletter_subscribers_company_created_idx" ON "newsletter_subscribers" USING btree ("company_id", "created_at");
 --> statement-breakpoint
-CREATE INDEX "newsletter_subscribers_company_status_idx" ON "newsletter_subscribers" USING btree ("company_id", "status");
+CREATE INDEX IF NOT EXISTS "newsletter_subscribers_company_status_idx" ON "newsletter_subscribers" USING btree ("company_id", "status");
 --> statement-breakpoint
-CREATE UNIQUE INDEX "newsletter_subscribers_company_email_idx" ON "newsletter_subscribers" USING btree ("company_id", "email");
+CREATE UNIQUE INDEX IF NOT EXISTS "newsletter_subscribers_company_email_idx" ON "newsletter_subscribers" USING btree ("company_id", "email");
+--> statement-breakpoint
+
+DO $$
+BEGIN
+  -- Add FK constraint to newsletter_subscribers only if it doesn't exist yet
+  IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'newsletter_subscribers_company_id_companies_id_fk' AND table_schema = 'public') THEN
+    ALTER TABLE "newsletter_subscribers" ADD CONSTRAINT "newsletter_subscribers_company_id_companies_id_fk" 
+    FOREIGN KEY ("company_id") REFERENCES "public"."companies"("id") ON DELETE no action ON UPDATE no action;
+  END IF;
+END $$;

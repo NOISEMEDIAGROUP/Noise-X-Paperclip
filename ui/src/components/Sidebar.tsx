@@ -105,7 +105,8 @@ export function Sidebar() {
           </button>
           {moreExpanded && (
             <div className="flex flex-col gap-0.5 pl-2">
-              <SidebarNavItem to="/goals" label="Goals" icon={Target} />
+              <SidebarNavItem to="objectives" label="Objectives" icon={Target} />
+              <SidebarNavItem to="goals" label="Goals" icon={Target} />
               <SidebarNavItem to="/approvals/pending" label="Approvals" icon={Shield} badge={sidebarBadges?.approvals} />
               <SidebarNavItem to="/org" label="Org" icon={Network} />
               <SidebarNavItem to="/costs" label="Costs" icon={DollarSign} />
@@ -117,7 +118,7 @@ export function Sidebar() {
 
       {/* Phase 5: Settings at fixed bottom position */}
       <div className="shrink-0 border-t border-border px-3 py-2">
-        <SidebarNavItem to="/settings/company" label="Settings" icon={Settings} />
+        <SidebarNavItem to="settings/company" label="Settings" icon={Settings} />
       </div>
     </aside>
   );

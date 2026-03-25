@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "@/lib/router";
+import { useCompany } from "../context/CompanyContext";
 import { useQuery } from "@tanstack/react-query";
 import { missionsApi } from "../api/missions";
 import { queryKeys } from "../lib/queryKeys";
@@ -20,14 +21,82 @@ import {
   Target
 } from "lucide-react";
 import type { Mission } from "../api/missions";
+import { formatDate } from "../lib/utils";
+import { statusBadge, statusBadgeDefault } from "../lib/status-colors";
 
 interface MissionCardProps {
   mission: Mission;
 }
 
+// Helper function to determine CSS class for status badge styling
+// This function name matches what's referenced in the JSX 
+const statusVariant = (status: string) => {
+  switch(status) {
+    case 'draft':
+      return statusBadge.draft || statusBadgeDefault;
+    case 'active': 
+      return statusBadge.active || statusBadgeDefault;
+    case 'paused':
+      return statusBadge.paused || statusBadgeDefault;
+    case 'completed':
+      return statusBadge.completed || statusBadgeDefault;
+    case 'failed':
+      return statusBadge.failed || statusBadgeDefault;
+    case 'pending':
+      return statusBadge.pending || statusBadgeDefault;
+    default:
+      return statusBadgeDefault; // fallback
+  }
+};
+
+// Helper function to format display of budget information
+const formatBudgetDisplay = (mission: Mission) => {
+  const { budgetCapUsd, budgetSpentUsd } = mission;
+  
+  if (budgetCapUsd != null) {
+    const capDisplay = `$${Number(budgetCapUsd).toFixed(2)}`;
+    let spentDisplay = '';
+    
+    if (budgetSpentUsd != null) {
+      const spent = Number(budgetSpentUsd);
+      spentDisplay = `${capDisplay} (${(spent / Number(budgetCapUsd) * 100).toFixed(1)}%)`;
+    }
+    
+    return {
+      budgetDisplay: capDisplay,
+      spentDisplay: spentDisplay
+    };
+  } else if (budgetSpentUsd != null) {
+    return {
+      budgetDisplay: `$${Number(budgetSpentUsd).toFixed(2)} spent`,
+      spentDisplay: ''
+    };
+  } else {
+    return {
+      budgetDisplay: 'No budget set',
+      spentDisplay: ''
+    };
+  }
+};
+
 function MissionCard({ mission }: MissionCardProps) {
   const navigate = useNavigate();
+  const { selectedCompany } = useCompany();
+
+  // Use the formatting function
+  const { budgetDisplay, spentDisplay } = formatBudgetDisplay(mission);
+
+  // ... rest of the component continues
   
+  const handleMissionClick = (missionId: string) => {
+    if (selectedCompany) {
+      navigate(`/${selectedCompany.issuePrefix}/missions/${missionId}`);
+    } else {
+      // Fallback to relative path if no selected company
+      navigate(`/missions/${missionId}`);
+    }
+  };
+
   // Calculate progress percentage - counting objectives
   const completedObjectives = mission.objectives?.filter(obj => 
     obj.toLowerCase().includes('done') || 
@@ -38,36 +107,12 @@ function MissionCard({ mission }: MissionCardProps) {
   const totalObjectives = mission.objectives?.length || 0;
   const progressPercentage = totalObjectives > 0 ? Math.round((completedObjectives / totalObjectives) * 100) : 0;
   
-  // Format budget display 
-  const budgetDisplay = mission.budgetCapUsd 
-    ? `$${mission.budgetCapUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    : "Unlimited";
-    
-  const spentDisplay = mission.budgetSpentUsd 
-    ? `$${mission.budgetSpentUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} spent`
-    : null;
-
-  // Status badge variant
-  const statusVariant = (status: string) => {
-    switch (status) {
-      case "active": return "default";
-      case "draft": return "secondary";
-      case "paused": return "outline"; 
-      case "completed": return "secondary";
-      case "failed": return "destructive";
-      default: return "outline";
-    }
-  };
+  // ...
   
-  // Format dates
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
   return (
     <Card 
       className="hover:shadow-md transition-shadow cursor-pointer"
-      onClick={() => navigate(`/missions/${mission.id}`)}
+      onClick={() => handleMissionClick(mission.id)}
     >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
@@ -95,7 +140,7 @@ function MissionCard({ mission }: MissionCardProps) {
       <CardContent>
         <div className="space-y-3">
           <div className="flex justify-between items-center">
-            <Badge variant={statusVariant(mission.status)}>
+            <Badge className={statusVariant(mission.status)}>
               {mission.status.charAt(0).toUpperCase() + mission.status.slice(1)}
             </Badge>
             
@@ -159,8 +204,7 @@ export function MissionsPage() {
   const [sortBy, setSortBy] = useState("createdAt"); 
   const [sortOrder, setSortOrder] = useState("desc");
   
-  // In real app, selectedCompanyId would come from context  
-  const selectedCompanyId = localStorage.getItem("selectedCompanyId") || "";  
+  const { selectedCompany } = useCompany();
 
   const { 
     data: missions = [], 
@@ -168,15 +212,16 @@ export function MissionsPage() {
     isError,
     isPending
   } = useQuery({
-    queryKey: queryKeys.missions.list(selectedCompanyId),
+    queryKey: queryKeys.missions.list(selectedCompany?.id || ""),
     queryFn: async () => {
-      if (!selectedCompanyId) return [];
-      return await missionsApi.list(selectedCompanyId);
+      if (!selectedCompany?.id) return [];
+      return await missionsApi.list(selectedCompany.id);
     },
-    enabled: !!selectedCompanyId,
+    enabled: !!selectedCompany?.id,
   });
   
-  // Filter and sort missions
+  // Replace localStorage-based company ID with context-based company ID
+  // const selectedCompanyId = localStorage.getItem("selectedCompanyId") || "";  
   const filteredAndSortedMissions = React.useMemo(() => {
     if (!missions) return [];
     
@@ -277,7 +322,7 @@ export function MissionsPage() {
         </div>
         
         <Button asChild>
-          <Link to="/missions/create">
+          <Link to={`/${selectedCompany?.issuePrefix || 'dashboard'}/missions/create`}>
             <Plus className="w-4 h-4 mr-2" />
             New Mission
           </Link>
@@ -382,7 +427,7 @@ export function MissionsPage() {
               : "Create your first mission to give agents a clear direction and goal"}
           </p>
           <Button asChild>
-            <Link to="/missions/create">Create Mission</Link>
+            <Link to={`/${selectedCompany?.issuePrefix || 'dashboard'}/missions/create`}>Create Mission</Link>
           </Button>
         </div>
       )}

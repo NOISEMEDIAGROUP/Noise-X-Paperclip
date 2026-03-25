@@ -1,6 +1,6 @@
-export type ObjectiveStatus = "proposed" | "approved" | "active" | "achieved" | "cancelled";
-export type ObjectiveType = "quarterly" | "annual" | "initiative";
-export type KeyResultStatus = "planned" | "active" | "achieved" | "cancelled";
+export type ObjectiveStatus = "proposed" | "approved" | "active" | "achieved" | "missed" | "cancelled";
+export type ObjectiveType = "annual" | "quarterly" | "monthly" | "sprint";
+export type KeyResultStatus = "pending" | "in_progress" | "done" | "missed" | "planned" | "active" | "cancelled";
 
 export interface KeyResult {
   id: string;
@@ -9,6 +9,7 @@ export interface KeyResult {
   status: KeyResultStatus;
   targetValue: number;
   currentValue: number;
+  assignedToId?: string | null; // ID of agent assigned to this KR
   createdAt: string;
   updatedAt: string;
 }
@@ -20,8 +21,11 @@ export interface CompanyObjective {
   description: string | null;
   objectiveType: ObjectiveType;
   status: ObjectiveStatus;
+  targetMetric: string | null; // Metric to measure objective success
   targetValue: number | null;
   currentValue: number;
+  proposedById?: string | null; // ID of proposing agent
+  approvedBy?: string | null; // ID of approver (board user)
   deadline: string | null;
   keyResults: KeyResult[];
   createdAt: string;
@@ -33,8 +37,11 @@ export interface CreateObjectivePayload {
   description?: string | null;
   objectiveType?: ObjectiveType;
   status?: ObjectiveStatus;
+  targetMetric?: string | null;
   targetValue?: number | null;
-  currentValue: number;
+  currentValue?: number;
+  proposedById?: string | null;
+  approvedBy?: string | null;
   deadline?: string | null;
   keyResults?: CreateKeyResultPayload[];
 }
@@ -46,6 +53,9 @@ export interface CreateKeyResultPayload {
   status?: KeyResultStatus;
   targetValue: number;
   currentValue?: number;
+  assignedToId?: string | null;
 }
+
+export interface UpdateKeyResultPayload extends Partial<CreateKeyResultPayload> {}
 
 export interface UpdateKeyResultPayload extends Partial<CreateKeyResultPayload> {}

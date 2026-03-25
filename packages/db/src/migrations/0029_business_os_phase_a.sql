@@ -1,30 +1,34 @@
-CREATE TABLE "business_configs" (
+CREATE TABLE IF NOT EXISTS "business_configs" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "company_id" uuid NOT NULL,
-  "product_name" text,
-  "product_url" text,
-  "healthcheck_url" text,
-  "default_currency" text DEFAULT 'usd' NOT NULL,
-  "telegram_chat_id" text,
-  "notification_email" text,
-  "telegram_enabled" boolean DEFAULT false NOT NULL,
-  "email_enabled" boolean DEFAULT false NOT NULL,
-  "daily_brief_telegram" boolean DEFAULT true NOT NULL,
-  "alert_telegram" boolean DEFAULT true NOT NULL,
-  "daily_brief_email" boolean DEFAULT false NOT NULL,
-  "alert_email" boolean DEFAULT false NOT NULL,
-  "stripe_secret_key_name" text DEFAULT 'business-stripe-secret-key' NOT NULL,
-  "stripe_webhook_secret_name" text DEFAULT 'business-stripe-webhook-secret' NOT NULL,
-  "telegram_bot_token_secret_name" text DEFAULT 'business-telegram-bot-token' NOT NULL,
+  "name" text DEFAULT '' NOT NULL,
+  "email" text,
+  "bio" text,
+  "logo_url" text,
+  "favicon_url" text,
+  "primary_color" text,
+  "accent_color" text,
+  "background_color" text,
+  "font_family" text,
+  "show_branding" boolean DEFAULT true NOT NULL,
+  "show_footer" boolean DEFAULT true NOT NULL,
+  "show_navbar" boolean DEFAULT true NOT NULL,
+  "show_sidebar" boolean DEFAULT true NOT NULL,
+  "enable_newsletter_signup" boolean DEFAULT false NOT NULL,
+  "enable_ai_insights" boolean DEFAULT true NOT NULL,
+  "enable_social_sharing" boolean DEFAULT false NOT NULL,
+  "enable_referrals" boolean DEFAULT false NOT NULL,
+  "show_company_info" boolean DEFAULT false NOT NULL,
+  "show_team_members" boolean DEFAULT false NOT NULL,
+  "show_testimonials" boolean DEFAULT false NOT NULL,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-  CONSTRAINT "business_configs_company_id_companies_id_fk"
-    FOREIGN KEY ("company_id") REFERENCES "public"."companies"("id") ON DELETE no action ON UPDATE no action
+  CONSTRAINT "business_configs_company_id_companies_id_fk" FOREIGN KEY ("company_id") REFERENCES "public"."companies"("id") ON DELETE no action ON UPDATE no action
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX "business_configs_company_idx" ON "business_configs" USING btree ("company_id");
+CREATE INDEX IF NOT EXISTS "business_configs_company_idx" ON "business_configs" USING btree ("company_id");
 --> statement-breakpoint
-CREATE TABLE "business_kpis" (
+CREATE TABLE IF NOT EXISTS "business_kpis" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "company_id" uuid NOT NULL,
   "kpi_date" date NOT NULL,
@@ -45,11 +49,11 @@ CREATE TABLE "business_kpis" (
     FOREIGN KEY ("company_id") REFERENCES "public"."companies"("id") ON DELETE no action ON UPDATE no action
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX "business_kpis_company_date_idx" ON "business_kpis" USING btree ("company_id", "kpi_date");
+CREATE UNIQUE INDEX IF NOT EXISTS "business_kpis_company_date_idx" ON "business_kpis" USING btree ("company_id", "kpi_date");
 --> statement-breakpoint
-CREATE INDEX "business_kpis_company_kpi_idx" ON "business_kpis" USING btree ("company_id", "kpi_date");
+CREATE INDEX IF NOT EXISTS "business_kpis_company_kpi_idx" ON "business_kpis" USING btree ("company_id", "kpi_date");
 --> statement-breakpoint
-CREATE TABLE "infra_costs" (
+CREATE TABLE IF NOT EXISTS "infra_costs" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "company_id" uuid NOT NULL,
   "category" text NOT NULL,
@@ -64,9 +68,9 @@ CREATE TABLE "infra_costs" (
     FOREIGN KEY ("company_id") REFERENCES "public"."companies"("id") ON DELETE no action ON UPDATE no action
 );
 --> statement-breakpoint
-CREATE INDEX "infra_costs_company_effective_idx" ON "infra_costs" USING btree ("company_id", "effective_from");
+CREATE INDEX IF NOT EXISTS "infra_costs_company_effective_idx" ON "infra_costs" USING btree ("company_id", "effective_from");
 --> statement-breakpoint
-CREATE TABLE "notification_log" (
+CREATE TABLE IF NOT EXISTS "notification_log" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "company_id" uuid NOT NULL,
   "channel" text NOT NULL,
@@ -83,11 +87,11 @@ CREATE TABLE "notification_log" (
     FOREIGN KEY ("company_id") REFERENCES "public"."companies"("id") ON DELETE no action ON UPDATE no action
 );
 --> statement-breakpoint
-CREATE INDEX "notification_log_company_created_idx" ON "notification_log" USING btree ("company_id", "created_at");
+CREATE INDEX IF NOT EXISTS "notification_log_company_created_idx" ON "notification_log" USING btree ("company_id", "created_at");
 --> statement-breakpoint
-CREATE INDEX "notification_log_company_type_created_idx" ON "notification_log" USING btree ("company_id", "notification_type", "created_at");
+CREATE INDEX IF NOT EXISTS "notification_log_company_type_created_idx" ON "notification_log" USING btree ("company_id", "notification_type", "created_at");
 --> statement-breakpoint
-CREATE TABLE "product_health_checks" (
+CREATE TABLE IF NOT EXISTS "product_health_checks" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "company_id" uuid NOT NULL,
   "endpoint_url" text NOT NULL,
@@ -103,11 +107,11 @@ CREATE TABLE "product_health_checks" (
     FOREIGN KEY ("company_id") REFERENCES "public"."companies"("id") ON DELETE no action ON UPDATE no action
 );
 --> statement-breakpoint
-CREATE INDEX "product_health_checks_company_checked_idx" ON "product_health_checks" USING btree ("company_id", "checked_at");
+CREATE INDEX IF NOT EXISTS "product_health_checks_company_checked_idx" ON "product_health_checks" USING btree ("company_id", "checked_at");
 --> statement-breakpoint
-CREATE INDEX "product_health_checks_company_status_checked_idx" ON "product_health_checks" USING btree ("company_id", "status", "checked_at");
+CREATE INDEX IF NOT EXISTS "product_health_checks_company_status_checked_idx" ON "product_health_checks" USING btree ("company_id", "status", "checked_at");
 --> statement-breakpoint
-CREATE TABLE "revenue_events" (
+CREATE TABLE IF NOT EXISTS "revenue_events" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "company_id" uuid NOT NULL,
   "source" text NOT NULL,
@@ -127,13 +131,13 @@ CREATE TABLE "revenue_events" (
     FOREIGN KEY ("company_id") REFERENCES "public"."companies"("id") ON DELETE no action ON UPDATE no action
 );
 --> statement-breakpoint
-CREATE INDEX "revenue_events_company_occurred_idx" ON "revenue_events" USING btree ("company_id", "occurred_at");
+CREATE INDEX IF NOT EXISTS "revenue_events_company_occurred_idx" ON "revenue_events" USING btree ("company_id", "occurred_at");
 --> statement-breakpoint
-CREATE INDEX "revenue_events_company_type_occurred_idx" ON "revenue_events" USING btree ("company_id", "event_type", "occurred_at");
+CREATE INDEX IF NOT EXISTS "revenue_events_company_type_occurred_idx" ON "revenue_events" USING btree ("company_id", "event_type", "occurred_at");
 --> statement-breakpoint
-CREATE UNIQUE INDEX "revenue_events_stripe_event_idx" ON "revenue_events" USING btree ("stripe_event_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "revenue_events_stripe_event_idx" ON "revenue_events" USING btree ("stripe_event_id");
 --> statement-breakpoint
-CREATE TABLE "user_metrics_snapshots" (
+CREATE TABLE IF NOT EXISTS "user_metrics_snapshots" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "company_id" uuid NOT NULL,
   "snapshot_date" date NOT NULL,
@@ -152,6 +156,6 @@ CREATE TABLE "user_metrics_snapshots" (
     FOREIGN KEY ("company_id") REFERENCES "public"."companies"("id") ON DELETE no action ON UPDATE no action
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX "user_metrics_snapshots_company_date_idx" ON "user_metrics_snapshots" USING btree ("company_id", "snapshot_date");
+CREATE UNIQUE INDEX IF NOT EXISTS "user_metrics_snapshots_company_date_idx" ON "user_metrics_snapshots" USING btree ("company_id", "snapshot_date");
 --> statement-breakpoint
-CREATE INDEX "user_metrics_snapshots_company_snapshot_idx" ON "user_metrics_snapshots" USING btree ("company_id", "snapshot_date");
+CREATE INDEX IF NOT EXISTS "user_metrics_snapshots_company_snapshot_idx" ON "user_metrics_snapshots" USING btree ("company_id", "snapshot_date");

@@ -7,6 +7,7 @@ import { formatCents } from "@/lib/utils";
 import { MissionStatus } from "@paperclipai/shared";
 import { useMemo } from "react";
 import type { Mission } from "@/api/missions";
+import { useCompany } from "../context/CompanyContext";
 
 interface ObjectiveProgress {
   completed: number;
@@ -19,6 +20,8 @@ interface MissionStatusCardProps {
 }
 
 export function MissionStatusCard({ mission, isPending }: MissionStatusCardProps) {
+  const { selectedCompany } = useCompany();
+  
   // Calculate objective progress
   const objectiveProgress = useMemo<ObjectiveProgress>(() => {
     if (!mission) return { completed: 0, total: 0 };
@@ -92,7 +95,7 @@ export function MissionStatusCard({ mission, isPending }: MissionStatusCardProps
         <CardContent className="pb-4">
           <p className="text-sm text-muted-foreground mb-3">A mission gives your agents a clear goal to work towards.</p>
           <Link 
-            to="/missions/create"
+            to={`/${selectedCompany?.issuePrefix || 'dashboard'}/missions/create`}
             className="inline-flex items-center text-sm font-medium underline"
           >
             Create a mission
@@ -177,14 +180,14 @@ export function MissionStatusCard({ mission, isPending }: MissionStatusCardProps
           {/* Action button */}
           <div className="flex space-x-2 pt-2">
             <Link 
-              to={`/missions/${mission.id}`}
+              to={`/${selectedCompany?.issuePrefix || 'dashboard'}/missions/${mission.id}`}
               className="text-sm font-medium underline"
             >
               View details
             </Link>
             <span className="text-muted-foreground">•</span>
             <Link 
-              to={`/agents`}
+              to={`/${selectedCompany?.issuePrefix || 'dashboard'}/agents`}
               className="text-sm font-medium text-blue-600 hover:text-blue-800"
             >
               Check progress

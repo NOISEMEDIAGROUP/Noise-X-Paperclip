@@ -10,7 +10,7 @@ import { missionsApi } from "../api/missions";
 
 export function MissionWizard() {
   const navigate = useNavigate();
-  const { selectedCompanyId } = useCompany();
+  const { selectedCompanyId, companies } = useCompany();
   const [step, setStep] = useState(1); // 1: Goal, 2: Autonomy, 3: Budget, 4: Updates, 5: Review
   
   // Form state - added notificationChannels to track selections
@@ -72,7 +72,9 @@ export function MissionWizard() {
         expiresAt: formData.expiresAt || undefined,
       });
       
-      navigate("/dashboard");
+      // Use company-prefixed navigation to dashboard
+      const company = companies.find(c => c.id === selectedCompanyId);
+      navigate(`/${company?.issuePrefix || 'dashboard'}/dashboard`);  // Use fallback if no company found
     } catch (err) {
       console.error("Failed to create mission:", err);
       // Show error to user

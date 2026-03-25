@@ -128,3 +128,16 @@ export type {
   UpdateProduct,
   ProductAnalyticsSummary,
 } from "./product.js";
+
+// Wave 3 CEO Engine - OKR types
+export type {
+  ObjectiveStatus,
+  ObjectiveType,
+  KeyResultStatus,
+  KeyResult,
+  CompanyObjective,
+  CreateObjectivePayload,
+  UpdateObjectivePayload,
+  CreateKeyResultPayload,
+  UpdateKeyResultPayload,
+} from "./objectives.js";
