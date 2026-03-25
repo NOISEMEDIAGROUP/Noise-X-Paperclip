@@ -389,6 +389,11 @@ if (config.deploymentMode === "authenticated") {
   }
 }
 
+if (config.deploymentMode === "local_trusted") {
+  await ensureLocalTrustedBoardPrincipal(db as any);
+}
+
+
 let authReady = config.deploymentMode === "local_trusted";
 let betterAuthHandler: ReturnType<typeof createBetterAuthHandler> | undefined;
 let resolveSession:
@@ -397,9 +402,8 @@ let resolveSession:
 let resolveSessionFromHeaders:
   | ((headers: Headers) => Promise<Awaited<ReturnType<typeof resolveBetterAuthSession>>>)
   | undefined;
-if (config.deploymentMode === "local_trusted") {
-  await ensureLocalTrustedBoardPrincipal(db as any);
-}
+let betterAuthInstance: any = undefined;
+
 if (config.deploymentMode === "authenticated") {
   const betterAuthSecret =
     process.env.BETTER_AUTH_SECRET?.trim() ?? process.env.PAPERCLIP_AGENT_JWT_SECRET?.trim();
@@ -414,6 +418,7 @@ if (config.deploymentMode === "authenticated") {
   resolveSessionFromHeaders = (headers) => resolveBetterAuthSessionFromHeaders(auth, headers);
   await initializeBoardClaimChallenge(db as any, { deploymentMode: config.deploymentMode });
   authReady = true;
+  betterAuthInstance = auth;
 }
 
 const uiMode = config.uiDevMiddleware ? "vite-dev" : config.serveUi ? "static" : "none";
@@ -429,6 +434,7 @@ const app = await createApp(db as any, {
   companyDeletionEnabled: config.companyDeletionEnabled,
   betterAuthHandler,
   resolveSession,
+  betterAuthInstance,
 });
 const server = createServer(app);
 

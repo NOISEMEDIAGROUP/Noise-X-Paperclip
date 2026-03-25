@@ -12,6 +12,8 @@ import {
 } from "@paperclipai/db";
 import type { Config } from "../config.js";
 
+export type BetterAuthInstance = ReturnType<typeof betterAuth>;
+
 export type BetterAuthSessionUser = {
   id: string;
   email?: string | null;
@@ -22,8 +24,6 @@ export type BetterAuthSessionResult = {
   session: { id: string; userId: string } | null;
   user: BetterAuthSessionUser | null;
 };
-
-type BetterAuthInstance = ReturnType<typeof betterAuth>;
 
 function headersFromNodeHeaders(rawHeaders: IncomingHttpHeaders): Headers {
   const headers = new Headers();
@@ -61,6 +61,20 @@ export function createBetterAuthInstance(db: Db, config: Config): BetterAuthInst
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,
+    },
+    session: {
+      expiresIn: 60 * 60 * 24, // 24 hours
+      updateAge: 60 * 60,      // update every hour if active
+      cookie: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+      },
+    },
+    refreshToken: {
+      enabled: true,
+      expiresIn: 60 * 60 * 24 * 7, // 7 days
     },
   };
 

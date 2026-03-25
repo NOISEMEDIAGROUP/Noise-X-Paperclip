@@ -35,6 +35,7 @@ import { telegramWebhookRoutes } from "./routes/telegram-webhook.js";
 import { aiIntelligenceRoutes } from "./routes/ai-intelligence.js";
 import { departmentRoutes } from "./routes/departments.js";
 import { productRoutes } from "./routes/products.js";
+import { authRefreshRoutes } from "./routes/auth-refresh.js";
 import type { BetterAuthSessionResult } from "./auth/better-auth.js";
 
 type UiMode = "none" | "static" | "vite-dev";
@@ -52,6 +53,7 @@ export async function createApp(
     companyDeletionEnabled: boolean;
     betterAuthHandler?: express.RequestHandler;
     resolveSession?: (req: ExpressRequest) => Promise<BetterAuthSessionResult | null>;
+    betterAuthInstance?: any; // The BetterAuth instance to access APIs
   },
 ) {
   const app = express();
@@ -101,6 +103,12 @@ export async function createApp(
 
   // Mount API routes
   const api = Router();
+  
+  // Add auth refresh routes if we have both db instance and better auth instance
+  if (opts.betterAuthInstance) {
+    api.use(authRefreshRoutes({ db, auth: opts.betterAuthInstance }));
+  }
+  
   api.use(boardMutationGuard());
   api.use(
     "/health",
