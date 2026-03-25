@@ -34,6 +34,7 @@ COPY packages/plugins/examples/plugin-authoring-smoke-example/package.json packa
 COPY packages/plugins/examples/plugin-file-browser-example/package.json packages/plugins/examples/plugin-file-browser-example/
 COPY packages/plugins/examples/plugin-hello-world-example/package.json packages/plugins/examples/plugin-hello-world-example/
 COPY packages/plugins/examples/plugin-kitchen-sink-example/package.json packages/plugins/examples/plugin-kitchen-sink-example/
+COPY patches/ patches/
 
 RUN pnpm install --frozen-lockfile
 
