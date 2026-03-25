@@ -214,6 +214,8 @@ export function OnboardingWizard() {
       ? "agent"
       : adapterType === "opencode_local"
       ? "opencode"
+      : adapterType === "oz_local"
+      ? "oz"
       : "claude");
 
   useEffect(() => {
@@ -1056,6 +1058,8 @@ export function OnboardingWizard() {
                                 ? `${effectiveAdapterCommand} --output-format json "Respond with hello."`
                               : adapterType === "opencode_local"
                                 ? `${effectiveAdapterCommand} run --format json "Respond with hello."`
+                              : adapterType === "oz_local"
+                                ? `${effectiveAdapterCommand} model list --output-format json`
                               : `${effectiveAdapterCommand} --print - --output-format stream-json --verbose`}
                           </p>
                           <p className="text-muted-foreground">
@@ -1065,7 +1069,8 @@ export function OnboardingWizard() {
                           {adapterType === "cursor" ||
                           adapterType === "codex_local" ||
                           adapterType === "gemini_local" ||
-                          adapterType === "opencode_local" ? (
+                          adapterType === "opencode_local" ||
+                          adapterType === "oz_local" ? (
                             <p className="text-muted-foreground">
                               If auth fails, set{" "}
                               <span className="font-mono">
@@ -1073,6 +1078,8 @@ export function OnboardingWizard() {
                                   ? "CURSOR_API_KEY"
                                   : adapterType === "gemini_local"
                                     ? "GEMINI_API_KEY"
+                                    : adapterType === "oz_local"
+                                      ? "WARP_API_KEY"
                                     : "OPENAI_API_KEY"}
                               </span>{" "}
                               in env or run{" "}
@@ -1083,6 +1090,8 @@ export function OnboardingWizard() {
                                     ? "codex login"
                                     : adapterType === "gemini_local"
                                       ? "gemini auth"
+                                      : adapterType === "oz_local"
+                                        ? "oz login"
                                       : "opencode auth login"}
                               </span>
                               .

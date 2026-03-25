@@ -706,6 +706,8 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                           ? "opencode"
                         : adapterType === "copilot_cli"
                           ? "copilot"
+                        : adapterType === "oz_local"
+                          ? "oz"
                           : "claude"
                   }
                 />
