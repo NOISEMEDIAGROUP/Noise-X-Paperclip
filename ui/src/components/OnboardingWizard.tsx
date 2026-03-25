@@ -49,6 +49,7 @@ import {
   Loader2,
   ChevronDown,
   Github,
+  Wand2,
   X
 } from "lucide-react";
 
@@ -62,7 +63,8 @@ type AdapterType =
   | "pi_local"
   | "cursor"
   | "http"
-  | "openclaw_gateway";
+  | "openclaw_gateway"
+  | "oz_local";
 
 const DEFAULT_TASK_DESCRIPTION = `You are the CEO. You set the direction for the company.
 
@@ -198,7 +200,8 @@ export function OnboardingWizard() {
     adapterType === "copilot_cli" ||
     adapterType === "gemini_local" ||
     adapterType === "opencode_local" ||
-    adapterType === "cursor";
+    adapterType === "cursor" ||
+    adapterType === "oz_local";
   const effectiveAdapterCommand =
     command.trim() ||
     (adapterType === "codex_local"
@@ -816,6 +819,12 @@ export function OnboardingWizard() {
                             desc: "Invoke OpenClaw via gateway protocol",
                             comingSoon: true,
                             disabledLabel: "Configure OpenClaw within the App"
+                          },
+                          {
+                            value: "oz_local" as const,
+                            label: "Oz",
+                            icon: Wand2,
+                            desc: "Local Warp Oz agent"
                           }
                         ].map((opt) => (
                           <button
