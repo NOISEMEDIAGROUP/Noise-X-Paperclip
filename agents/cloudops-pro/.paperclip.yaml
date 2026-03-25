@@ -1,0 +1,161 @@
+schema: paperclip/v1
+
+agents:
+  ceo:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+  cto:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+  cloud-architect:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        AWS_ACCESS_KEY_ID:
+          kind: secret
+          requirement: required
+        AWS_SECRET_ACCESS_KEY:
+          kind: secret
+          requirement: required
+        AZURE_SUBSCRIPTION_ID:
+          kind: secret
+          requirement: optional
+        AZURE_CLIENT_ID:
+          kind: secret
+          requirement: optional
+        AZURE_CLIENT_SECRET:
+          kind: secret
+          requirement: optional
+        GCP_PROJECT_ID:
+          kind: secret
+          requirement: optional
+        GCP_SERVICE_ACCOUNT_KEY:
+          kind: secret
+          requirement: optional
+  devops-engineer:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        GH_TOKEN:
+          kind: secret
+          requirement: required
+        AWS_ACCESS_KEY_ID:
+          kind: secret
+          requirement: required
+        AWS_SECRET_ACCESS_KEY:
+          kind: secret
+          requirement: required
+        AZURE_SUBSCRIPTION_ID:
+          kind: secret
+          requirement: optional
+        GCP_PROJECT_ID:
+          kind: secret
+          requirement: optional
+  sre:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        DATADOG_API_KEY:
+          kind: secret
+          requirement: optional
+        PAGERDUTY_API_KEY:
+          kind: secret
+          requirement: optional
+        SLACK_WEBHOOK_URL:
+          kind: secret
+          requirement: optional
+  finops-analyst:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        AWS_ACCESS_KEY_ID:
+          kind: secret
+          requirement: required
+        AWS_SECRET_ACCESS_KEY:
+          kind: secret
+          requirement: required
+        AZURE_SUBSCRIPTION_ID:
+          kind: secret
+          requirement: optional
+        GCP_PROJECT_ID:
+          kind: secret
+          requirement: optional
+  security-ops:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        AWS_ACCESS_KEY_ID:
+          kind: secret
+          requirement: required
+        AWS_SECRET_ACCESS_KEY:
+          kind: secret
+          requirement: required
+        AZURE_SUBSCRIPTION_ID:
+          kind: secret
+          requirement: optional
+        AZURE_CLIENT_ID:
+          kind: secret
+          requirement: optional
+        AZURE_CLIENT_SECRET:
+          kind: secret
+          requirement: optional
+        GCP_PROJECT_ID:
+          kind: secret
+          requirement: optional
+        GCP_SERVICE_ACCOUNT_KEY:
+          kind: secret
+          requirement: optional
+  program-manager:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        SLACK_WEBHOOK_URL:
+          kind: secret
+          requirement: optional
+
+routines:
+  daily-ops-standup:
+    task: tasks/daily-ops-standup/TASK.md
+    schedule:
+      timezone: UTC
+      cron: "0 9 * * *"
+  weekly-cost-report:
+    task: tasks/weekly-cost-report/TASK.md
+    schedule:
+      timezone: UTC
+      cron: "0 8 * * 1"
+  sla-health-check:
+    task: tasks/sla-health-check/TASK.md
+    schedule:
+      timezone: UTC
+      cron: "*/15 * * * *"

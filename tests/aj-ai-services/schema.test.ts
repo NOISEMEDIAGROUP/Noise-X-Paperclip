@@ -5,7 +5,7 @@
  * These tests run without a live Paperclip server and validate that every
  * file in the package:
  *   - exists on disk
- *   - has valid YAML frontmatter with all required fields
+ *   - has front-matter with expected top-level keys
  *   - satisfies the agentcompanies/v1 invariants (no orphan agents, no cycles,
  *     consistent secret declarations, portable task schedules)
  */
@@ -30,7 +30,7 @@ function fileExists(relPath: string): boolean {
   return fs.existsSync(path.join(ROOT, relPath));
 }
 
-/** Parse YAML front-matter (handles CRLF). Returns key-value record. */
+/** Extract top-level key-value pairs from front-matter delimiters (handles CRLF). Not a full YAML parser — only extracts flat key: value lines. */
 function parseFrontmatter(content: string): Record<string, unknown> {
   const normalised = content.replace(/\r\n/g, "\n");
   const match = normalised.match(/^---\n([\s\S]*?)\n---/);

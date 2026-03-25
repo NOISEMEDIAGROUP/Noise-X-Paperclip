@@ -1,0 +1,149 @@
+schema: paperclip/v1
+
+agents:
+  ceo:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+
+  support-director:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        SLACK_WEBHOOK_URL:
+          kind: secret
+          requirement: optional
+        TEAMS_WEBHOOK_URL:
+          kind: secret
+          requirement: optional
+
+  l1-support:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        HELPDESK_API_KEY:
+          kind: secret
+          requirement: required
+        EMAIL_SERVICE_KEY:
+          kind: secret
+          requirement: required
+        ZENDESK_API_TOKEN:
+          kind: secret
+          requirement: optional
+        JIRA_API_TOKEN:
+          kind: secret
+          requirement: optional
+
+  l2-support:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        HELPDESK_API_KEY:
+          kind: secret
+          requirement: required
+        JIRA_API_TOKEN:
+          kind: secret
+          requirement: optional
+        ZENDESK_API_TOKEN:
+          kind: secret
+          requirement: optional
+
+  l3-specialist:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        HELPDESK_API_KEY:
+          kind: secret
+          requirement: required
+        JIRA_API_TOKEN:
+          kind: secret
+          requirement: optional
+        PAGERDUTY_API_KEY:
+          kind: secret
+          requirement: optional
+
+  knowledge-manager:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        HELPDESK_API_KEY:
+          kind: secret
+          requirement: required
+
+  sla-monitor:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        HELPDESK_API_KEY:
+          kind: secret
+          requirement: required
+        SLACK_WEBHOOK_URL:
+          kind: secret
+          requirement: optional
+        TEAMS_WEBHOOK_URL:
+          kind: secret
+          requirement: optional
+        PAGERDUTY_API_KEY:
+          kind: secret
+          requirement: optional
+
+  csat-analyst:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        HELPDESK_API_KEY:
+          kind: secret
+          requirement: required
+        EMAIL_SERVICE_KEY:
+          kind: secret
+          requirement: required
+        SLACK_WEBHOOK_URL:
+          kind: secret
+          requirement: optional
+
+routines:
+  daily-support-standup:
+    task: tasks/daily-support-standup/TASK.md
+    schedule:
+      timezone: UTC
+      cron: "0 9 * * *"
+  weekly-csat-report:
+    task: tasks/weekly-csat-report/TASK.md
+    schedule:
+      timezone: UTC
+      cron: "0 8 * * 1"
+  sla-queue-health-check:
+    task: tasks/sla-queue-health-check/TASK.md
+    schedule:
+      timezone: UTC
+      cron: "*/15 * * * *"
