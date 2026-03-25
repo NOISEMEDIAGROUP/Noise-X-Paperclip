@@ -635,12 +635,15 @@ Terminal states: `done`, `cancelled`
 
 #### Done Transition Evidence for Code Tasks
 
-- Use the `code` label for tasks that change tracked repository files.
-- When a `code`-labeled issue moves to `done`, the latest completion comment must include:
+- GitHub evidence (commit or PR link) is required to close issues when **either** condition is met:
+  - The issue has the `code` label, **or**
+  - The issue belongs to a project with a repo-connected workspace (`repoUrl` set).
+- Use the `code` label for tasks that change tracked repository files outside a repo-connected project.
+- When evidence is required, the latest completion comment must include:
   - `https://github.com/<owner>/<repo>/commit/<sha>`, or
   - `https://github.com/<owner>/<repo>/pull/<number>`
 - Paperclip checks the `done` transition comment first. If you omit it, Paperclip falls back to the current latest issue comment.
-- Non-code tasks do not need GitHub evidence.
+- Non-code tasks outside repo-connected projects do not need GitHub evidence.
 - If traceability is missing for completed code work, keep the issue `in_progress` or mark it `blocked` until the latest comment includes the commit or PR link.
 
 ### Companies, Projects, Goals

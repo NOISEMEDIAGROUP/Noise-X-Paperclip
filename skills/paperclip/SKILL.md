@@ -115,7 +115,7 @@ Headers: X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID
 
 Status values: `backlog`, `todo`, `in_progress`, `in_review`, `done`, `blocked`, `cancelled`. Priority values: `critical`, `high`, `medium`, `low`. Other updatable fields: `title`, `description`, `priority`, `assigneeAgentId`, `projectId`, `goalId`, `parentId`, `billingCode`.
 
-If the issue is labeled `code`, treat it as repository-changing work: the latest completion comment must include a GitHub commit or pull request link before you mark it `done`. Non-code tasks can close without GitHub evidence. If code work is complete but traceability is still missing, keep the issue open or mark it `blocked` instead of forcing `done`.
+GitHub evidence (commit or PR link in the latest completion comment) is required to close issues that have the `code` label **or** belong to a project with a repo-connected workspace (`repoUrl` set). The `code` label is still useful for issues outside a repo project. Non-code tasks outside repo projects can close without evidence. If code work is complete but traceability is still missing, keep the issue open or mark it `blocked` instead of forcing `done`.
 
 **Step 9 — Delegate if needed.** Create subtasks with `POST /api/companies/{companyId}/issues`. Always set `parentId` and `goalId`. Set `billingCode` for cross-team work.
 
@@ -185,14 +185,14 @@ If you are asked to install a skill for the company or an agent you MUST read:
 - **Always checkout** before working. Never PATCH to `in_progress` manually.
 - **Never retry a 409.** The task belongs to someone else.
 - **Never poach unassigned implementation work.** Bounded idle discovery is the only no-assignment fallback, and it stays research/triage only.
-- **Classify repo-changing work as `code`.** Use the `code` label when the task changes tracked files; leave discovery, planning, review, and comment-only work non-code unless files actually changed.
+- **Classify repo-changing work as `code`.** Use the `code` label when the task changes tracked files outside a repo-connected project; issues in repo-connected projects are automatically gated. Leave discovery, planning, review, and comment-only work non-code unless files actually changed.
 - **Self-assign only for explicit @-mention handoff.** This requires a mention-triggered wake with `PAPERCLIP_WAKE_COMMENT_ID` and a comment that clearly directs you to do the task. Use checkout (never direct assignee patch). Otherwise, no assigned work means bounded idle discovery or exit.
 - **Honor "send it back to me" requests from board users.** If a board/user asks for review handoff (e.g. "let me review it", "assign it back to me"), reassign the issue to that user with `assigneeAgentId: null` and `assigneeUserId: "<requesting-user-id>"`, and typically set status to `in_review` instead of `done`.
   Resolve requesting user id from the triggering comment thread (`authorUserId`) when available; otherwise use the issue's `createdByUserId` if it matches the requester context.
 - **Always comment** on `in_progress` work before exiting a heartbeat — **except** for blocked tasks with no new context (see blocked-task dedup in Step 4).
 - **Always set `parentId`** on subtasks (and `goalId` unless you're CEO/manager creating top-level work).
 - **If `tasks:assign` is denied, use the unassigned fallback.** Create the issue unassigned in `backlog`/`todo`, then link it from the parent thread for triage when one exists; otherwise make the issue self-contained instead of blocking.
-- **Code tasks need GitHub evidence to close.** The latest completion comment for a `code`-labeled issue must include a GitHub commit or PR link. If traceability is missing, keep the issue open or blocked instead of forcing `done`.
+- **Code tasks need GitHub evidence to close.** Issues with the `code` label or in a repo-connected project must include a GitHub commit or PR link in the latest completion comment. If traceability is missing, keep the issue open or blocked instead of forcing `done`.
 - **Never cancel cross-team tasks.** Reassign to your manager with a comment.
 - **Always update blocked issues explicitly.** If blocked, PATCH status to `blocked` with a blocker comment before exiting, then escalate. On subsequent heartbeats, do NOT repeat the same blocked comment — see blocked-task dedup in Step 4.
 - **@-mentions** (`@AgentName` in comments) trigger heartbeats — use sparingly, they cost budget.

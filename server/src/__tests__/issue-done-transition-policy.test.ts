@@ -52,18 +52,24 @@ describe("resolveDoneTransitionEvidenceComment", () => {
 });
 
 describe("buildDoneEvidenceRequiredErrorResponse", () => {
-  it("documents the closeout fallback for code and non-code work", () => {
+  it("documents both enforcement signals and closeout fallbacks", () => {
     const payload = buildDoneEvidenceRequiredErrorResponse();
-    expect(payload.error).toContain("remove the code label before closing");
+    expect(payload.error).toContain("code label");
+    expect(payload.error).toContain("repo-connected workspace");
     expect(payload.error).toContain("keep the issue open until traceability is available");
     expect(payload.details).toMatchObject({
       requiredLabel: "code",
+      enforcedSignals: {
+        codeLabel: expect.any(String),
+        projectRepoWorkspace: expect.any(String),
+      },
       acceptedEvidence: {
         githubCommitUrl: "https://github.com/<owner>/<repo>/commit/<sha>",
         githubPullRequestUrl: "https://github.com/<owner>/<repo>/pull/<number>",
       },
       fallback: {
         nonCode: "Remove the code label before marking done when the task did not require repository changes.",
+        projectBound: expect.stringContaining("repo-connected project"),
       },
     });
   });

@@ -71,13 +71,18 @@ export function shouldWakeAgentForComment(
 }
 
 const DONE_EVIDENCE_REQUIRED_ERROR =
-  "Cannot mark issue done for code-labeled issues: latest completion comment must include a GitHub commit or pull request link " +
-  "(https://github.com/<owner>/<repo>/commit/<sha> or /pull/<number>). If this was non-code work, remove the code label before closing. " +
-  "Otherwise keep the issue open until traceability is available.";
+  "Cannot mark issue done: latest completion comment must include a GitHub commit or pull request link " +
+  "(https://github.com/<owner>/<repo>/commit/<sha> or /pull/<number>). Evidence is required when the issue has the code label " +
+  "or belongs to a project with a repo-connected workspace. If this was non-code work, remove the code label and ensure the issue " +
+  "is not in a repo-connected project before closing. Otherwise keep the issue open until traceability is available.";
 
 export function buildDoneEvidenceRequiredDetails() {
   return {
     requiredLabel: "code",
+    enforcedSignals: {
+      codeLabel: "Issue has the 'code' label.",
+      projectRepoWorkspace: "Issue belongs to a project with a repo-connected workspace (repoUrl set).",
+    },
     latestCommentRule: "Paperclip checks the transition comment first, then the current latest issue comment.",
     acceptedEvidence: {
       githubCommitUrl: "https://github.com/<owner>/<repo>/commit/<sha>",
@@ -85,6 +90,7 @@ export function buildDoneEvidenceRequiredDetails() {
     },
     fallback: {
       nonCode: "Remove the code label before marking done when the task did not require repository changes.",
+      projectBound: "If the issue is in a repo-connected project but did not change files, move it to a non-repo project or remove the project association.",
       missingTraceability:
         "Keep the issue in_progress or mark it blocked until the latest comment includes a GitHub commit or pull request link.",
     },
@@ -951,11 +957,17 @@ export function issueRoutes(db: Db, storage: StorageService) {
       const companyLabels = Array.isArray(updateFields.labelIds)
         ? await svc.listLabels(existing.companyId)
         : null;
-      const doneEvidenceRequired = issueRequiresDoneEvidence({
+      const labelBasedEvidence = issueRequiresDoneEvidence({
         currentLabels: existing.labels,
         nextLabelIds: updateFields.labelIds,
         companyLabels,
       });
+      let workspaceBasedEvidence = false;
+      if (!labelBasedEvidence && existing.projectId) {
+        const workspaces = await projectsSvc.listWorkspaces(existing.projectId);
+        workspaceBasedEvidence = workspaces.some((ws) => !!ws.repoUrl);
+      }
+      const doneEvidenceRequired = labelBasedEvidence || workspaceBasedEvidence;
       if (doneEvidenceRequired) {
         let latestExistingCommentBody: string | null = null;
         if (!commentBody?.trim()) {
