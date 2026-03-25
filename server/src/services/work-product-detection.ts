@@ -12,8 +12,8 @@ export interface ExtractedPr {
 const PR_URL_PATTERNS = [
   // GitHub: https://github.com/{owner}/{repo}/pull/{number}
   /https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)/g,
-  // GitLab: https://gitlab.com/{owner}/{repo}/-/merge_requests/{number}
-  /https:\/\/gitlab\.com\/([\w.-]+)\/([\w.-]+)\/-\/merge_requests\/(\d+)/g,
+  // GitLab: https://gitlab.com/{group}[/{subgroup}...]/{repo}/-/merge_requests/{number}
+  /https:\/\/gitlab\.com\/([\w.-]+)\/([\w.-]+(?:\/[\w.-]+)*)\/-\/merge_requests\/(\d+)/g,
 ];
 
 export function extractPrUrls(text: string): ExtractedPr[] {
@@ -97,6 +97,8 @@ export async function createPrWorkProductIfNew(params: {
     status: "active",
     isPrimary: !hasPrAlready,
     createdByRunId: runId,
+    healthStatus: "unknown",
+    reviewState: "none",
   });
 }
 

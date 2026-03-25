@@ -140,6 +140,8 @@ describe("createPrWorkProductIfNew", () => {
       status: "active",
       isPrimary: true,
       createdByRunId: "run-1",
+      healthStatus: "unknown",
+      reviewState: "none",
     });
   });
 

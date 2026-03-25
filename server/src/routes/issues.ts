@@ -273,7 +273,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
         req.query.includeRoutineExecutions === "true" || req.query.includeRoutineExecutions === "1",
       q: req.query.q as string | undefined,
     });
-    // Enrich with PR work products
+    // Enrich with PR work products (intentionally PR-only for list view badges)
     const issueIds = result.map((issue) => issue.id);
     const prMap = await workProductsSvc.listPrWorkProductsForIssues(issueIds, companyId);
     const enriched = result.map((issue) => ({

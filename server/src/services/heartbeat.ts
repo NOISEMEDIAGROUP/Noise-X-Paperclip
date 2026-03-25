@@ -2436,7 +2436,7 @@ export function heartbeatService(db: Db) {
         });
 
         if (enablePrDetection && stream === "stdout") {
-          void detectPrFromLogChunk(chunk, {
+          void detectPrFromLogChunk(sanitizedChunk, {
             issueId: issueId!,
             companyId: run.companyId,
             runId: run.id,
