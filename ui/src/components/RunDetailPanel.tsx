@@ -1,19 +1,17 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { heartbeatsApi } from "../api/heartbeats";
 import { activityApi } from "../api/activity";
-import { agentsApi } from "../api/agents";
 import { queryKeys } from "../lib/queryKeys";
 import { runMetrics } from "../lib/run-utils";
 import { StatusBadge } from "./StatusBadge";
+import { RunLogViewer } from "./RunLogViewer";
 import { invocationSourceLabel, invocationSourceBadge, invocationSourceBadgeDefault } from "../lib/status-colors";
 import { cn, relativeTime, formatTokens, agentRouteRef } from "../lib/utils";
 import { Button } from "@/components/ui/button";
 import {
-  RotateCcw,
   ExternalLink,
-  ChevronRight,
 } from "lucide-react";
 import type { HeartbeatRun, Agent } from "@paperclipai/shared";
 
@@ -226,14 +224,26 @@ export function RunDetailPanel({ run: initialRun, agent, onClose }: RunDetailPan
         </div>
       )}
 
-      {/* CTA to full detail */}
-      <Link
-        to={fullDetailUrl}
-        className="flex items-center justify-center gap-2 w-full py-2.5 px-4 text-sm font-medium border border-border rounded-lg hover:bg-accent/30 transition-colors no-underline text-foreground"
-      >
-        View full log &amp; transcript
-        <ChevronRight className="h-4 w-4" />
-      </Link>
+      {/* Inline transcript / log viewer */}
+      {(run.logRef || run.status === "running" || run.status === "queued") && agent?.adapterType && (
+        <RunLogViewer
+          run={run}
+          adapterType={agent.adapterType}
+          compact
+          maxHeight="28rem"
+        />
+      )}
+
+      {/* Subtle link to full agent detail */}
+      <div className="flex justify-end">
+        <Link
+          to={fullDetailUrl}
+          className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors no-underline"
+        >
+          Full agent run detail
+          <ExternalLink className="h-3 w-3" />
+        </Link>
+      </div>
     </div>
   );
 }
