@@ -416,7 +416,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
         ? eff("adapterConfig", "variant", String(config.variant ?? ""))
       : eff("adapterConfig", "effort", String(config.effort ?? ""));
   const showThinkingEffort =
-    adapterType === "gemini_local"
+    adapterType === "gemini_local" || adapterType === "oz_local"
       ? false
       : adapterType === "copilot_cli"
         ? Boolean(!currentModelId || copilotModelEffort)
