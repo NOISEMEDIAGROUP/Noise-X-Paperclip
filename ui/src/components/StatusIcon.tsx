@@ -37,7 +37,7 @@ export function StatusIcon({ status, onChange, className, showLabel }: StatusIco
       )}
       {isCancelled && (
         <svg
-          className="absolute inset-0 m-auto !w-2.5 text-card"
+          className="absolute inset-0 m-auto size-2.5! text-card"
           viewBox="0 0 12 12"
           fill="none"
           stroke="currentColor"
