@@ -33,9 +33,11 @@ COPY --from=deps /app /app
 COPY . .
 RUN pnpm --filter @paperclipai/shared build
 RUN pnpm --filter @paperclipai/plugin-sdk build
+RUN pnpm --filter @paperclipai/plugin-slack build
 RUN pnpm --filter @paperclipai/ui build
 RUN pnpm --filter @paperclipai/server build
 RUN test -f server/dist/index.js || (echo "ERROR: server build output missing" && exit 1)
+RUN test -f packages/plugins/plugin-slack/dist/worker.js || (echo "ERROR: plugin-slack worker build output missing" && exit 1)
 
 FROM base AS production
 WORKDIR /app
