@@ -51,6 +51,8 @@ interface CreatePrWorkProductData {
   status: string;
   isPrimary?: boolean;
   createdByRunId?: string | null;
+  healthStatus?: string;
+  reviewState?: string;
 }
 
 export interface PrDetectionContext {
