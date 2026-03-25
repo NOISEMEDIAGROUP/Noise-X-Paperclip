@@ -33,11 +33,17 @@ export function activityRoutes(db: Db) {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
 
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 500);
+    const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+    const offset = (page - 1) * limit;
+
     const filters = {
       companyId,
       agentId: req.query.agentId as string | undefined,
       entityType: req.query.entityType as string | undefined,
       entityId: req.query.entityId as string | undefined,
+      limit,
+      offset,
     };
     const result = await svc.list(filters);
     res.json(result);
