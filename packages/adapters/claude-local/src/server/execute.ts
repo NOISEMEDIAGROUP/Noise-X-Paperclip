@@ -117,6 +117,7 @@ function renderPaperclipRuntimeNote(env: Record<string, string>): string {
       "",
       "Paperclip API authentication:",
       "Always include -H \"Authorization: Bearer $PAPERCLIP_API_KEY\" on every Paperclip API call (curl to $PAPERCLIP_API_URL).",
+      "For POST/PATCH requests, also include -H \"X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID\" so the server can attribute the action to this run.",
     );
   }
   lines.push("", "");
