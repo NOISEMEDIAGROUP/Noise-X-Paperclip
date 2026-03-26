@@ -144,6 +144,7 @@ type EnsureCodexSkillsInjectedOptions = {
   skillsEntries?: Array<{ key: string; runtimeName: string; source: string }>;
   desiredSkillNames?: string[];
   linkSkill?: (source: string, target: string) => Promise<void>;
+  runtimeConfig?: unknown;
 };
 
 export async function ensureCodexSkillsInjected(
@@ -452,6 +453,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     agent,
     run: { id: runId, source: "on_demand" },
     context,
+    env,
   };
   const renderedPrompt = renderTemplate(promptTemplate, templateData);
   const renderedBootstrapPrompt =

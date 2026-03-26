@@ -1,5 +1,15 @@
 /// <reference path="./types/express.d.ts" />
-import { existsSync, readFileSync, rmSync } from "node:fs";
+
+// Prevent unhandled promise rejections (e.g. from adapter WebSocket close events)
+// from crashing the server.  Log them instead and let the heartbeat service handle
+// run failure status updates.
+process.on("unhandledRejection", (reason, _promise) => {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  // eslint-disable-next-line no-console
+  console.error(`[paperclip] unhandled rejection (non-fatal): ${message}`);
+});
+
+import { existsSync, readFileSync, rmSync, renameSync, mkdirSync, readdirSync } from "node:fs";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -237,8 +247,20 @@ export async function startServer(): Promise<StartedServer> {
     | { mode: "external-postgres"; connectionString: string }
     | { mode: "embedded-postgres"; dataDir: string; port: number };
   if (config.databaseUrl) {
-    migrationSummary = await ensureMigrations(config.databaseUrl, "PostgreSQL");
-  
+    try {
+      migrationSummary = await ensureMigrations(config.databaseUrl, "PostgreSQL");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("does not exist") && message.includes("role")) {
+        throw new Error(
+          `PostgreSQL role not found. Create it first:\n` +
+          `  CREATE ROLE paperclip WITH PASSWORD 'paperclip' LOGIN CREATEDB;\n` +
+          `Or set DATABASE_URL with a valid role. Original error: ${message}`,
+        );
+      }
+      throw err;
+    }
+
     db = createDb(config.databaseUrl);
     logger.info("Using external PostgreSQL via DATABASE_URL/config");
     activeDatabaseConnectionString = config.databaseUrl;
@@ -293,7 +315,26 @@ export async function startServer(): Promise<StartedServer> {
     }
   
     const clusterVersionFile = resolve(dataDir, "PG_VERSION");
-    const clusterAlreadyInitialized = existsSync(clusterVersionFile);
+    let clusterAlreadyInitialized = existsSync(clusterVersionFile);
+
+    if (!clusterAlreadyInitialized && existsSync(dataDir) && readdirSync(dataDir).length > 0) {
+      const backupDir = `${dataDir}_corrupted_${Date.now()}`;
+      logger.warn(
+        { dataDir, backupDir },
+        "Database directory is not empty but missing PG_VERSION. Backing up and starting fresh.",
+      );
+      try {
+        renameSync(dataDir, backupDir);
+        mkdirSync(dataDir, { recursive: true });
+        logger.warn({ dataDir, backupDir }, "Backup complete; proceeding with fresh initialisation.");
+      } catch (backupErr) {
+        logger.error(
+          { dataDir, backupDir, err: backupErr },
+          "Failed to back up corrupted database directory; manual intervention may be required.",
+        );
+        throw backupErr;
+      }
+    }
     const postmasterPidFile = resolve(dataDir, "postmaster.pid");
     const isPidRunning = (pid: number): boolean => {
       try {
@@ -347,7 +388,13 @@ export async function startServer(): Promise<StartedServer> {
           password: "paperclip",
           port,
           persistent: true,
-          initdbFlags: ["--encoding=UTF8", "--locale=C", "--lc-messages=C"],
+          initdbFlags: [
+            "--encoding=UTF8",
+            // C.UTF-8 is not available on Windows; fall back to C locale (#1026)
+            `--locale=${process.platform === "win32" ? "C" : "C.UTF-8"}`,
+            "--lc-messages=C",
+            "--username=paperclip",
+          ],
           onLog: appendEmbeddedPostgresLog,
           onError: appendEmbeddedPostgresLog,
         });
@@ -478,6 +525,11 @@ export async function startServer(): Promise<StartedServer> {
   const listenPort = await detectPort(config.port);
   const uiMode = config.uiDevMiddleware ? "vite-dev" : config.serveUi ? "static" : "none";
   const storageService = createStorageServiceFromConfig(config);
+  
+  const authProviders: string[] = [];
+  if (config.authGithubClientId && config.authGithubClientSecret) authProviders.push("github");
+  if (config.authGoogleClientId && config.authGoogleClientSecret) authProviders.push("google");
+
   const app = await createApp(db as any, {
     uiMode,
     serverPort: listenPort,
@@ -485,9 +537,11 @@ export async function startServer(): Promise<StartedServer> {
     deploymentMode: config.deploymentMode,
     deploymentExposure: config.deploymentExposure,
     allowedHostnames: config.allowedHostnames,
+    authPublicBaseUrl: config.authPublicBaseUrl,
     bindHost: config.host,
     authReady,
     companyDeletionEnabled: config.companyDeletionEnabled,
+    authProviders,
     betterAuthHandler,
     resolveSession,
   });

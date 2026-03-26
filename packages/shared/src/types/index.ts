@@ -1,4 +1,4 @@
-export type { Company } from "./company.js";
+export type { Company, CompanyTreeNode } from "./company.js";
 export type { InstanceExperimentalSettings, InstanceGeneralSettings, InstanceSettings } from "./instance.js";
 export type {
   CompanySkillSourceType,
@@ -131,6 +131,7 @@ export type { LiveEvent } from "./live.js";
 export type { DashboardSummary } from "./dashboard.js";
 export type { ActivityEvent } from "./activity.js";
 export type { SidebarBadges } from "./sidebar-badges.js";
+export type { Artifact, ArtifactType, ArtifactStatus } from "./artifact.js";
 export type {
   CompanyMembership,
   PrincipalPermissionGrant,

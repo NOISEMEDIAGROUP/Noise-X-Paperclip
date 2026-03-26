@@ -1,6 +1,7 @@
 import type {
   Company,
   CompanyPortabilityExportRequest,
+  CompanyTreeNode,
   CompanyPortabilityExportPreviewResult,
   CompanyPortabilityExportResult,
   CompanyPortabilityImportRequest,
@@ -13,10 +14,20 @@ import { api } from "./client";
 
 export type CompanyStats = Record<string, { agentCount: number; issueCount: number }>;
 
+export type CompanyStatsAggregated = Record<string, {
+  agentCount: number;
+  issueCount: number;
+  subsidiaryCount: number;
+  totalAgentCount: number;
+  totalIssueCount: number;
+}>;
+
 export const companiesApi = {
   list: () => api.get<Company[]>("/companies"),
   get: (companyId: string) => api.get<Company>(`/companies/${companyId}`),
   stats: () => api.get<CompanyStats>("/companies/stats"),
+  statsAggregated: () => api.get<CompanyStatsAggregated>("/companies/stats?includeChildren=true"),
+  tree: () => api.get<CompanyTreeNode[]>("/companies/tree"),
   create: (data: {
     name: string;
     description?: string | null;

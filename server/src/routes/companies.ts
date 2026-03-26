@@ -74,12 +74,100 @@ export function companyRoutes(db: Db, storage?: StorageService) {
       ? null
       : new Set(req.actor.companyIds ?? []);
     const stats = await svc.stats();
-    if (!allowed) {
-      res.json(stats);
+    const filtered = allowed
+      ? Object.fromEntries(Object.entries(stats).filter(([companyId]) => allowed.has(companyId)))
+      : stats;
+
+    if (req.query.includeChildren !== "true") {
+      res.json(filtered);
       return;
     }
-    const filtered = Object.fromEntries(Object.entries(stats).filter(([companyId]) => allowed.has(companyId)));
-    res.json(filtered);
+
+    // Build child → parent map to aggregate subsidiary counts into holding totals
+    const all = await svc.list();
+    const childrenByParent = new Map<string, string[]>();
+    for (const c of all) {
+      if (c.parentCompanyId) {
+        const siblings = childrenByParent.get(c.parentCompanyId) ?? [];
+        siblings.push(c.id);
+        childrenByParent.set(c.parentCompanyId, siblings);
+      }
+    }
+
+    const result: Record<string, {
+      agentCount: number; issueCount: number;
+      subsidiaryCount: number; totalAgentCount: number; totalIssueCount: number;
+    }> = {};
+    for (const [companyId, s] of Object.entries(filtered)) {
+      const children = childrenByParent.get(companyId) ?? [];
+      const totalAgentCount = s.agentCount + children.reduce((sum, cid) => sum + (stats[cid]?.agentCount ?? 0), 0);
+      const totalIssueCount = s.issueCount + children.reduce((sum, cid) => sum + (stats[cid]?.issueCount ?? 0), 0);
+      result[companyId] = { ...s, subsidiaryCount: children.length, totalAgentCount, totalIssueCount };
+    }
+    res.json(result);
+  });
+
+  router.get("/tree", async (req, res) => {
+    assertBoard(req);
+    const all = await svc.list();
+    const visible = (req.actor.source === "local_implicit" || req.actor.isInstanceAdmin)
+      ? all
+      : (() => {
+          const actorIds = new Set(req.actor.companyIds ?? []);
+          // Include subsidiaries of any company the actor has access to
+          const parentIds = new Set(all.filter(c => c.parentCompanyId && actorIds.has(c.parentCompanyId)).map(c => c.id));
+          return all.filter(c => actorIds.has(c.id) || parentIds.has(c.id));
+        })();
+
+    type TreeNode = (typeof visible[0]) & { children: TreeNode[] };
+    const byId = new Map<string, TreeNode>(visible.map(c => [c.id, { ...c, children: [] }]));
+    const roots: TreeNode[] = [];
+    for (const node of byId.values()) {
+      if (node.parentCompanyId && byId.has(node.parentCompanyId)) {
+        byId.get(node.parentCompanyId)!.children.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+    res.json(roots);
+  });
+
+  /** Holding roster: all agents across the holding tree */
+  router.get("/holding/roster", async (req, res, next) => {
+    try {
+      assertBoard(req);
+      const all = await svc.list();
+      // Find root company (no parent) or first company
+      const root = all.find((c) => !c.parentCompanyId) ?? all[0];
+      if (!root) return res.json({ agents: [], count: 0 });
+
+      const { adapter_type, capability, status } = req.query;
+      try {
+        const roster = await svc.getHoldingRoster(root.id, {
+          adapterType: adapter_type ? String(adapter_type) : undefined,
+          capabilityTag: capability ? String(capability) : undefined,
+          status: status ? String(status) : undefined,
+        });
+        return res.json({ agents: roster, count: roster.length });
+      } catch (innerErr: any) {
+        console.error("[holding/roster] Inner error:", innerErr?.message);
+        return res.status(500).json({ error: innerErr?.message ?? "Internal error" });
+      }
+    } catch (err: any) {
+      console.error("[holding/roster] Outer error:", err?.message);
+      next(err);
+    }
+  });
+
+  /** Holding tree: recursive company hierarchy from a given root */
+  router.get("/holding/tree/:companyId", async (req, res, next) => {
+    try {
+      assertBoard(req);
+      const tree = await svc.getHoldingTree(req.params.companyId);
+      return res.json(tree);
+    } catch (err) {
+      next(err);
+    }
   });
 
   // Common malformed path when companyId is empty in "/api/companies/{companyId}/issues".

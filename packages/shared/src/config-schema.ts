@@ -14,7 +14,7 @@ export const configMetaSchema = z.object({
 });
 
 export const llmConfigSchema = z.object({
-  provider: z.enum(["claude", "openai"]),
+  provider: z.enum(["gemini", "openai"]),
   apiKey: z.string().optional(),
 });
 
@@ -52,10 +52,17 @@ export const serverConfigSchema = z.object({
   serveUi: z.boolean().default(true),
 });
 
+export const authSocialProviderSchema = z.object({
+  clientId: z.string().min(1),
+  clientSecret: z.string().min(1),
+});
+
 export const authConfigSchema = z.object({
   baseUrlMode: z.enum(AUTH_BASE_URL_MODES).default("auto"),
   publicBaseUrl: z.string().url().optional(),
   disableSignUp: z.boolean().default(false),
+  github: authSocialProviderSchema.optional(),
+  google: authSocialProviderSchema.optional(),
 });
 
 export const storageLocalDiskConfigSchema = z.object({

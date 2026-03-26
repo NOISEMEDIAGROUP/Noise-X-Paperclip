@@ -20,7 +20,7 @@ import {
   projectWorkspaces,
   projects,
 } from "@paperclipai/db";
-import { extractAgentMentionIds, extractProjectMentionIds } from "@paperclipai/shared";
+import { extractAgentMentionIds, extractProjectMentionIds, isUuidLike } from "@paperclipai/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
 import {
   defaultIssueExecutionWorkspaceSettingsForProject,
@@ -582,7 +582,14 @@ export function issueService(db: Db) {
         conditions.push(statuses.length === 1 ? eq(issues.status, statuses[0]) : inArray(issues.status, statuses));
       }
       if (filters?.assigneeAgentId) {
-        conditions.push(eq(issues.assigneeAgentId, filters.assigneeAgentId));
+        const agentIds = filters.assigneeAgentId.split(",").map((s) => s.trim()).filter(isUuidLike);
+        if (agentIds.length > 0) {
+          conditions.push(
+            agentIds.length === 1
+              ? eq(issues.assigneeAgentId, agentIds[0])
+              : inArray(issues.assigneeAgentId, agentIds),
+          );
+        }
       }
       if (filters?.participantAgentId) {
         conditions.push(participatedByAgentCondition(companyId, filters.participantAgentId));
@@ -865,7 +872,28 @@ export function issueService(db: Db) {
           values.cancelledAt = new Date();
         }
 
-        const [issue] = await tx.insert(issues).values(values).returning();
+        let issue: typeof issues.$inferSelect;
+        try {
+          [issue] = await tx.insert(issues).values(values).returning();
+        } catch (err) {
+          // Handle duplicate key from concurrent issue creation (#1078).
+          // Resync counter from the actual max issue_number and retry once.
+          const message = err instanceof Error ? err.message : String(err);
+          if (message.includes("duplicate key") || message.includes("unique constraint")) {
+            const [resynced] = await tx
+              .update(companies)
+              .set({
+                issueCounter: sql`GREATEST(${companies.issueCounter}, COALESCE((SELECT MAX(${issues.issueNumber}) FROM ${issues} WHERE ${issues.companyId} = ${companyId}), 0)) + 1`,
+              })
+              .where(eq(companies.id, companyId))
+              .returning({ issueCounter: companies.issueCounter, issuePrefix: companies.issuePrefix });
+            values.issueNumber = resynced.issueCounter;
+            values.identifier = `${resynced.issuePrefix}-${resynced.issueCounter}`;
+            [issue] = await tx.insert(issues).values(values).returning();
+          } else {
+            throw err;
+          }
+        }
         if (inputLabelIds) {
           await syncIssueLabels(issue.id, companyId, inputLabelIds, tx);
         }
@@ -1227,6 +1255,9 @@ export function issueService(db: Db) {
           status: "todo",
           assigneeAgentId: null,
           checkoutRunId: null,
+          executionRunId: null,
+          executionLockedAt: null,
+          executionAgentNameKey: null,
           updatedAt: new Date(),
         })
         .where(eq(issues.id, id))

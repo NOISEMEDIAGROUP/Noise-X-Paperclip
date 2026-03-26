@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { constants as fsConstants, promises as fs, type Dirent } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type {
   AdapterSkillEntry,
@@ -225,7 +226,8 @@ export function defaultPathForPlatform() {
   if (process.platform === "win32") {
     return "C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\Wbem";
   }
-  return "/usr/local/bin:/opt/homebrew/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin";
+  const homeBin = path.join(os.homedir(), ".local", "bin");
+  return `${homeBin}:/usr/local/bin:/opt/homebrew/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin`;
 }
 
 function windowsPathExts(env: NodeJS.ProcessEnv): string[] {
@@ -301,9 +303,16 @@ async function resolveSpawnTarget(
 }
 
 export function ensurePathInEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  if (typeof env.PATH === "string" && env.PATH.length > 0) return env;
-  if (typeof env.Path === "string" && env.Path.length > 0) return env;
-  return { ...env, PATH: defaultPathForPlatform() };
+  const homeBin = path.join(os.homedir(), ".local", "bin");
+  const currentPath = env.PATH ?? env.Path ?? "";
+  if (currentPath.length === 0) {
+    return { ...env, PATH: defaultPathForPlatform() };
+  }
+  const sep = process.platform === "win32" ? ";" : ":";
+  if (!currentPath.split(sep).includes(homeBin)) {
+    return { ...env, PATH: `${homeBin}${sep}${currentPath}` };
+  }
+  return env;
 }
 
 export async function ensureAbsoluteDirectory(
@@ -378,8 +387,10 @@ export async function listPaperclipSkillEntries(
         key: `paperclipai/paperclip/${entry.name}`,
         runtimeName: entry.name,
         source: path.join(root, entry.name),
-        required: true,
-        requiredReason: "Bundled Paperclip skills are always available for local adapters.",
+        required: entry.name === "paperclip",
+        requiredReason: entry.name === "paperclip"
+          ? "Core orchestration skill"
+          : undefined,
       }));
   } catch {
     return [];
@@ -783,11 +794,13 @@ export async function runChildProcess(
           opts.timeoutSec > 0
             ? setTimeout(() => {
                 timedOut = true;
-                child.kill("SIGTERM");
+                try { child.kill("SIGTERM"); } catch { /* process may have already exited */ }
                 setTimeout(() => {
-                  if (!child.killed) {
-                    child.kill("SIGKILL");
-                  }
+                  try {
+                    if (!child.killed) {
+                      child.kill("SIGKILL");
+                    }
+                  } catch { /* process may have already exited */ }
                 }, Math.max(1, opts.graceSec) * 1000);
               }, opts.timeoutSec * 1000)
             : null;

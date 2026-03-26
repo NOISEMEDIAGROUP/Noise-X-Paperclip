@@ -136,6 +136,7 @@ export {
 
 export type {
   Company,
+  CompanyTreeNode,
   CompanySkillSourceType,
   CompanySkillTrustLevel,
   CompanySkillCompatibility,

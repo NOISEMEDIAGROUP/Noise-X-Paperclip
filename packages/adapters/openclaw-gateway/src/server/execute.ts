@@ -3,6 +3,7 @@ import type {
   AdapterExecutionResult,
   AdapterRuntimeServiceReport,
 } from "@paperclipai/adapter-utils";
+import { resolveSkillAllowlist } from "@paperclipai/adapter-utils";
 import { asNumber, asString, buildPaperclipEnv, parseObject } from "@paperclipai/adapter-utils/server-utils";
 import crypto, { randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
@@ -85,6 +86,9 @@ const DEFAULT_CLIENT_MODE = "backend";
 const DEFAULT_CLIENT_VERSION = "paperclip";
 const DEFAULT_ROLE = "operator";
 
+const MAX_EXECUTION_RETRIES = 2;
+const RETRY_DELAY_MS = 3_000;
+
 const SENSITIVE_LOG_KEY_PATTERN =
   /(^|[_-])(auth|authorization|token|secret|password|api[_-]?key|private[_-]?key)([_-]|$)|^x-openclaw-(auth|token)$/i;
 
@@ -131,10 +135,16 @@ function resolveSessionKey(input: {
   configuredSessionKey: string | null;
   runId: string;
   issueId: string | null;
+  agentId?: string | null;
 }): string {
   const fallback = input.configuredSessionKey ?? "paperclip";
-  if (input.strategy === "run") return `paperclip:run:${input.runId}`;
-  if (input.strategy === "issue" && input.issueId) return `paperclip:issue:${input.issueId}`;
+  // Session keys must use the "agent:{agentId}:{rest}" format so the OpenClaw
+  // gateway resolves which agent owns the session.  Without this prefix the
+  // gateway falls back to DEFAULT_AGENT_ID ("main") and rejects requests where
+  // agentId != "main".
+  const agentId = nonEmpty(input.agentId) ?? "main";
+  if (input.strategy === "run") return `agent:${agentId}:paperclip:run:${input.runId}`;
+  if (input.strategy === "issue" && input.issueId) return `agent:${agentId}:paperclip:issue:${input.issueId}`;
   return fallback;
 }
 
@@ -626,8 +636,15 @@ class GatewayWsClient {
     ws.on("close", (code, reason) => {
       const reasonText = rawDataToString(reason);
       const err = new Error(`gateway closed (${code}): ${reasonText}`);
-      this.failPending(err);
-      this.rejectChallenge(err);
+      try {
+        this.failPending(err);
+        this.rejectChallenge(err);
+      } catch (closeErr) {
+        // Swallow errors from failPending/rejectChallenge to prevent unhandled
+        // rejections from crashing the process when the close event fires after
+        // execution completes.
+        void this.opts.onLog("stderr", `[openclaw-gateway] close handler error (suppressed): ${closeErr instanceof Error ? closeErr.message : String(closeErr)}\n`);
+      }
     });
 
     ws.on("error", (err) => {
@@ -713,7 +730,13 @@ class GatewayWsClient {
 
   close() {
     if (!this.ws) return;
-    this.ws.close(1000, "paperclip-complete");
+    try {
+      if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+        this.ws.close(1000, "paperclip-complete");
+      }
+    } catch {
+      // Suppress close errors — the connection is being torn down anyway.
+    }
     this.ws = null;
   }
 
@@ -866,7 +889,7 @@ async function autoApproveDevicePairing(params: {
   } catch (err) {
     return { ok: false, reason: err instanceof Error ? err.message : String(err) };
   } finally {
-    client.close();
+    try { client.close(); } catch { /* suppress */ }
   }
 }
 
@@ -1026,6 +1049,41 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     };
   }
 
+  // Cross-company credential guard
+  const expectedCompanyId = nonEmpty(ctx.config.expectedCompanyId);
+  if (expectedCompanyId && ctx.agent.companyId !== expectedCompanyId) {
+    return {
+      exitCode: 1,
+      signal: null,
+      timedOut: false,
+      errorMessage: `Cross-company access denied: agent company ${ctx.agent.companyId} does not match gateway expected company ${expectedCompanyId}`,
+      errorCode: "openclaw_gateway_company_mismatch",
+    };
+  }
+
+  // Pre-flight health probe — fast-fail if gateway is unreachable
+  const healthProbeUrl = `http${parsedUrl.protocol === "wss:" ? "s" : ""}://${parsedUrl.host}/`;
+  try {
+    const probe = await fetch(healthProbeUrl, { signal: AbortSignal.timeout(5_000) });
+    if (!probe.ok && probe.status !== 426) {
+      return {
+        exitCode: 1,
+        signal: null,
+        timedOut: false,
+        errorMessage: `Gateway health probe failed: HTTP ${probe.status}`,
+        errorCode: "openclaw_gateway_unhealthy",
+      };
+    }
+  } catch (probeErr) {
+    return {
+      exitCode: 1,
+      signal: null,
+      timedOut: false,
+      errorMessage: `Gateway unreachable: ${probeErr instanceof Error ? probeErr.message : String(probeErr)}`,
+      errorCode: "openclaw_gateway_unreachable",
+    };
+  }
+
   const timeoutSec = Math.max(0, Math.floor(asNumber(ctx.config.timeoutSec, 120)));
   const timeoutMs = timeoutSec > 0 ? timeoutSec * 1000 : 0;
   const connectTimeoutMs = timeoutMs > 0 ? Math.min(timeoutMs, 15_000) : 10_000;
@@ -1057,11 +1115,13 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   const sessionKeyStrategy = normalizeSessionKeyStrategy(ctx.config.sessionKeyStrategy);
   const configuredSessionKey = nonEmpty(ctx.config.sessionKey);
+  const configuredAgentIdForSession = nonEmpty(ctx.config.agentId);
   const sessionKey = resolveSessionKey({
     strategy: sessionKeyStrategy,
     configuredSessionKey,
     runId: ctx.runId,
     issueId: wakePayload.issueId,
+    agentId: configuredAgentIdForSession,
   });
 
   const templateMessage = nonEmpty(payloadTemplate.message) ?? nonEmpty(payloadTemplate.text);
@@ -1083,6 +1143,16 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   if (typeof agentParams.timeout !== "number") {
     agentParams.timeout = waitTimeoutMs;
+  }
+
+  // Pass skill allowlist to gateway so it can filter skills on the runtime side
+  const skillAllowlistPolicy = resolveSkillAllowlist(ctx.agent.runtimeConfig);
+  if (skillAllowlistPolicy.enabled) {
+    agentParams.skillAllowlist = {
+      enabled: true,
+      allowed: skillAllowlistPolicy.allowed,
+      blocked: skillAllowlistPolicy.blocked,
+    };
   }
 
   if (ctx.onMeta) {
@@ -1120,6 +1190,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const autoPairOnFirstConnect = parseBoolean(ctx.config.autoPairOnFirstConnect, true);
   let autoPairAttempted = false;
   let latestResultPayload: unknown = null;
+  let executionRetryCount = 0;
 
   while (true) {
     const trackedRunIds = new Set<string>([ctx.runId]);
@@ -1409,6 +1480,17 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         );
       }
 
+      // Timeout retry — transient LLM/network failures
+      if (timedOut && executionRetryCount < MAX_EXECUTION_RETRIES) {
+        executionRetryCount++;
+        await ctx.onLog(
+          "stdout",
+          `[openclaw-gateway] timeout retry ${executionRetryCount}/${MAX_EXECUTION_RETRIES} after ${RETRY_DELAY_MS}ms\n`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+        continue;
+      }
+
       const detailedMessage = pairingRequired
         ? `${message}. Approve the pending device in OpenClaw (for example: openclaw devices approve --latest --url <gateway-ws-url> --token <gateway-token>) and retry. Ensure this agent has a persisted adapterConfig.devicePrivateKeyPem so approvals are reused.`
         : message;
@@ -1428,7 +1510,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         resultJson: asRecord(latestResultPayload),
       };
     } finally {
-      client.close();
+      try { client.close(); } catch { /* suppress */ }
     }
   }
 }

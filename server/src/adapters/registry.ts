@@ -197,7 +197,9 @@ const adaptersByType = new Map<string, ServerAdapterModule>(
 );
 
 export function getServerAdapter(type: string): ServerAdapterModule {
-  const adapter = adaptersByType.get(type);
+  // Normalize hyphens to underscores so "openclaw-gateway" matches "openclaw_gateway"
+  const normalized = type.replace(/-/g, "_");
+  const adapter = adaptersByType.get(type) ?? adaptersByType.get(normalized);
   if (!adapter) {
     // Fall back to process adapter for unknown types
     return processAdapter;
@@ -206,7 +208,8 @@ export function getServerAdapter(type: string): ServerAdapterModule {
 }
 
 export async function listAdapterModels(type: string): Promise<{ id: string; label: string }[]> {
-  const adapter = adaptersByType.get(type);
+  const normalized = type.replace(/-/g, "_");
+  const adapter = adaptersByType.get(type) ?? adaptersByType.get(normalized);
   if (!adapter) return [];
   if (adapter.listModels) {
     const discovered = await adapter.listModels();
@@ -220,5 +223,6 @@ export function listServerAdapters(): ServerAdapterModule[] {
 }
 
 export function findServerAdapter(type: string): ServerAdapterModule | null {
-  return adaptersByType.get(type) ?? null;
+  const normalized = type.replace(/-/g, "_");
+  return adaptersByType.get(type) ?? adaptersByType.get(normalized) ?? null;
 }

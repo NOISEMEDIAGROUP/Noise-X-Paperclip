@@ -31,6 +31,7 @@ export const AGENT_ADAPTER_TYPES = [
   "cursor",
   "openclaw_gateway",
   "hermes_local",
+  "gemini_local",
 ] as const;
 export type AgentAdapterType = (typeof AGENT_ADAPTER_TYPES)[number];
 
@@ -39,6 +40,7 @@ export const AGENT_ROLES = [
   "cto",
   "cmo",
   "cfo",
+  "coo",
   "engineer",
   "designer",
   "pm",
@@ -54,6 +56,7 @@ export const AGENT_ROLE_LABELS: Record<AgentRole, string> = {
   cto: "CTO",
   cmo: "CMO",
   cfo: "CFO",
+  coo: "COO",
   engineer: "Engineer",
   designer: "Designer",
   pm: "PM",
@@ -317,6 +320,14 @@ export const LIVE_EVENT_TYPES = [
   "plugin.ui.updated",
   "plugin.worker.crashed",
   "plugin.worker.restarted",
+  "knowledge.created",
+  "knowledge.searched",
+  "knowledge.learned",
+  "knowledge.superseded",
+  "meeting.started",
+  "meeting.completed",
+  "delegation.created",
+  "delegation.completed",
 ] as const;
 export type LiveEventType = (typeof LIVE_EVENT_TYPES)[number];
 

@@ -5,6 +5,7 @@ import { resolveDefaultAgentWorkspaceDir } from "../home-paths.js";
 import {
   buildExplicitResumeSessionOverride,
   formatRuntimeWorkspaceWarningLog,
+  isPendingIssueStatusForTimerWake,
   prioritizeProjectWorkspaceCandidatesForRun,
   parseSessionCompactionPolicy,
   resolveRuntimeSessionParamsForWorkspace,
@@ -181,6 +182,19 @@ describe("shouldResetTaskSessionForWake", () => {
         wakeTriggerDetail: "callback",
       }),
     ).toBe(false);
+  });
+});
+
+describe("isPendingIssueStatusForTimerWake", () => {
+  it("treats todo and in_progress issues as pending", () => {
+    expect(isPendingIssueStatusForTimerWake("todo")).toBe(true);
+    expect(isPendingIssueStatusForTimerWake("in_progress")).toBe(true);
+  });
+
+  it("does not treat blocked or completed issues as pending", () => {
+    expect(isPendingIssueStatusForTimerWake("blocked")).toBe(false);
+    expect(isPendingIssueStatusForTimerWake("done")).toBe(false);
+    expect(isPendingIssueStatusForTimerWake("cancelled")).toBe(false);
   });
 });
 

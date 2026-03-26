@@ -12,6 +12,7 @@ import {
   agentWakeupRequests,
   heartbeatRunEvents,
   heartbeatRuns,
+  issueComments,
   issues,
   projects,
   projectWorkspaces,
@@ -31,6 +32,17 @@ import { secretService } from "./secrets.js";
 import { resolveDefaultAgentWorkspaceDir, resolveManagedProjectWorkspaceDir } from "../home-paths.js";
 import { summarizeHeartbeatRunResultJson } from "./heartbeat-run-summary.js";
 import {
+  evaluateCircuitBreaker,
+  resolveCircuitBreakerConfigForAdapter,
+  tripCircuitBreaker,
+} from "./circuit-breaker.js";
+import {
+  executeFallback,
+  parseFallbackConfig,
+  buildFallbackPrompt,
+  type FallbackResult,
+} from "./openrouter-fallback.js";
+import {
   buildWorkspaceReadyComment,
   cleanupExecutionWorkspaceArtifacts,
   ensureRuntimeServicesForRun,
@@ -41,6 +53,7 @@ import {
 } from "./workspace-runtime.js";
 import { issueService } from "./issues.js";
 import { executionWorkspaceService } from "./execution-workspaces.js";
+import { autoResearchSkills, buildAutoResearchContext } from "./autoresearch.js";
 import { workspaceOperationService } from "./workspace-operations.js";
 import {
   buildExecutionWorkspaceAdapterConfig,
@@ -58,7 +71,43 @@ import {
   type SessionCompactionPolicy,
 } from "@paperclipai/adapter-utils";
 
+// ---------------------------------------------------------------------------
+// Telegram auth failure notification (non-fatal, best-effort)
+// ---------------------------------------------------------------------------
+function isAuthError(message: string): boolean {
+  return (
+    message.includes("gateway token missing") ||
+    message.includes("provide gateway auth token") ||
+    message.includes("unauthorized") ||
+    message.includes("authentication failed")
+  );
+}
+
+async function notifyTelegramAuthFailure(agentName: string, adapterType: string, errorMsg: string): Promise<void> {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!botToken || !chatId) return;
+  try {
+    const text =
+      `🔐 <b>Paperclip Auth Hatası</b>\n` +
+      `Agent: <code>${agentName}</code>\n` +
+      `Adapter: <code>${adapterType}</code>\n` +
+      `Hata: ${errorMsg.slice(0, 200)}\n` +
+      `Zaman: ${new Date().toISOString()}`;
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
+    });
+  } catch {
+    // non-fatal — do not throw
+  }
+}
+
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
+const HEARTBEAT_MAX_GLOBAL_CONCURRENT_RUNS = parseInt(process.env.HEARTBEAT_MAX_GLOBAL_CONCURRENT_RUNS ?? "1", 10);
+const HEARTBEAT_MIN_SPACING_MS = parseInt(process.env.HEARTBEAT_MIN_SPACING_MS ?? "120000", 10); // 2 min default
+let lastRunFinishedAt: number | null = null;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_MAX = 10;
 const DEFERRED_WAKE_CONTEXT_KEY = "_paperclipWakeContext";
@@ -549,6 +598,10 @@ export function shouldResetTaskSessionForWake(
   return false;
 }
 
+export function isPendingIssueStatusForTimerWake(status: string): boolean {
+  return status === "todo" || status === "in_progress";
+}
+
 export function formatRuntimeWorkspaceWarningLog(warning: string) {
   return {
     stream: "stdout" as const,
@@ -623,6 +676,90 @@ function enrichWakeContextSnapshot(input: {
     taskKey,
     wakeCommentId,
   };
+}
+
+/**
+ * Enrich context snapshot with issue description and comment body from the
+ * database.  This closes silent-context-loss bugs #848 and #799 where task-
+ * triggered and comment-triggered wakes only passed IDs without the actual
+ * text content agents need to act on.
+ */
+async function enrichContextWithDbContent(
+  dbRef: Db,
+  contextSnapshot: Record<string, unknown>,
+  issueId: string | null,
+  commentId: string | null,
+) {
+  if (issueId && !readNonEmptyString(contextSnapshot["issueDescription"])) {
+    const row = await dbRef
+      .select({ description: issues.description })
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .then((rows: { description: string | null }[]) => rows[0] ?? null);
+    if (row?.description) {
+      contextSnapshot.issueDescription = row.description;
+    }
+  }
+  if (commentId && !readNonEmptyString(contextSnapshot["commentBody"])) {
+    const row = await dbRef
+      .select({ body: issueComments.body })
+      .from(issueComments)
+      .where(eq(issueComments.id, commentId))
+      .then((rows: { body: string | null }[]) => rows[0] ?? null);
+    if (row?.body) {
+      contextSnapshot.commentBody = row.body;
+    }
+  }
+}
+
+/**
+ * Build role-specific instructions injected into agent context.
+ * Helps leads delegate, CMO orchestrate marketing team, etc.
+ */
+function buildRoleBasedInstructions(
+  agent: { name: string; role: string; companyId: string },
+  _db: Db,
+): string | null {
+  const lines: string[] = [];
+
+  // Lead agents: auto-delegation instructions
+  if (agent.role === "project_lead") {
+    lines.push(
+      "## Auto-Delegation",
+      "Sen proje lead'isin. Bu gorevi alt gorevlere bol ve ilgili muhendislere ata.",
+      "Her sub-issue icin Paperclip API kullan: POST /api/companies/:companyId/issues",
+      "Sub-issue'larda parentId olarak bu issue'nun ID'sini kullan.",
+      "Rollere gore ata: Backend → backend_engineer, Frontend → frontend_engineer,",
+      "QA → qa_engineer, DevOps → devops, Designer → designer.",
+    );
+  }
+
+  // CMO: marketing team orchestration
+  if (agent.name === "EvoHaus CMO") {
+    lines.push(
+      "## CMO Delegasyon Talimati",
+      "Sen stratejik CMO'sun. Icerik uretimi, sosyal medya postlari,",
+      "materyal hazirlama gibi operasyonel gorevleri ekibine delege et:",
+      "- PAZARLAMA: icerik uretimi, sosyal medya",
+      "- REKLAM: reklam kampanyalari",
+      "- CRM: musteri iliskileri",
+      "- EMAIL: email kampanyalari",
+      "- WHATSAPP: WhatsApp iletisimi",
+      "Sen sadece strateji belirle ve onayla. Operasyonel isleri sub-issue olarak delege et.",
+    );
+  }
+
+  // COO: cross-cutting operations
+  if (agent.role === "coo") {
+    lines.push(
+      "## COO Operasyon Talimati",
+      "Cross-cutting workflow'lari yonet. n8n automation'lari, WhatsApp bildirimleri,",
+      "haftalik hatirlatmalar gibi gorevleri ilgili agent'lara delege et.",
+      "DEPLOY agent'i deploy islemleri icin, WHATSAPP agent'i mesajlasma icin kullan.",
+    );
+  }
+
+  return lines.length > 0 ? lines.join("\n") : null;
 }
 
 function mergeCoalescedContextSnapshot(
@@ -765,6 +902,29 @@ function resolveNextSessionState(input: {
   };
 }
 
+// --- Vault Snapshot Cache (cross-platform context injection) ---
+const VAULT_BASE = path.join(
+  process.env.HOME ?? "/Users/evohaus",
+  "Documents/EvoHaus-Vault/Hafiza",
+);
+const VAULT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
+const VAULT_FILES = ["orkestrasyon/cross-platform.md", "altyapi.md"];
+let vaultCache: { data: Record<string, string>; fetchedAt: number } | null = null;
+
+async function getVaultSnapshot(): Promise<Record<string, string>> {
+  if (vaultCache && Date.now() - vaultCache.fetchedAt < VAULT_CACHE_TTL_MS) {
+    return vaultCache.data;
+  }
+  const data: Record<string, string> = {};
+  for (const f of VAULT_FILES) {
+    try {
+      data[f] = await fs.readFile(path.join(VAULT_BASE, f), "utf-8");
+    } catch { /* skip missing files */ }
+  }
+  vaultCache = { data, fetchedAt: Date.now() };
+  return data;
+}
+
 export function heartbeatService(db: Db) {
   const instanceSettings = instanceSettingsService(db);
   const getCurrentUserRedactionOptions = async () => ({
@@ -775,6 +935,13 @@ export function heartbeatService(db: Db) {
   const secretsSvc = secretService(db);
   const companySkills = companySkillService(db);
   const issuesSvc = issueService(db);
+
+  // Knowledge service for context injection (lazy init to avoid circular deps)
+  let knowledgeSvc: ReturnType<typeof import("./knowledge.js").createKnowledgeService> | null = null;
+  try {
+    const { createKnowledgeService } = require("./knowledge.js");
+    knowledgeSvc = createKnowledgeService(db);
+  } catch { /* knowledge service may not be available */ }
   const executionWorkspacesSvc = executionWorkspaceService(db);
   const workspaceOperationsSvc = workspaceOperationService(db);
   const activeRunExecutions = new Set<string>();
@@ -1249,9 +1416,29 @@ export function heartbeatService(db: Db) {
       }
     }
 
-    const cwd = resolveDefaultAgentWorkspaceDir(agent.id);
-    await fs.mkdir(cwd, { recursive: true });
+    const agentConfig = parseObject(agent.adapterConfig);
+    const agentConfigCwd = readNonEmptyString(agentConfig.cwd);
+    // Prefer adapterConfig.cwd if set and exists, otherwise use default agent workspace
     const warnings: string[] = [];
+    let cwd: string;
+    if (agentConfigCwd) {
+      const agentConfigCwdExists = await fs
+        .stat(agentConfigCwd)
+        .then((stats) => stats.isDirectory())
+        .catch(() => false);
+      if (agentConfigCwdExists) {
+        cwd = agentConfigCwd;
+      } else {
+        cwd = resolveDefaultAgentWorkspaceDir(agent.id);
+        await fs.mkdir(cwd, { recursive: true });
+        warnings.push(
+          `Configured adapter workspace "${agentConfigCwd}" is not available. Using fallback workspace "${cwd}" for this run.`,
+        );
+      }
+    } else {
+      cwd = resolveDefaultAgentWorkspaceDir(agent.id);
+      await fs.mkdir(cwd, { recursive: true });
+    }
     if (sessionCwd) {
       warnings.push(
         `Saved session workspace "${sessionCwd}" is not available. Using fallback workspace "${cwd}" for this run.`,
@@ -1259,10 +1446,6 @@ export function heartbeatService(db: Db) {
     } else if (resolvedProjectId) {
       warnings.push(
         `No project workspace directory is currently available for this issue. Using fallback workspace "${cwd}" for this run.`,
-      );
-    } else {
-      warnings.push(
-        `No project or prior session workspace was available. Using fallback workspace "${cwd}" for this run.`,
       );
     }
     return {
@@ -1458,6 +1641,19 @@ export function heartbeatService(db: Db) {
     });
   }
 
+  /** Parse human-readable duration strings like "2h", "30m", "3600s" into seconds */
+  function parseDurationToSec(value: string): number {
+    const trimmed = value.trim().toLowerCase();
+    const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*(h|m|s)?$/);
+    if (!match) return 0;
+    const num = parseFloat(match[1]);
+    if (!Number.isFinite(num) || num < 0) return 0;
+    const unit = match[2] ?? "s";
+    if (unit === "h") return Math.floor(num * 3600);
+    if (unit === "m") return Math.floor(num * 60);
+    return Math.floor(num);
+  }
+
   async function nextRunEventSeq(runId: string) {
     const [row] = await db
       .select({ maxSeq: sql<number | null>`max(${heartbeatRunEvents.seq})` })
@@ -1612,9 +1808,22 @@ export function heartbeatService(db: Db) {
     const runtimeConfig = parseObject(agent.runtimeConfig);
     const heartbeat = parseObject(runtimeConfig.heartbeat);
 
+    // Primary: runtimeConfig.heartbeat.intervalSec (numeric)
+    let intervalSec = asNumber(heartbeat.intervalSec, -1);
+
+    // Fallback: metadata.heartbeat (human-readable string like "2h", "24h")
+    if (intervalSec < 0) {
+      const metadata = parseObject(agent.metadata);
+      if (typeof metadata.heartbeat === "string") {
+        intervalSec = parseDurationToSec(metadata.heartbeat);
+      } else {
+        intervalSec = 0;
+      }
+    }
+
     return {
       enabled: asBoolean(heartbeat.enabled, true),
-      intervalSec: Math.max(0, asNumber(heartbeat.intervalSec, 0)),
+      intervalSec: Math.max(0, intervalSec),
       wakeOnDemand: asBoolean(heartbeat.wakeOnDemand ?? heartbeat.wakeOnAssignment ?? heartbeat.wakeOnOnDemand ?? heartbeat.wakeOnAutomation, true),
       maxConcurrentRuns: normalizeMaxConcurrentRuns(heartbeat.maxConcurrentRuns),
     };
@@ -1817,7 +2026,13 @@ export function heartbeatService(db: Db) {
         },
       });
 
-      await finalizeAgentStatus(run.agentId, "failed");
+      // Use "cancelled" outcome so the agent recovers to "idle" instead of
+      // "error" — process_lost is an infrastructure event, not an agent fault.
+      // Note: this means the live-event `agent.status` payload will carry
+      // outcome:"cancelled" even though the run record stores status:"failed" /
+      // errorCode:"process_lost". Consumers that need the accurate failure signal
+      // should read the run record; the live event signals agent availability.
+      await finalizeAgentStatus(run.agentId, "cancelled");
       await startNextQueuedRunForAgent(run.agentId);
       runningProcesses.delete(run.id);
       reaped.push(run.id);
@@ -1830,6 +2045,22 @@ export function heartbeatService(db: Db) {
   }
 
   async function resumeQueuedRuns() {
+    // Global concurrency guard: don't start new runs if we already have too many
+    const globalRunningCount = runningProcesses.size + activeRunExecutions.size;
+    if (globalRunningCount >= HEARTBEAT_MAX_GLOBAL_CONCURRENT_RUNS) {
+      logger.info(
+        { globalRunningCount, limit: HEARTBEAT_MAX_GLOBAL_CONCURRENT_RUNS },
+        "global concurrent run limit reached — skipping queued run resumption",
+      );
+      return;
+    }
+    // Minimum spacing guard: wait at least HEARTBEAT_MIN_SPACING_MS between runs
+    if (lastRunFinishedAt !== null && Date.now() - lastRunFinishedAt < HEARTBEAT_MIN_SPACING_MS) {
+      const waitMs = HEARTBEAT_MIN_SPACING_MS - (Date.now() - lastRunFinishedAt);
+      logger.info({ waitMs }, "minimum run spacing not elapsed — skipping queued run resumption");
+      return;
+    }
+
     const queuedRuns = await db
       .select({ agentId: heartbeatRuns.agentId })
       .from(heartbeatRuns)
@@ -1837,6 +2068,9 @@ export function heartbeatService(db: Db) {
 
     const agentIds = [...new Set(queuedRuns.map((r) => r.agentId))];
     for (const agentId of agentIds) {
+      // Re-check global limit before each agent start
+      const currentRunning = runningProcesses.size + activeRunExecutions.size;
+      if (currentRunning >= HEARTBEAT_MAX_GLOBAL_CONCURRENT_RUNS) break;
       await startNextQueuedRunForAgent(agentId);
     }
   }
@@ -1881,6 +2115,7 @@ export function heartbeatService(db: Db) {
       await costs.createEvent(agent.companyId, {
         heartbeatRunId: run.id,
         agentId: agent.id,
+        adapterType: agent.adapterType,
         issueId: ledgerScope.issueId,
         projectId: ledgerScope.projectId,
         provider,
@@ -2347,6 +2582,7 @@ export function heartbeatService(db: Db) {
           startedAt,
           sessionIdBefore: runtimeForAdapter.sessionDisplayId ?? runtimeForAdapter.sessionId,
           contextSnapshot: context,
+          promptChars: JSON.stringify(context).length,
           updatedAt: new Date(),
         })
         .where(eq(heartbeatRuns.id, run.id))
@@ -2512,19 +2748,135 @@ export function heartbeatService(db: Db) {
           "local agent jwt secret missing or invalid; running without injected PAPERCLIP_API_KEY",
         );
       }
-      const adapterResult = await adapter.execute({
-        runId: run.id,
-        agent,
-        runtime: runtimeForAdapter,
-        config: runtimeConfig,
-        context,
-        onLog,
-        onMeta: onAdapterMeta,
-        onSpawn: async (meta) => {
-          await persistRunProcessMetadata(run.id, meta);
-        },
-        authToken: authToken ?? undefined,
-      });
+      // Inject vault snapshot — only for agents that opt-in via runtimeConfig
+      const heartbeatCfg = parseObject(agent.runtimeConfig)?.heartbeat as Record<string, unknown> | undefined;
+      const injectVault = heartbeatCfg?.injectVaultSnapshot === true;
+      if (injectVault) {
+        try {
+          context.vaultSnapshot = await getVaultSnapshot();
+        } catch { /* non-fatal: vault may be unavailable */ }
+      }
+
+      // --- Auto-Research: discover & inject skills based on task ---
+      const issueDesc = readNonEmptyString(context.issueDescription);
+      const issueTitle = readNonEmptyString(context.issueTitle);
+      if (issueDesc && run.invocationSource !== "timer") {
+        try {
+          const arResult = await autoResearchSkills({
+            issueTitle: issueTitle ?? "",
+            issueDescription: issueDesc,
+            agentId: agent.id,
+            agentName: agent.name,
+            agentRole: agent.role,
+            companyId: agent.companyId,
+            db,
+          });
+          const arContext = buildAutoResearchContext(arResult);
+          if (arContext) {
+            context.autoResearchSummary = arContext;
+          }
+        } catch (err) {
+          /* non-fatal: autoresearch failure should not block agent execution */
+          console.warn("[autoresearch] Failed:", err);
+        }
+      }
+
+      // --- Role-based context instructions ---
+      try {
+        const roleInstructions = buildRoleBasedInstructions(agent, db);
+        if (roleInstructions) {
+          context.paperclipRoleInstructions = roleInstructions;
+        }
+      } catch { /* non-fatal */ }
+
+      // Inject knowledge digest — only when agent has an actual task
+      const hasTask = Boolean(readNonEmptyString(context.issueDescription) || readNonEmptyString(context.taskKey));
+      if (hasTask) {
+        try {
+          const taskQuery = readNonEmptyString(context.issueDescription)
+            ?? readNonEmptyString(context.taskKey)
+            ?? agent.name;
+          const isTimerRun = run.invocationSource === "timer";
+          if (taskQuery && knowledgeSvc) {
+            const digest = await knowledgeSvc.getRelevantForTask({
+              query: taskQuery,
+              companyId: agent.companyId,
+              limit: isTimerRun ? 2 : 5,
+            });
+            if (digest.length > 0) {
+              context.knowledgeDigest = digest;
+            }
+          }
+        } catch { /* non-fatal: knowledge_store may be unavailable */ }
+      }
+
+      // Heartbeat model override — use cheap model for timer invocations
+      const hbModel = (parseObject(agent.runtimeConfig)?.heartbeat as Record<string, unknown> | undefined)?.model;
+      if (run.invocationSource === "timer" && hbModel && typeof hbModel === "string") {
+        resolvedConfig.model = hbModel;
+      }
+
+      // ── OpenRouter direct mode: bypass adapter, call OpenRouter API directly ──
+      const useOpenRouter = parseObject(agent.runtimeConfig)?.useOpenRouter === true;
+      let openRouterDirectResult: FallbackResult | null = null;
+
+      if (useOpenRouter) {
+        const openrouterKey = process.env.OPENROUTER_API_KEY;
+        const fbConfig = parseFallbackConfig(parseObject(agent.runtimeConfig));
+        if (fbConfig && openrouterKey) {
+          await onLog("stderr", `[paperclip] useOpenRouter=true — bypassing adapter, calling OpenRouter directly\n`);
+          const prompt = buildFallbackPrompt(context, agent);
+          openRouterDirectResult = await executeFallback({
+            config: fbConfig,
+            prompt,
+            systemPrompt: `You are ${agent.name}, a ${agent.role} at EvoHaus. Complete the assigned task concisely.`,
+            apiKey: openrouterKey,
+          });
+          if (openRouterDirectResult.success) {
+            await onLog("stderr", `[paperclip] OpenRouter direct succeeded with ${openRouterDirectResult.model}\n`);
+          } else {
+            await onLog("stderr", `[paperclip] OpenRouter direct failed: ${openRouterDirectResult.error}\n`);
+          }
+        }
+      }
+
+      const adapterResult = useOpenRouter && openRouterDirectResult
+        ? {
+            exitCode: openRouterDirectResult.success ? 0 : 1,
+            signal: null,
+            timedOut: false,
+            errorMessage: openRouterDirectResult.success ? null : openRouterDirectResult.error,
+            errorCode: openRouterDirectResult.success ? null : "openrouter_failed",
+            usage: openRouterDirectResult.tokensUsed ? {
+              inputTokens: openRouterDirectResult.tokensUsed.input,
+              outputTokens: openRouterDirectResult.tokensUsed.output,
+            } as UsageSummary : undefined,
+            provider: "openrouter",
+            biller: "openrouter",
+            model: openRouterDirectResult.model,
+            billingType: "api" as const,
+            costUsd: 0,
+            resultJson: openRouterDirectResult.success
+              ? { response: openRouterDirectResult.response }
+              : null,
+            sessionId: null,
+            sessionParams: null,
+            runtimeServices: [],
+            summary: openRouterDirectResult.response?.slice(0, 200) ?? null,
+          } satisfies AdapterExecutionResult
+        : await adapter.execute({
+            runId: run.id,
+            agent,
+            runtime: runtimeForAdapter,
+            config: runtimeConfig,
+            context,
+            onLog,
+            onMeta: onAdapterMeta,
+            onSpawn: async (meta) => {
+              await persistRunProcessMetadata(run.id, meta);
+            },
+            authToken: authToken ?? undefined,
+          });
       const adapterManagedRuntimeServices = adapterResult.runtimeServices
         ? await persistAdapterManagedRuntimeServices({
             db,
@@ -2596,7 +2948,13 @@ export function heartbeatService(db: Db) {
       } else if (adapterResult.timedOut) {
         outcome = "timed_out";
       } else if ((adapterResult.exitCode ?? 0) === 0 && !adapterResult.errorMessage) {
-        outcome = "succeeded";
+        // Validate that the run actually produced output (#1117, #849).
+        // A run with exit code 0 but empty/missing resultJson is suspicious —
+        // mark as failed to surface silent failures instead of hiding them.
+        const hasOutput =
+          adapterResult.resultJson != null &&
+          Object.keys(adapterResult.resultJson).length > 0;
+        outcome = hasOutput ? "succeeded" : "failed";
       } else {
         outcome = "failed";
       }
@@ -2604,6 +2962,71 @@ export function heartbeatService(db: Db) {
       let logSummary: { bytes: number; sha256?: string; compressed: boolean } | null = null;
       if (handle) {
         logSummary = await runLogStore.finalize(handle);
+      }
+
+      // ── OpenRouter free model fallback ──
+      let fallbackResult: FallbackResult | null = null;
+      if (outcome === "failed" || outcome === "timed_out") {
+        try {
+          const fallbackConfig = parseFallbackConfig(parseObject(agent.runtimeConfig));
+          const openrouterKey = process.env.OPENROUTER_API_KEY;
+          if (fallbackConfig && openrouterKey) {
+            logger.info(
+              { agentId: agent.id, runId: run.id, errorCode: adapterResult.errorCode, outcome },
+              "Primary adapter failed, attempting OpenRouter fallback",
+            );
+            const fallbackPrompt = buildFallbackPrompt(context, agent);
+            fallbackResult = await executeFallback({
+              config: fallbackConfig,
+              prompt: fallbackPrompt,
+              systemPrompt: `You are ${agent.name}, a ${agent.role} at EvoHaus. Complete the assigned task concisely.`,
+              apiKey: openrouterKey,
+            });
+            if (fallbackResult.success) {
+              logger.info({ agentId: agent.id, model: fallbackResult.model }, "OpenRouter fallback succeeded");
+              // Post fallback response as issue comment
+              const issueIdForFallback = readNonEmptyString(context.issueId);
+              if (issueIdForFallback && fallbackResult.response) {
+                try {
+                  await issuesSvc.addComment(
+                    issueIdForFallback,
+                    `**[Fallback: ${fallbackResult.model}]**\n\n${fallbackResult.response}`,
+                    { agentId: agent.id },
+                  );
+                } catch (commentErr) {
+                  logger.warn({ err: commentErr }, "Failed to post fallback comment");
+                }
+              }
+              // Record free model cost event ($0)
+              if (fallbackResult.tokensUsed) {
+                try {
+                  const costs = costService(db, budgetHooks);
+                  await costs.createEvent(agent.companyId, {
+                    heartbeatRunId: run.id,
+                    agentId: agent.id,
+                    issueId: readNonEmptyString(context.issueId) ?? undefined,
+                    projectId: readNonEmptyString(context.projectId) ?? undefined,
+                    provider: "openrouter",
+                    biller: "openrouter",
+                    billingType: "api",
+                    model: fallbackResult.model,
+                    inputTokens: fallbackResult.tokensUsed.input,
+                    cachedInputTokens: 0,
+                    outputTokens: fallbackResult.tokensUsed.output,
+                    costCents: 0,
+                    occurredAt: new Date(),
+                  });
+                } catch (costErr) {
+                  logger.warn({ err: costErr }, "Failed to record fallback cost event");
+                }
+              }
+            } else {
+              logger.warn({ agentId: agent.id, error: fallbackResult.error }, "OpenRouter fallback also failed");
+            }
+          }
+        } catch (fallbackErr) {
+          logger.warn({ err: fallbackErr, agentId: agent.id }, "Fallback execution failed (non-fatal)");
+        }
       }
 
       const status =
@@ -2668,6 +3091,9 @@ export function heartbeatService(db: Db) {
         logBytes: logSummary?.bytes,
         logSha256: logSummary?.sha256,
         logCompressed: logSummary?.compressed ?? false,
+        sessionReused: !!previousSessionParams,
+        taskSessionReused: !!taskSessionForRun,
+        normalizedInputTokens: normalizedUsage?.inputTokens ?? null,
       });
 
       await setWakeupStatus(run.wakeupRequestId, outcome === "succeeded" ? "completed" : status, {
@@ -2688,6 +3114,43 @@ export function heartbeatService(db: Db) {
           },
         });
         await releaseIssueExecutionAndPromote(finalizedRun);
+
+        // Post-run feedback: bump access for knowledge entries used in this run
+        try {
+          const ctx = parseObject(finalizedRun.contextSnapshot);
+          const digest = ctx.knowledgeDigest;
+          if (Array.isArray(digest) && knowledgeSvc && outcome === "succeeded") {
+            for (const entry of digest) {
+              if (entry?.id) {
+                await knowledgeSvc.bumpAccess(String(entry.id));
+              }
+            }
+          }
+        } catch { /* non-fatal: knowledge feedback is best-effort */ }
+
+        // Skill usage tracking: record which skills were used
+        try {
+          const ctx2 = parseObject(finalizedRun.contextSnapshot);
+          const skillSetHash = readNonEmptyString(ctx2.skillSetHash);
+          const usedSkills = ctx2.usedSkills;
+          if ((skillSetHash || usedSkills) && knowledgeSvc) {
+            await knowledgeSvc.create({
+              companyId: agent.companyId,
+              sourceAgentId: agent.id,
+              sourcePlatform: agent.adapterType,
+              category: "skill_metric",
+              title: `Skill usage: ${agent.name}`,
+              body: JSON.stringify({
+                skillSetHash,
+                usedSkills: Array.isArray(usedSkills) ? usedSkills : [],
+                runId: finalizedRun.id,
+                outcome,
+              }),
+              tags: ["skill-metric", agent.adapterType],
+              ttlDays: 90,
+            });
+          }
+        } catch { /* non-fatal */ }
       }
 
       if (finalizedRun) {
@@ -2715,6 +3178,40 @@ export function heartbeatService(db: Db) {
         }
       }
       await finalizeAgentStatus(agent.id, outcome);
+
+      // ── Telegram notification on failure ──
+      if (outcome !== "succeeded" && outcome !== "cancelled") {
+        const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+        const telegramChat = process.env.TELEGRAM_CHAT_ID;
+        if (telegramToken && telegramChat) {
+          const emoji = outcome === "failed" ? "🔴" : outcome === "timed_out" ? "⏰" : "⚠️";
+          const model = adapterResult.model ?? resolvedConfig.model ?? "unknown";
+          const errMsg = adapterResult.errorMessage?.slice(0, 200) ?? "Unknown error";
+          const text = `${emoji} *${agent.name}* (${agent.adapterType})\nModel: ${model}\nStatus: ${outcome}\nError: ${errMsg}`;
+          fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: telegramChat, text, parse_mode: "Markdown" }),
+          }).catch(() => { /* non-fatal */ });
+        }
+      }
+
+      // Circuit breaker evaluation after run completes — skip if fallback succeeded
+      if (fallbackResult?.success) {
+        logger.info({ agentId: agent.id, runId }, "Skipping circuit breaker — OpenRouter fallback succeeded");
+      } else {
+        try {
+          const cbConfig = resolveCircuitBreakerConfigForAdapter(agent.circuitBreakerConfig as Record<string, unknown> | null, agent.adapterType);
+          if (cbConfig.enabled) {
+            const cbEval = await evaluateCircuitBreaker(db, agent.id, cbConfig);
+            if (cbEval.tripped) {
+              await tripCircuitBreaker(db, agent.id, agent.companyId, cbEval.reason!);
+            }
+          }
+        } catch (cbErr) {
+          logger.warn({ err: cbErr, agentId: agent.id, runId }, "circuit breaker evaluation failed (non-fatal)");
+        }
+      }
     } catch (err) {
       const message = redactCurrentUserText(
         err instanceof Error ? err.message : "Unknown adapter failure",
@@ -2741,6 +3238,9 @@ export function heartbeatService(db: Db) {
         logSha256: logSummary?.sha256,
         logCompressed: logSummary?.compressed ?? false,
       });
+      if (isAuthError(message)) {
+        void notifyTelegramAuthFailure(agent.name, agent.adapterType, message);
+      }
       await setWakeupStatus(run.wakeupRequestId, "failed", {
         finishedAt: new Date(),
         error: message,
@@ -2779,6 +3279,19 @@ export function heartbeatService(db: Db) {
       }
 
       await finalizeAgentStatus(agent.id, "failed");
+
+      // Circuit breaker evaluation after failure
+      try {
+        const cbConfig = resolveCircuitBreakerConfigForAdapter(agent.circuitBreakerConfig as Record<string, unknown> | null, agent.adapterType);
+        if (cbConfig.enabled) {
+          const cbEval = await evaluateCircuitBreaker(db, agent.id, cbConfig);
+          if (cbEval.tripped) {
+            await tripCircuitBreaker(db, agent.id, agent.companyId, cbEval.reason!);
+          }
+        }
+      } catch (cbErr) {
+        logger.warn({ err: cbErr, agentId: agent.id, runId }, "circuit breaker evaluation failed (non-fatal)");
+      }
     }
     } catch (outerErr) {
           // Setup code before adapter.execute threw (e.g. ensureRuntimeState, resolveWorkspaceForRun).
@@ -2812,6 +3325,7 @@ export function heartbeatService(db: Db) {
         } finally {
           await releaseRuntimeServicesForRun(run.id).catch(() => undefined);
           activeRunExecutions.delete(run.id);
+          lastRunFinishedAt = Date.now();
           await startNextQueuedRunForAgent(run.agentId);
         }
   }
@@ -2898,6 +3412,8 @@ export function heartbeatService(db: Db) {
 
         const {
           contextSnapshot: promotedContextSnapshot,
+          issueIdFromPayload: promotedIssueId,
+          wakeCommentId: promotedCommentId,
           taskKey: promotedTaskKey,
         } = enrichWakeContextSnapshot({
           contextSnapshot: promotedContextSeed,
@@ -2906,6 +3422,7 @@ export function heartbeatService(db: Db) {
           triggerDetail: promotedTriggerDetail,
           payload: promotedPayload,
         });
+        await enrichContextWithDbContent(db, promotedContextSnapshot, promotedIssueId ?? null, promotedCommentId ?? null);
 
         const sessionBefore =
           readNonEmptyString(promotedContextSnapshot.resumeSessionDisplayId) ??
@@ -2988,6 +3505,7 @@ export function heartbeatService(db: Db) {
       triggerDetail,
       payload,
     });
+    await enrichContextWithDbContent(db, enrichedContextSnapshot, issueIdFromPayload ?? null, wakeCommentId ?? null);
     let issueId = readNonEmptyString(enrichedContextSnapshot.issueId) ?? issueIdFromPayload;
 
     const agent = await getAgent(agentId);
@@ -3067,6 +3585,28 @@ export function heartbeatService(db: Db) {
     if (source !== "timer" && !policy.wakeOnDemand) {
       await writeSkippedRequest("heartbeat.wakeOnDemand.disabled");
       return null;
+    }
+
+    // Skip timer heartbeat when agent has no pending tasks (opt-in via runtimeConfig)
+    if (source === "timer" && !issueId) {
+      const hbCfg = parseObject(parseObject(agent.runtimeConfig).heartbeat);
+      if (asBoolean(hbCfg.skipIfNoPendingTasks, false)) {
+        const pendingIssues = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(issues)
+          .where(
+            and(
+              eq(issues.companyId, agent.companyId),
+              eq(issues.assigneeAgentId, agent.id),
+              inArray(issues.status, ["open", "in_progress"]),
+            ),
+          )
+          .then((rows) => Number(rows[0]?.count ?? 0));
+        if (pendingIssues === 0) {
+          await writeSkippedRequest("heartbeat.no_pending_tasks");
+          return null;
+        }
+      }
     }
 
     const bypassIssueExecutionLock =
@@ -3602,6 +4142,7 @@ export function heartbeatService(db: Db) {
     }
 
     runningProcesses.delete(run.id);
+    lastRunFinishedAt = Date.now();
     await finalizeAgentStatus(run.agentId, "cancelled");
     await startNextQueuedRunForAgent(run.agentId);
     return cancelled;
@@ -3810,14 +4351,15 @@ export function heartbeatService(db: Db) {
       let skipped = 0;
 
       for (const agent of allAgents) {
-        if (agent.status === "paused" || agent.status === "terminated" || agent.status === "pending_approval") continue;
+        if (agent.status === "paused" || agent.pausedAt !== null || agent.status === "terminated" || agent.status === "pending_approval") continue;
         const policy = parseHeartbeatPolicy(agent);
         if (!policy.enabled || policy.intervalSec <= 0) continue;
 
         checked += 1;
         const baseline = new Date(agent.lastHeartbeatAt ?? agent.createdAt).getTime();
         const elapsedMs = now.getTime() - baseline;
-        if (elapsedMs < policy.intervalSec * 1000) continue;
+        const jitterMs = Math.floor(Math.random() * 60_000); // 0-60s random jitter to stagger heartbeats
+        if (elapsedMs < (policy.intervalSec * 1000) + jitterMs) continue;
 
         const run = await enqueueWakeup(agent.id, {
           source: "timer",

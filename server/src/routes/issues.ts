@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import multer from "multer";
+import { sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   addIssueCommentSchema,
@@ -19,6 +20,7 @@ import { validate } from "../middleware/validate.js";
 import {
   accessService,
   agentService,
+  companyService,
   executionWorkspaceService,
   goalService,
   heartbeatService,
@@ -27,6 +29,7 @@ import {
   documentService,
   logActivity,
   projectService,
+  publishLiveEvent,
   routineService,
   workProductService,
 } from "../services/index.js";
@@ -920,6 +923,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
         ...(reopened ? { reopened: true, reopenedFrom: reopenFromStatus } : {}),
         _previous: hasFieldChanges ? previous : undefined,
       },
+      suppressAgentWake: actor.actorType === "agent",
     });
 
     let comment = null;
@@ -946,6 +950,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
           ...(reopened ? { reopened: true, reopenedFrom: reopenFromStatus, source: "comment" } : {}),
           ...(hasFieldChanges ? { updated: true } : {}),
         },
+        suppressAgentWake: actor.actorType === "agent",
       });
 
     }
@@ -1020,6 +1025,42 @@ export function issueRoutes(db: Db, storage: StorageService) {
           .catch((err) => logger.warn({ err, issueId: issue.id, agentId }, "failed to wake agent on issue update"));
       }
     })();
+
+    // Emit delegation.completed when a delegated issue is marked done
+    // Also notify the source issue's assignee with a comment + wakeup
+    if (updateFields.status === "done") {
+      try {
+        const delRef = await db.execute(
+          sql`SELECT delegated_from_issue_id, delegated_from_company_id FROM issues WHERE id = ${id} AND delegated_from_issue_id IS NOT NULL`,
+        );
+        const delRows = Array.isArray(delRef) ? delRef : (delRef as any).rows ?? [];
+        if (delRows.length > 0) {
+          const sourceIssueId = (delRows[0] as any).delegated_from_issue_id as string;
+          publishLiveEvent({
+            companyId: issue.companyId,
+            type: "delegation.completed",
+            payload: { issueId: id, delegatedFromIssueId: sourceIssueId },
+          });
+          // Add comment to source issue notifying completion
+          try {
+            const sourceIssue = await svc.getById(sourceIssueId);
+            if (sourceIssue) {
+              await svc.addComment(sourceIssueId, `[Auto] Delegated görev tamamlandı: **${issue.title}**`, {
+                userId: "system",
+              });
+              // Wake the source issue's assignee
+              if (sourceIssue.assigneeAgentId) {
+                heartbeat.wakeup(sourceIssue.assigneeAgentId, {
+                  source: "automation",
+                  reason: "delegation_completed",
+                  payload: { delegatedIssueId: id, sourceIssueId, completedTitle: issue.title },
+                }).catch(() => { /* non-fatal */ });
+              }
+            }
+          } catch { /* non-fatal: source issue notification */ }
+        }
+      } catch { /* non-fatal */ }
+    }
 
     res.json({ ...issue, comment });
   });
@@ -1318,6 +1359,8 @@ export function issueRoutes(db: Db, storage: StorageService) {
       userId: actor.actorType === "user" ? actor.actorId : undefined,
     });
 
+    const actorIsAgent = actor.actorType === "agent";
+
     if (actor.runId) {
       await heartbeat.reportRunActivity(actor.runId).catch((err) =>
         logger.warn({ err, runId: actor.runId }, "failed to clear detached run warning after issue comment"));
@@ -1340,6 +1383,9 @@ export function issueRoutes(db: Db, storage: StorageService) {
         ...(reopened ? { reopened: true, reopenedFrom: reopenFromStatus, source: "comment" } : {}),
         ...(interruptedRunId ? { interruptedRunId } : {}),
       },
+      // Prevent event-loop: when an agent comments, suppress live-event wake
+      // so Hermes (or other subscribers) don't re-wake the same agent.
+      suppressAgentWake: actorIsAgent,
     });
 
     // Merge all wakeups from this comment into one enqueue per agent to avoid duplicate runs.
@@ -1599,6 +1645,88 @@ export function issueRoutes(db: Db, storage: StorageService) {
     });
 
     res.json({ ok: true });
+  });
+
+  /** Delegate an issue to another company */
+  router.post("/issues/:id/delegate", async (req, res, next) => {
+    try {
+      const { targetCompanyId, targetAgentId, reason } = req.body;
+      if (!targetCompanyId) {
+        return res.status(400).json({ error: "targetCompanyId is required" });
+      }
+
+      const issue = await svc.getById(req.params.id);
+      if (!issue) return res.status(404).json({ error: "Issue not found" });
+
+      // AUTH: verify access to source company
+      assertCompanyAccess(req, issue.companyId);
+
+      // TREE VALIDATION: target must be in the same holding tree
+      const companySvc = companyService(db);
+      const tree = await companySvc.getHoldingTree(issue.companyId);
+      const treeIds = tree.map((t) => t.id);
+      if (!treeIds.includes(targetCompanyId)) {
+        return res.status(403).json({
+          error: "Target company is not in the same holding tree",
+        });
+      }
+
+      // Create delegated issue + set delegation reference atomically
+      const delegatedIssue = await svc.create(targetCompanyId, {
+        title: `[Delegated] ${issue.title}`,
+        description: `Delegated from ${issue.companyId}.\n\nOriginal: ${issue.description ?? ""}\n\nReason: ${reason ?? "N/A"}`,
+        assigneeAgentId: targetAgentId ?? null,
+        priority: issue.priority,
+      });
+
+      await db.execute(
+        sql`UPDATE issues SET
+          delegated_from_company_id = ${issue.companyId},
+          delegated_from_issue_id = ${issue.id}
+          WHERE id = ${delegatedIssue.id}`,
+      );
+
+      // LIVE EVENT
+      try {
+        publishLiveEvent({
+          companyId: issue.companyId,
+          type: "delegation.created",
+          payload: {
+            originalIssueId: issue.id,
+            delegatedIssueId: delegatedIssue.id,
+            targetCompanyId,
+          },
+        });
+      } catch { /* non-fatal */ }
+
+      return res.status(201).json({
+        originalIssueId: issue.id,
+        delegatedIssueId: delegatedIssue.id,
+        targetCompanyId,
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** Get delegations for an issue */
+  router.get("/issues/:id/delegations", async (req, res, next) => {
+    try {
+      const issue = await svc.getById(req.params.id);
+      if (!issue) return res.status(404).json({ error: "Issue not found" });
+      assertCompanyAccess(req, issue.companyId);
+
+      const delegations = await db.execute(
+        sql`SELECT id, company_id, title, status, delegated_from_company_id, delegated_from_issue_id
+            FROM issues
+            WHERE delegated_from_issue_id = ${req.params.id}
+            ORDER BY created_at DESC`,
+      );
+      const rows = Array.isArray(delegations) ? delegations : (delegations as any).rows ?? [];
+      return res.json(rows);
+    } catch (err) {
+      next(err);
+    }
   });
 
   return router;

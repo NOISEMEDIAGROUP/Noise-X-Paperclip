@@ -39,6 +39,7 @@ tmp/
 .paperclip-local/
 /.idea/
 /.agents/
+sentinel/.agents/skills/
 
 # Doc maintenance cursor
 .doc-review-cursor
@@ -50,3 +51,6 @@ tests/release-smoke/test-results/
 tests/release-smoke/playwright-report/
 .superset/
 .claude/worktrees/
+
+# OpenCode
+.opencode/

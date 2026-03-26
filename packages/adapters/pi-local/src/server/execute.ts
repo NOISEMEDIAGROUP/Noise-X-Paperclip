@@ -289,6 +289,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     agent,
     run: { id: runId, source: "on_demand" },
     context,
+    env,
   };
   const renderedSystemPromptExtension = renderTemplate(systemPromptExtension, templateData);
   const renderedHeartbeatPrompt = renderTemplate(promptTemplate, templateData);

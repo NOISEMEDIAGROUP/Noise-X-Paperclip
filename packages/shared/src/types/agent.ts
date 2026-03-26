@@ -13,6 +13,13 @@ export interface AgentPermissions {
   canCreateAgents: boolean;
 }
 
+export interface CircuitBreakerConfig {
+  enabled: boolean;
+  maxConsecutiveFailures: number;
+  maxConsecutiveNoProgress: number;
+  cooldownMinutes: number;
+}
+
 export type AgentInstructionsBundleMode = "managed" | "external";
 
 export interface AgentInstructionsFileSummary {

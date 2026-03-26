@@ -128,6 +128,8 @@ function boardRoutes() {
       <Route path="skills/*" element={<CompanySkills />} />
       <Route path="settings" element={<LegacySettingsRedirect />} />
       <Route path="settings/*" element={<LegacySettingsRedirect />} />
+      <Route path="instance" element={<InstancePrefixedRedirect />} />
+      <Route path="instance/*" element={<InstancePrefixedRedirect />} />
       <Route path="plugins/:pluginId" element={<PluginPage />} />
       <Route path="org" element={<OrgChart />} />
       <Route path="agents" element={<Navigate to="/agents/all" replace />} />
@@ -184,6 +186,17 @@ function InboxRootRedirect() {
 function LegacySettingsRedirect() {
   const location = useLocation();
   return <Navigate to={`/instance/settings/general${location.search}${location.hash}`} replace />;
+}
+
+/** Redirect /:companyPrefix/instance/... → /instance/... (strip spurious company prefix) */
+function InstancePrefixedRedirect() {
+  const location = useLocation();
+  const idx = location.pathname.indexOf("/instance");
+  if (idx >= 0) {
+    const globalPath = location.pathname.slice(idx);
+    return <Navigate to={`${globalPath}${location.search}${location.hash}`} replace />;
+  }
+  return <Navigate to="/instance/settings/heartbeats" replace />;
 }
 
 function OnboardingRoutePage() {
@@ -321,6 +334,8 @@ export function App() {
           <Route path="companies" element={<UnprefixedBoardRedirect />} />
           <Route path="issues" element={<UnprefixedBoardRedirect />} />
           <Route path="issues/:issueId" element={<UnprefixedBoardRedirect />} />
+          <Route path="approvals" element={<UnprefixedBoardRedirect />} />
+          <Route path="approvals/:approvalId" element={<UnprefixedBoardRedirect />} />
           <Route path="routines" element={<UnprefixedBoardRedirect />} />
           <Route path="routines/:routineId" element={<UnprefixedBoardRedirect />} />
           <Route path="skills/*" element={<UnprefixedBoardRedirect />} />

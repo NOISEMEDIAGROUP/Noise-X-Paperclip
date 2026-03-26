@@ -1,5 +1,4 @@
 import fs from "node:fs/promises";
-import type { Dirent } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,6 +37,16 @@ const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
 function hasNonEmptyEnvValue(env: Record<string, string>, key: string): boolean {
   const raw = env[key];
   return typeof raw === "string" && raw.trim().length > 0;
+}
+
+function commandLooksGemini(command: string): boolean {
+  const base = path.basename(command).toLowerCase();
+  return base === "gemini" || base === "gemini.cmd" || base === "gemini.exe" || base.includes("gemini");
+}
+
+function hasUnknownOption(stderr: string, stdout: string, option: string): boolean {
+  const needle = `unknown option '${option}'`;
+  return stderr.includes(needle) || stdout.includes(needle);
 }
 
 function resolveGeminiBillingType(env: Record<string, string>): "api" | "subscription" {
@@ -223,6 +232,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   const timeoutSec = asNumber(config.timeoutSec, 0);
   const graceSec = asNumber(config.graceSec, 20);
+  const nativeGeminiFlagsEnabled = commandLooksGemini(command);
   const extraArgs = (() => {
     const fromExtraArgs = asStringArray(config.extraArgs);
     if (fromExtraArgs.length > 0) return fromExtraArgs;
@@ -261,9 +271,35 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       );
     }
   }
-  const commandNotes = (() => {
+  const buildCommandNotes = (params?: {
+    omitApprovalMode?: boolean;
+    omitSandboxArgs?: boolean;
+    fallbackReason?: string | null;
+  }) => {
+    const omitApprovalMode = params?.omitApprovalMode === true;
+    const omitSandboxArgs = params?.omitSandboxArgs === true;
     const notes: string[] = ["Prompt is passed to Gemini via --prompt for non-interactive execution."];
-    notes.push("Added --approval-mode yolo for unattended execution.");
+    if (!nativeGeminiFlagsEnabled) {
+      notes.push(
+        `Skipped Gemini-specific flags because command "${command}" does not look like the Gemini CLI binary.`,
+      );
+    } else {
+      if (!omitApprovalMode) {
+        notes.push("Added --approval-mode yolo for unattended execution.");
+      } else {
+        notes.push("Skipped --approval-mode because the configured CLI rejected that flag.");
+      }
+      if (sandbox && !omitSandboxArgs) {
+        notes.push("Added --sandbox for isolated execution.");
+      } else if (!sandbox && !omitSandboxArgs) {
+        notes.push("Added --sandbox=none for unattended execution.");
+      } else {
+        notes.push("Skipped Gemini sandbox flags because the configured CLI rejected them.");
+      }
+    }
+    if (params?.fallbackReason) {
+      notes.push(params.fallbackReason);
+    }
     if (!instructionsFilePath) return notes;
     if (instructionsPrefix.length > 0) {
       notes.push(
@@ -276,7 +312,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       `Configured instructionsFilePath ${instructionsFilePath}, but file could not be read; continuing without injected instructions.`,
     );
     return notes;
-  })();
+  };
 
   const bootstrapPromptTemplate = asString(config.bootstrapPromptTemplate, "");
   const templateData = {
@@ -287,6 +323,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     agent,
     run: { id: runId, source: "on_demand" },
     context,
+    env,
   };
   const renderedPrompt = renderTemplate(promptTemplate, templateData);
   const renderedBootstrapPrompt =
@@ -313,29 +350,45 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     heartbeatPromptChars: renderedPrompt.length,
   };
 
-  const buildArgs = (resumeSessionId: string | null) => {
+  const buildArgs = (
+    resumeSessionId: string | null,
+    params?: { omitApprovalMode?: boolean; omitSandboxArgs?: boolean },
+  ) => {
+    const omitApprovalMode = params?.omitApprovalMode === true;
+    const omitSandboxArgs = params?.omitSandboxArgs === true;
     const args = ["--output-format", "stream-json"];
     if (resumeSessionId) args.push("--resume", resumeSessionId);
     if (model && model !== DEFAULT_GEMINI_LOCAL_MODEL) args.push("--model", model);
-    args.push("--approval-mode", "yolo");
-    if (sandbox) {
-      args.push("--sandbox");
-    } else {
-      args.push("--sandbox=none");
+    if (nativeGeminiFlagsEnabled && !omitApprovalMode) {
+      args.push("--approval-mode", "yolo");
+    }
+    if (nativeGeminiFlagsEnabled && !omitSandboxArgs) {
+      if (sandbox) {
+        args.push("--sandbox");
+      } else {
+        args.push("--sandbox=none");
+      }
     }
     if (extraArgs.length > 0) args.push(...extraArgs);
     args.push("--prompt", prompt);
     return args;
   };
 
-  const runAttempt = async (resumeSessionId: string | null) => {
-    const args = buildArgs(resumeSessionId);
+  const runAttempt = async (
+    resumeSessionId: string | null,
+    params?: {
+      omitApprovalMode?: boolean;
+      omitSandboxArgs?: boolean;
+      fallbackReason?: string | null;
+    },
+  ) => {
+    const args = buildArgs(resumeSessionId, params);
     if (onMeta) {
       await onMeta({
         adapterType: "gemini_local",
         command,
         cwd,
-        commandNotes,
+        commandNotes: buildCommandNotes(params),
         commandArgs: args.map((value, index) => (
           index === args.length - 1 ? `<prompt ${prompt.length} chars>` : value
         )),
@@ -455,6 +508,39 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     );
     const retry = await runAttempt(null);
     return toResult(retry, true, true);
+  }
+
+  if (
+    !initial.proc.timedOut &&
+    (initial.proc.exitCode ?? 0) !== 0 &&
+    nativeGeminiFlagsEnabled &&
+    hasUnknownOption(initial.proc.stderr, initial.proc.stdout, "--approval-mode")
+  ) {
+    await onLog(
+      "stderr",
+      `[paperclip] Gemini CLI rejected --approval-mode; retrying without that flag.\n`,
+    );
+    const retry = await runAttempt(sessionId, {
+      omitApprovalMode: true,
+      fallbackReason: "Retrying without --approval-mode after CLI rejected the flag.",
+    });
+    if (
+      !retry.proc.timedOut &&
+      (retry.proc.exitCode ?? 0) !== 0 &&
+      hasUnknownOption(retry.proc.stderr, retry.proc.stdout, "--sandbox=none")
+    ) {
+      await onLog(
+        "stderr",
+        `[paperclip] Gemini CLI rejected --sandbox=none; retrying without Gemini sandbox flags.\n`,
+      );
+      const sandboxRetry = await runAttempt(sessionId, {
+        omitApprovalMode: true,
+        omitSandboxArgs: true,
+        fallbackReason: "Retrying without Gemini-specific approval/sandbox flags after CLI rejected them.",
+      });
+      return toResult(sandboxRetry, false, true);
+    }
+    return toResult(retry, false, true);
   }
 
   return toResult(initial);

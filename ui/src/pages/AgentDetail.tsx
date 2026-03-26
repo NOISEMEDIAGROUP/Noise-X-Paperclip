@@ -21,6 +21,7 @@ import { useCompany } from "../context/CompanyContext";
 import { useToast } from "../context/ToastContext";
 import { useDialog } from "../context/DialogContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
+import { useToast } from "../context/ToastContext";
 import { queryKeys } from "../lib/queryKeys";
 import { AgentConfigForm } from "../components/AgentConfigForm";
 import { PageTabBar } from "../components/PageTabBar";
@@ -1448,15 +1449,19 @@ function ConfigurationTab({
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.configRevisions(agent.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(agent.companyId) });
     },
-    onError: (err) => {
+    onError: (error: unknown) => {
       setAwaitingRefreshAfterSave(false);
-      const message =
-        err instanceof ApiError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : "Could not save agent";
-      pushToast({ title: "Save failed", body: message, tone: "error" });
+      // Show user-friendly error message
+      let errorMessage = "Failed to save configuration";
+      if (error instanceof ApiError) {
+        const body = error.body as { error?: string } | undefined;
+        if (body?.error) {
+          errorMessage = body.error;
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      pushToast({ title: "Save failed", body: errorMessage, tone: "error" });
     },
   });
 

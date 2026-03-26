@@ -42,7 +42,11 @@ function buildContext(
 async function createMockGatewayServer(options?: {
   waitPayload?: Record<string, unknown>;
 }) {
-  const server = createServer();
+  const server = createServer((_req, res) => {
+    // Health probe handler — execute.ts does a pre-flight HTTP fetch
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("ok");
+  });
   const wss = new WebSocketServer({ server });
 
   let agentPayload: Record<string, unknown> | null = null;
@@ -173,7 +177,10 @@ async function createMockGatewayServer(options?: {
 }
 
 async function createMockGatewayServerWithPairing() {
-  const server = createServer();
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("ok");
+  });
   const wss = new WebSocketServer({ server });
 
   let agentPayload: Record<string, unknown> | null = null;
@@ -452,7 +459,7 @@ describe("openclaw gateway adapter execute", () => {
       const payload = gateway.getAgentPayload();
       expect(payload).toBeTruthy();
       expect(payload?.idempotencyKey).toBe("run-123");
-      expect(payload?.sessionKey).toBe("paperclip:issue:issue-123");
+      expect(payload?.sessionKey).toBe("agent:main:paperclip:issue:issue-123");
       expect(String(payload?.message ?? "")).toContain("wake now");
       expect(String(payload?.message ?? "")).toContain("PAPERCLIP_RUN_ID=run-123");
       expect(String(payload?.message ?? "")).toContain("PAPERCLIP_TASK_ID=task-123");

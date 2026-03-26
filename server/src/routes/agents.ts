@@ -42,6 +42,7 @@ import {
   syncInstructionsBundleConfigFromFilePath,
   workspaceOperationService,
 } from "../services/index.js";
+import { tokenAnalyticsService } from "../services/token-analytics.js";
 import { conflict, forbidden, notFound, unprocessable } from "../errors.js";
 import { assertBoard, assertCompanyAccess, assertInstanceAdmin, getActorInfo } from "./authz.js";
 import { findServerAdapter, listAdapterModels } from "../adapters/index.js";
@@ -92,6 +93,7 @@ export function agentRoutes(db: Db) {
   const instructions = agentInstructionsService();
   const companySkills = companySkillService(db);
   const workspaceOperations = workspaceOperationService(db);
+  const tokenAnalytics = tokenAnalyticsService(db);
   const instanceSettings = instanceSettingsService(db);
   const strictSecretsMode = process.env.PAPERCLIP_SECRETS_STRICT_MODE === "true";
 
@@ -203,7 +205,20 @@ export function agentRoutes(db: Db) {
   }
 
   async function assertCanReadConfigurations(req: Request, companyId: string) {
-    return assertCanCreateAgentsForCompany(req, companyId);
+    assertCompanyAccess(req, companyId);
+    // Board users: check agents:create (existing behavior)
+    if (req.actor.type === "board") {
+      return assertCanCreateAgentsForCompany(req, companyId);
+    }
+    // Agents: allow read access if same company (agents can see peers for delegation)
+    if (req.actor.agentId) {
+      const actorAgent = await svc.getById(req.actor.agentId);
+      if (!actorAgent || actorAgent.companyId !== companyId) {
+        throw forbidden("Agent key cannot access another company");
+      }
+      return actorAgent;
+    }
+    throw forbidden("Authentication required");
   }
 
   async function actorCanReadConfigurationsForCompany(req: Request, companyId: string) {
@@ -215,8 +230,7 @@ export function agentRoutes(db: Db) {
     if (!req.actor.agentId) return false;
     const actorAgent = await svc.getById(req.actor.agentId);
     if (!actorAgent || actorAgent.companyId !== companyId) return false;
-    const allowedByGrant = await access.hasPermission(companyId, "agent", actorAgent.id, "agents:create");
-    return allowedByGrant || canCreateAgents(actorAgent);
+    return true; // Agents can read peer info within same company
   }
 
   async function assertCanUpdateAgent(req: Request, targetAgent: { id: string; companyId: string }) {
@@ -847,8 +861,14 @@ export function agentRoutes(db: Db) {
     assertCompanyAccess(req, companyId);
     const result = await svc.list(companyId);
     const canReadConfigs = await actorCanReadConfigurationsForCompany(req, companyId);
-    if (canReadConfigs || req.actor.type === "board") {
+    if (req.actor.type === "board") {
       res.json(result);
+      return;
+    }
+    // Agents can read peer configs (type, role, capabilities) but credentials
+    // in adapterConfig/runtimeConfig are always redacted for non-board actors.
+    if (canReadConfigs) {
+      res.json(result.map((agent) => redactAgentConfiguration(agent)));
       return;
     }
     res.json(result.map((agent) => redactForRestrictedAgentView(agent)));
@@ -1007,10 +1027,14 @@ export function agentRoutes(db: Db) {
     assertCompanyAccess(req, agent.companyId);
     if (req.actor.type === "agent" && req.actor.agentId !== id) {
       const canRead = await actorCanReadConfigurationsForCompany(req, agent.companyId);
+      const chainOfCommand = await svc.getChainOfCommand(agent.id);
       if (!canRead) {
         res.json(await buildAgentDetail(agent, { restricted: true }));
         return;
       }
+      // Agents can see peer config structure but not raw credentials
+      res.json({ ...redactAgentConfiguration(agent), chainOfCommand });
+      return;
     }
     res.json(await buildAgentDetail(agent));
   });
@@ -1716,7 +1740,23 @@ export function agentRoutes(db: Db) {
       if (changingInstructionsPath) {
         await assertCanManageInstructionsPath(req, existing);
       }
-      patchData.adapterConfig = adapterConfig;
+      patchData.adapterConfig = {
+        ...(asRecord(existing.adapterConfig) ?? {}),
+        ...adapterConfig,
+      };
+    }
+    if (Object.prototype.hasOwnProperty.call(patchData, "runtimeConfig")) {
+      const runtimeConfig = asRecord(patchData.runtimeConfig);
+      if (patchData.runtimeConfig !== undefined && !runtimeConfig) {
+        res.status(422).json({ error: "runtimeConfig must be an object" });
+        return;
+      }
+      if (runtimeConfig) {
+        patchData.runtimeConfig = {
+          ...(asRecord(existing.runtimeConfig) ?? {}),
+          ...runtimeConfig,
+        };
+      }
     }
 
     const requestedAdapterType =
@@ -2306,6 +2346,48 @@ export function agentRoutes(db: Db) {
       agentName: agent.name,
       adapterType: agent.adapterType,
     });
+  });
+
+  // ── Token Analytics ──
+
+  router.get("/agents/:id/token-summary", async (req, res) => {
+    assertBoard(req);
+    const id = req.params.id as string;
+    const agent = await svc.getById(id);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    assertCompanyAccess(req, agent.companyId);
+
+    const sinceHours = req.query.sinceHours ? Number(req.query.sinceHours) : 24;
+    const summary = await tokenAnalytics.getAgentTokenSummary(id, agent.companyId, { sinceHours });
+    res.json(summary);
+  });
+
+  router.get("/agents/:id/token-deltas", async (req, res) => {
+    assertBoard(req);
+    const id = req.params.id as string;
+    const agent = await svc.getById(id);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    assertCompanyAccess(req, agent.companyId);
+
+    const limit = req.query.limit ? Math.min(Number(req.query.limit), 200) : 50;
+    const offset = req.query.offset ? Number(req.query.offset) : 0;
+    const deltas = await tokenAnalytics.getAgentTokenDeltas(id, agent.companyId, { limit, offset });
+    res.json(deltas);
+  });
+
+  router.get("/companies/:companyId/token-summary", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+
+    const sinceHours = req.query.sinceHours ? Number(req.query.sinceHours) : 24;
+    const summary = await tokenAnalytics.getCompanyTokenSummary(companyId, { sinceHours });
+    res.json(summary);
   });
 
   return router;

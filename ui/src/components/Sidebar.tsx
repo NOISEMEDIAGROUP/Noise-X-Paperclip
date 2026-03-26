@@ -19,6 +19,7 @@ import { SidebarProjects } from "./SidebarProjects";
 import { SidebarAgents } from "./SidebarAgents";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
+import { useLiveUpdates } from "../context/LiveUpdatesProvider";
 import { heartbeatsApi } from "../api/heartbeats";
 import { queryKeys } from "../lib/queryKeys";
 import { useInboxBadge } from "../hooks/useInboxBadge";
@@ -27,13 +28,14 @@ import { PluginSlotOutlet } from "@/plugins/slots";
 
 export function Sidebar() {
   const { openNewIssue } = useDialog();
-  const { selectedCompanyId, selectedCompany } = useCompany();
+  const { selectedCompanyId, selectedCompany, parentCompany } = useCompany();
+  const { isConnected: isWsConnected } = useLiveUpdates();
   const inboxBadge = useInboxBadge(selectedCompanyId);
   const { data: liveRuns } = useQuery({
     queryKey: queryKeys.liveRuns(selectedCompanyId!),
     queryFn: () => heartbeatsApi.liveRunsForCompany(selectedCompanyId!),
     enabled: !!selectedCompanyId,
-    refetchInterval: 10_000,
+    refetchInterval: isWsConnected ? false : 10_000,
   });
   const liveRunCount = liveRuns?.length ?? 0;
 
@@ -59,6 +61,11 @@ export function Sidebar() {
         <span className="flex-1 text-sm font-bold text-foreground truncate pl-1">
           {selectedCompany?.name ?? "Select company"}
         </span>
+        {parentCompany && (
+          <span className="text-[10px] text-muted-foreground shrink-0 mr-1">
+            ↑ {parentCompany.name}
+          </span>
+        )}
         <Button
           variant="ghost"
           size="icon-sm"

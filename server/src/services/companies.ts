@@ -10,7 +10,9 @@ import {
   agentTaskSessions,
   agentWakeupRequests,
   issues,
+  issueAttachments,
   issueComments,
+  issueReadStates,
   projects,
   goals,
   heartbeatRuns,
@@ -25,6 +27,7 @@ import {
   invites,
   principalPermissionGrants,
   companyMemberships,
+  workspaceRuntimeServices,
 } from "@paperclipai/db";
 import { notFound, unprocessable } from "../errors.js";
 
@@ -42,6 +45,7 @@ export function companyService(db: Db) {
     spentMonthlyCents: companies.spentMonthlyCents,
     requireBoardApprovalForNewAgents: companies.requireBoardApprovalForNewAgents,
     brandColor: companies.brandColor,
+    parentCompanyId: companies.parentCompanyId,
     logoAssetId: companyLogos.assetId,
     createdAt: companies.createdAt,
     updatedAt: companies.updatedAt,
@@ -254,6 +258,12 @@ export function companyService(db: Db) {
     remove: (id: string) =>
       db.transaction(async (tx) => {
         // Delete from child tables in dependency order
+        // issueAttachments has FK to assets — must delete before assets
+        await tx.delete(issueAttachments).where(eq(issueAttachments.companyId, id));
+        await tx.delete(assets).where(eq(assets.companyId, id));
+        await tx.delete(workspaceRuntimeServices).where(eq(workspaceRuntimeServices.companyId, id));
+        // activityLog has FK to heartbeatRuns — must delete first
+        await tx.delete(activityLog).where(eq(activityLog.companyId, id));
         await tx.delete(heartbeatRunEvents).where(eq(heartbeatRunEvents.companyId, id));
         await tx.delete(agentTaskSessions).where(eq(agentTaskSessions.companyId, id));
         await tx.delete(heartbeatRuns).where(eq(heartbeatRuns.companyId, id));
@@ -270,13 +280,14 @@ export function companyService(db: Db) {
         await tx.delete(invites).where(eq(invites.companyId, id));
         await tx.delete(principalPermissionGrants).where(eq(principalPermissionGrants.companyId, id));
         await tx.delete(companyMemberships).where(eq(companyMemberships.companyId, id));
+        // issueReadStates has FK to issues — must delete before issues
+        await tx.delete(issueReadStates).where(eq(issueReadStates.companyId, id));
         await tx.delete(issues).where(eq(issues.companyId, id));
         await tx.delete(companyLogos).where(eq(companyLogos.companyId, id));
         await tx.delete(assets).where(eq(assets.companyId, id));
         await tx.delete(goals).where(eq(goals.companyId, id));
         await tx.delete(projects).where(eq(projects.companyId, id));
         await tx.delete(agents).where(eq(agents.companyId, id));
-        await tx.delete(activityLog).where(eq(activityLog.companyId, id));
         const rows = await tx
           .delete(companies)
           .where(eq(companies.id, id))
@@ -308,5 +319,93 @@ export function companyService(db: Db) {
         }
         return result;
       }),
+
+    /** Recursive CTE: get all company IDs in a holding tree (parent + descendants) */
+    getHoldingTree: async (companyId: string) => {
+      const rows = await db.execute(sql`
+        WITH RECURSIVE tree AS (
+          SELECT id, name, parent_company_id, 0 AS depth
+          FROM companies
+          WHERE id = ${companyId}
+          UNION ALL
+          SELECT c.id, c.name, c.parent_company_id, t.depth + 1
+          FROM companies c
+          JOIN tree t ON c.parent_company_id = t.id
+          WHERE t.depth < 10
+        )
+        SELECT id, name, parent_company_id AS "parentCompanyId", depth
+        FROM tree
+        ORDER BY depth, name
+      `);
+      const resultRows = Array.isArray(rows) ? rows : (rows as any).rows ?? [];
+      return resultRows as Array<{
+        id: string;
+        name: string;
+        parentCompanyId: string | null;
+        depth: number;
+      }>;
+    },
+
+    /** Get all agents across the holding tree with capabilities */
+    getHoldingRoster: async (companyId: string, filters?: {
+      adapterType?: string;
+      capabilityTag?: string;
+      status?: string;
+    }) => {
+      // First get all company IDs in the tree (with depth limit to prevent infinite recursion)
+      const treeResult = await db.execute(sql`
+        WITH RECURSIVE tree AS (
+          SELECT id, 0 AS depth FROM companies WHERE id = ${companyId}
+          UNION ALL
+          SELECT c.id, t.depth + 1 FROM companies c JOIN tree t ON c.parent_company_id = t.id
+          WHERE t.depth < 10
+        )
+        SELECT id FROM tree
+      `);
+      // db.execute returns either { rows: [...] } or directly [...] depending on driver
+      const treeRows = Array.isArray(treeResult) ? treeResult : (treeResult as any).rows ?? [];
+      const companyIds = (treeRows as Array<{ id: string }>).map((r) => r.id);
+      if (companyIds.length === 0) return [];
+
+      const rosterConditions = [inArray(agents.companyId, companyIds)];
+      if (filters?.adapterType) {
+        rosterConditions.push(eq(agents.adapterType, filters.adapterType));
+      }
+      if (filters?.status) {
+        rosterConditions.push(eq(agents.status, filters.status));
+      }
+      // SQL-level capability filtering using GIN index
+      if (filters?.capabilityTag) {
+        rosterConditions.push(
+          sql`${agents.capabilityTags} @> ARRAY[${filters.capabilityTag}]::text[]`,
+        );
+      }
+
+      // Single query with all columns including capabilities
+      const rows = await db
+        .select({
+          id: agents.id,
+          name: agents.name,
+          role: agents.role,
+          status: agents.status,
+          adapterType: agents.adapterType,
+          companyId: agents.companyId,
+          companyName: companies.name,
+          capabilityTags: agents.capabilityTags,
+          specialty: agents.specialty,
+          currentTaskSummary: agents.currentTaskSummary,
+        })
+        .from(agents)
+        .innerJoin(companies, eq(agents.companyId, companies.id))
+        .where(and(...rosterConditions))
+        .orderBy(companies.name, agents.name);
+
+      return rows.map((r) => ({
+        ...r,
+        capabilityTags: r.capabilityTags ?? [],
+        specialty: r.specialty ?? null,
+        currentTaskSummary: r.currentTaskSummary ?? null,
+      }));
+    },
   };
 }

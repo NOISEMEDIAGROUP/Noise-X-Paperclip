@@ -8,6 +8,7 @@ import {
   jsonb,
   index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { companies } from "./companies.js";
 
 export const agents = pgTable(
@@ -32,6 +33,11 @@ export const agents = pgTable(
     permissions: jsonb("permissions").$type<Record<string, unknown>>().notNull().default({}),
     lastHeartbeatAt: timestamp("last_heartbeat_at", { withTimezone: true }),
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    circuitBreakerConfig: jsonb("circuit_breaker_config").$type<Record<string, unknown>>(),
+    capabilityTags: text("capability_tags").array().notNull().default(sql`'{}'::text[]`),
+    specialty: text("specialty"),
+    currentTaskSummary: text("current_task_summary"),
+    availability: text("availability").default("available"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
