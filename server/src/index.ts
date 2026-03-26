@@ -104,8 +104,8 @@ export async function startServer(): Promise<StartedServer> {
   }
   
   async function promptApplyMigrations(migrations: string[]): Promise<boolean> {
-    if (process.env.PAPERCLIP_MIGRATION_PROMPT === "never") return false;
     if (process.env.PAPERCLIP_MIGRATION_AUTO_APPLY === "true") return true;
+    if (process.env.PAPERCLIP_MIGRATION_PROMPT === "never") return false;
     if (!stdin.isTTY || !stdout.isTTY) return true;
   
     const prompt = createInterface({ input: stdin, output: stdout });
@@ -392,6 +392,7 @@ export async function startServer(): Promise<StartedServer> {
             "--encoding=UTF8",
             // C.UTF-8 is not available on Windows; fall back to C locale (#1026)
             `--locale=${process.platform === "win32" ? "C" : "C.UTF-8"}`,
+            "--lc-messages=C",
             "--username=paperclip",
           ],
           onLog: appendEmbeddedPostgresLog,
