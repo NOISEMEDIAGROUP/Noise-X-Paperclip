@@ -10,6 +10,7 @@ import {
   parseObject,
   appendWithCap,
 } from "@paperclipai/adapter-utils/server-utils";
+import { readDesiredSkillContent } from "./skills.js";
 
 // ---------------------------------------------------------------------------
 // Paperclip issue lifecycle helpers
@@ -66,12 +67,110 @@ async function completeIssue(
   }
 }
 
+async function resetIssueForRetry(
+  issueId: string,
+  runId: string,
+  authToken: string,
+  retryNum: number,
+): Promise<void> {
+  try {
+    await fetch(`${PAPERCLIP_BASE_URL}/api/issues/${issueId}`, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${authToken}`,
+        "x-paperclip-run-id": runId,
+      },
+      body: JSON.stringify({
+        status: "todo",
+        comment: `<!-- deerflow-retry:${retryNum} --> DeerFlow auto-retry: non-substantive response, resetting to todo.`,
+      }),
+    });
+  } catch {
+    // Best-effort
+  }
+}
+
+async function blockIssue(
+  issueId: string,
+  runId: string,
+  authToken: string,
+  reason: string,
+): Promise<void> {
+  try {
+    await fetch(`${PAPERCLIP_BASE_URL}/api/issues/${issueId}`, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${authToken}`,
+        "x-paperclip-run-id": runId,
+      },
+      body: JSON.stringify({
+        status: "blocked",
+        comment: `## DeerFlow Adapter Failed\n\n${reason}`,
+      }),
+    });
+  } catch {
+    // Best-effort
+  }
+}
+
+async function getDeerflowRetryCount(
+  issueId: string,
+  authToken: string,
+): Promise<number> {
+  try {
+    const res = await fetch(`${PAPERCLIP_BASE_URL}/api/issues/${issueId}/comments`, {
+      headers: { authorization: `Bearer ${authToken}` },
+    });
+    if (!res.ok) return 0;
+    const comments = (await res.json()) as Array<{ body?: string }>;
+    let maxRetry = 0;
+    for (const c of comments) {
+      const match = c.body?.match(/<!-- deerflow-retry:(\d+) -->/);
+      if (match) {
+        maxRetry = Math.max(maxRetry, parseInt(match[1], 10));
+      }
+    }
+    return maxRetry;
+  } catch {
+    return 0;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function buildUserMessage(ctx: AdapterExecutionContext): string {
-  const context = parseObject(ctx.context);
+async function hydrateIssueContext(
+  context: Record<string, unknown>,
+  authToken: string,
+): Promise<void> {
+  const issueId = asString(context.issueId as unknown, "");
+  if (!issueId || !authToken) return;
+  // Already hydrated?
+  if (asString(context.issueTitle as unknown, "")) return;
+
+  try {
+    const res = await fetch(`${PAPERCLIP_BASE_URL}/api/issues/${issueId}/heartbeat-context`, {
+      headers: { authorization: `Bearer ${authToken}` },
+    });
+    if (!res.ok) return;
+    const data = (await res.json()) as Record<string, unknown>;
+    const issue = data.issue as Record<string, unknown> | undefined;
+    if (issue) {
+      if (issue.title) context.issueTitle = issue.title;
+      if (issue.description) context.issueBody = issue.description;
+    }
+    if (data.comments) context.comments = data.comments;
+    if (data.goalAncestry) context.goalAncestry = data.goalAncestry;
+  } catch {
+    // Best-effort — continue without issue details
+  }
+}
+
+function buildUserMessage(ctx: AdapterExecutionContext, hydratedContext?: Record<string, unknown>): string {
+  const context = hydratedContext ?? parseObject(ctx.context);
   const parts: string[] = [];
 
   const title = asString(context.issueTitle as unknown, "");
@@ -134,7 +233,8 @@ async function* parseSSE(
     const lines = buffer.split("\n");
     buffer = lines.pop() ?? "";
 
-    for (const line of lines) {
+    for (const rawLine of lines) {
+      const line = rawLine.replace(/\r$/, "");
       if (line.startsWith("event: ")) {
         currentEvent.event = line.slice(7).trim();
       } else if (line.startsWith("data: ")) {
@@ -151,7 +251,8 @@ async function* parseSSE(
   // Flush remaining
   if (buffer.trim()) {
     const remaining: SSEEvent = {};
-    for (const line of buffer.split("\n")) {
+    for (const rawLine of buffer.split("\n")) {
+      const line = rawLine.replace(/\r$/, "");
       if (line.startsWith("event: ")) remaining.event = line.slice(7).trim();
       else if (line.startsWith("data: ")) remaining.data = line.slice(6);
     }
@@ -234,8 +335,17 @@ export async function execute(
 
     await onLog("stdout", `[deerflow] Thread: ${threadId}\n`);
 
-    // 2. Build the message
-    const userMessage = buildUserMessage(ctx);
+    // 2. Hydrate issue context if needed (issueId present but title/body missing)
+    const hydratedContext = parseObject(ctx.context);
+    await hydrateIssueContext(hydratedContext, authToken);
+
+    // 2b. Build the message
+    const userMessage = buildUserMessage(ctx, hydratedContext);
+
+    // 2a. Load desired skill content for injection into the DeerFlow context.
+    //     readDesiredSkillContent reads from config.paperclipRuntimeSkills (set by
+    //     Paperclip server) so no filesystem dependency at runtime.
+    const skillsContent = await readDesiredSkillContent(config);
 
     // 3. Stream the run
     const runBody = {
@@ -252,6 +362,14 @@ export async function execute(
         thinking_enabled: thinkingEnabled,
         subagent_enabled: subagentEnabled,
         ...(skill ? { skill_name: skill } : {}),
+        // Inject all Paperclip-managed skills selected for this agent.
+        // The DeerFlow Python side reads these via the LangGraph run context.
+        // skill_names = hints for the Python skill registry
+        // skills_content = pre-loaded SKILL.md content (no filesystem lookup needed)
+        ...(skillsContent.length > 0 ? {
+          skill_names: skillsContent.map((s) => s.name),
+          skills_content: skillsContent,
+        } : {}),
         paperclip_api_url: PAPERCLIP_BASE_URL,
         paperclip_company_id: ctx.agent.companyId,
         // Auth token is forwarded so DeerFlow agents can call back into the
@@ -293,12 +411,27 @@ export async function execute(
         continue;
       }
 
-      if (sse.event === "messages-tuple" || sse.event === "messages/partial") {
-        // LangGraph streams messages as [messageType, messageData]
-        const tuple = parsed as [string, Record<string, unknown>];
-        if (!Array.isArray(tuple) || tuple.length < 2) continue;
+      if (sse.event === "messages-tuple" || sse.event === "messages/partial" || sse.event === "messages") {
+        // LangGraph streams messages in two possible formats:
+        // 1. messages-tuple mode: ["AIMessageChunk", {content, ...}]
+        // 2. messages mode: [{content, type: "AIMessageChunk", ...}, {metadata}]
+        const arr = parsed as unknown[];
+        if (!Array.isArray(arr) || arr.length < 1) continue;
 
-        const [msgType, msgData] = tuple;
+        let msgType: string;
+        let msgData: Record<string, unknown>;
+
+        if (typeof arr[0] === "string") {
+          // Tuple format: [type, data]
+          msgType = arr[0];
+          msgData = (arr[1] ?? {}) as Record<string, unknown>;
+        } else if (typeof arr[0] === "object" && arr[0] !== null) {
+          // Object format: [messageObject, metadataObject]
+          msgData = arr[0] as Record<string, unknown>;
+          msgType = asString(msgData.type as unknown, "");
+        } else {
+          continue;
+        }
 
         if (msgType === "AIMessageChunk" || msgType === "AIMessage") {
           const content = asString(msgData.content as unknown, "");
@@ -355,10 +488,27 @@ export async function execute(
 
     summary = lastAiContent.slice(0, 500);
 
-    // Mark issue as done on successful execution
+    // Check if the response is substantive (not just metadata/empty)
+    const isSubstantive = lastAiContent.length > 200; // ~50 tokens at 4 chars/token
+
     if (!errorMessage && issueId && authToken) {
-      await completeIssue(issueId, ctx.runId, authToken, summary);
-      await onLog("stdout", `\n[deerflow] Marked issue ${issueId} as done\n`);
+      if (isSubstantive) {
+        await completeIssue(issueId, ctx.runId, authToken, summary);
+        await onLog("stdout", `\n[deerflow] Marked issue ${issueId} as done\n`);
+      } else {
+        // Non-substantive response — retry by resetting to todo
+        const retryCount = await getDeerflowRetryCount(issueId, authToken);
+        if (retryCount < 2) {
+          await resetIssueForRetry(issueId, ctx.runId, authToken, retryCount + 1);
+          await onLog("stderr", `\n[deerflow] Non-substantive response (${lastAiContent.length} chars). Retry ${retryCount + 1}/2\n`);
+          errorMessage = `Non-substantive response, resetting for retry ${retryCount + 1}/2`;
+        } else {
+          await blockIssue(issueId, ctx.runId, authToken,
+            "DeerFlow adapter failed to produce substantive output after 2 retries.");
+          await onLog("stderr", `\n[deerflow] Retries exhausted. Blocked issue ${issueId}\n`);
+          errorMessage = "Retries exhausted — blocked for human review";
+        }
+      }
     }
 
     return {
