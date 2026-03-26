@@ -19,6 +19,7 @@ import { AgentConfigForm, type CreateConfigValues } from "../components/AgentCon
 import { defaultCreateValues } from "../components/agent-config-defaults";
 import { getUIAdapter } from "../adapters";
 import { AgentIcon } from "../components/AgentIconPicker";
+import { withFirstAgentCeoDefault } from "./new-agent-defaults";
 import {
   DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX,
   DEFAULT_CODEX_LOCAL_MODEL,
@@ -103,10 +104,10 @@ export function NewAgent() {
 
   useEffect(() => {
     if (isFirstAgent) {
-      if (!name) setName("CEO");
-      if (!title) setTitle("CEO");
+      setName((currentName) => withFirstAgentCeoDefault(currentName, isFirstAgent));
+      setTitle((currentTitle) => withFirstAgentCeoDefault(currentTitle, isFirstAgent));
     }
-  }, [isFirstAgent]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isFirstAgent]);
 
   useEffect(() => {
     const requested = presetAdapterType;
