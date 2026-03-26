@@ -126,16 +126,29 @@ function normalizeSessionKeyStrategy(value: unknown): SessionKeyStrategy {
   return "issue";
 }
 
-function resolveSessionKey(input: {
+function hasAgentScope(sessionKey: string): boolean {
+  return /^agent:[a-z0-9_-]+:.+/i.test(sessionKey.trim());
+}
+
+export function resolveSessionKey(input: {
   strategy: SessionKeyStrategy;
   configuredSessionKey: string | null;
   runId: string;
   issueId: string | null;
+  agentId: string | null;
 }): string {
   const fallback = input.configuredSessionKey ?? "paperclip";
-  if (input.strategy === "run") return `paperclip:run:${input.runId}`;
-  if (input.strategy === "issue" && input.issueId) return `paperclip:issue:${input.issueId}`;
-  return fallback;
+  let base: string;
+  if (input.strategy === "run") {
+    base = `paperclip:run:${input.runId}`;
+  } else if (input.strategy === "issue" && input.issueId) {
+    base = `paperclip:issue:${input.issueId}`;
+  } else {
+    base = fallback;
+  }
+  if (!input.agentId || input.agentId === "main") return base;
+  if (hasAgentScope(base)) return base;
+  return `agent:${input.agentId}:${base}`;
 }
 
 function isLoopbackHost(hostname: string): boolean {
@@ -1057,11 +1070,13 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   const sessionKeyStrategy = normalizeSessionKeyStrategy(ctx.config.sessionKeyStrategy);
   const configuredSessionKey = nonEmpty(ctx.config.sessionKey);
+  const configuredAgentId = nonEmpty(ctx.config.agentId);
   const sessionKey = resolveSessionKey({
     strategy: sessionKeyStrategy,
     configuredSessionKey,
     runId: ctx.runId,
     issueId: wakePayload.issueId,
+    agentId: configuredAgentId ?? nonEmpty(wakePayload.agentId),
   });
 
   const templateMessage = nonEmpty(payloadTemplate.message) ?? nonEmpty(payloadTemplate.text);
@@ -1076,7 +1091,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   };
   delete agentParams.text;
 
-  const configuredAgentId = nonEmpty(ctx.config.agentId);
   if (configuredAgentId && !nonEmpty(agentParams.agentId)) {
     agentParams.agentId = configuredAgentId;
   }

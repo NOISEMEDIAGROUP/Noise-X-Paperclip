@@ -43,6 +43,8 @@ The adapter supports the same session routing model as HTTP OpenClaw mode:
 
 Resolved session key is sent as `agent.sessionKey`.
 
+When a non-main `agentId` is present, generated `issue` / `run` session keys are automatically agent-scoped (for example `agent:eng:paperclip:issue:<issueId>`) so multi-agent OpenClaw routing preserves issue/run continuity per agent. Existing explicitly scoped fixed keys are preserved as-is.
+
 ## Payload Mapping
 
 The agent request is built as:
