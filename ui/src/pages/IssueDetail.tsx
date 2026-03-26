@@ -518,7 +518,7 @@ export function IssueDetail() {
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.comments(issueId!) });
     },
     onError: (err) => {
-      pushToast({ title: "Failed to post comment", body: err instanceof Error ? err.message : "Something went wrong.", tone: "error" });
+      pushToast({ title: "Failed to post comment and reassign", body: err instanceof Error ? err.message : "Something went wrong.", tone: "error" });
     },
   });
 
