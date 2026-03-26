@@ -330,5 +330,49 @@ export function costRoutes(db: Db) {
     res.json(updated);
   });
 
+  // ---------------------------------------------------------------------------
+  // Biller unit prices (credit → USD conversion config)
+  // ---------------------------------------------------------------------------
+
+  router.get("/companies/:companyId/biller-unit-prices", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+    const rows = await costs.listBillerUnitPrices(companyId);
+    res.json(rows);
+  });
+
+  router.post("/companies/:companyId/biller-unit-prices", async (req, res) => {
+    assertBoard(req);
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+    const { biller, billingType, unitType, unitPriceUsd, planName, effectiveFrom, effectiveTo, notes } = req.body as Record<string, unknown>;
+    const row = await costs.createBillerUnitPrice(companyId, {
+      biller: String(biller),
+      billingType: String(billingType),
+      unitType: String(unitType),
+      unitPriceUsd: String(unitPriceUsd),
+      planName: planName != null ? String(planName) : null,
+      effectiveFrom: new Date(String(effectiveFrom)),
+      effectiveTo: effectiveTo != null ? new Date(String(effectiveTo)) : null,
+      notes: notes != null ? String(notes) : null,
+    });
+    res.status(201).json(row);
+  });
+
+  router.patch("/companies/:companyId/biller-unit-prices/:id", async (req, res) => {
+    assertBoard(req);
+    const companyId = req.params.companyId as string;
+    const id = req.params.id as string;
+    assertCompanyAccess(req, companyId);
+    const { unitPriceUsd, planName, effectiveTo, notes } = req.body as Record<string, unknown>;
+    const row = await costs.updateBillerUnitPrice(companyId, id, {
+      ...(unitPriceUsd != null ? { unitPriceUsd: String(unitPriceUsd) } : {}),
+      ...(planName !== undefined ? { planName: planName != null ? String(planName) : null } : {}),
+      ...(effectiveTo !== undefined ? { effectiveTo: effectiveTo != null ? new Date(String(effectiveTo)) : null } : {}),
+      ...(notes !== undefined ? { notes: notes != null ? String(notes) : null } : {}),
+    });
+    res.json(row);
+  });
+
   return router;
 }

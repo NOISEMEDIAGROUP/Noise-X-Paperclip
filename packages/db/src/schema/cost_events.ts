@@ -1,10 +1,11 @@
-import { pgTable, uuid, text, timestamp, integer, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, numeric, index } from "drizzle-orm/pg-core";
 import { companies } from "./companies.js";
 import { agents } from "./agents.js";
 import { issues } from "./issues.js";
 import { projects } from "./projects.js";
 import { goals } from "./goals.js";
 import { heartbeatRuns } from "./heartbeat_runs.js";
+import { billerUnitPrices } from "./biller_unit_prices.js";
 
 export const costEvents = pgTable(
   "cost_events",
@@ -25,6 +26,12 @@ export const costEvents = pgTable(
     cachedInputTokens: integer("cached_input_tokens").notNull().default(0),
     outputTokens: integer("output_tokens").notNull().default(0),
     costCents: integer("cost_cents").notNull(),
+    /** Raw provider units (e.g. Warp credits). NULL when adapter reports USD directly. */
+    rawUnits: numeric("raw_units", { precision: 14, scale: 4 }),
+    /** Human label for rawUnits, e.g. "credits". */
+    rawUnitType: text("raw_unit_type"),
+    /** Which biller_unit_prices row was used to convert rawUnits → costCents. */
+    unitPriceId: uuid("unit_price_id").references(() => billerUnitPrices.id),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

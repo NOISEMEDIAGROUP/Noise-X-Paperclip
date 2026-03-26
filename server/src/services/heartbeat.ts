@@ -295,6 +295,52 @@ function normalizeBilledCostCents(costUsd: number | null | undefined, billingTyp
   return Math.max(0, Math.round(costUsd * 100));
 }
 
+/**
+ * Resolve cost in cents for an adapter result.
+ *
+ * - If the adapter reports raw units (e.g. Warp credits via costRawUnits),
+ *   look up the company's biller_unit_prices rule and convert to USD cents.
+ * - Otherwise fall back to costUsd → cents directly.
+ */
+async function resolveAdapterCostCents(
+  db: Db,
+  companyId: string,
+  result: AdapterExecutionResult,
+  billingType: BillingType,
+  biller: string,
+): Promise<{ costCents: number; rawUnits: string | null; rawUnitType: string | null; unitPriceId: string | null }> {
+  if (result.costRawUnits != null && typeof result.costRawUnits === "number" && Number.isFinite(result.costRawUnits)) {
+    const costs = costService(db);
+    const rule = await costs.lookupBillerUnitPrice(companyId, biller, billingType);
+    if (rule) {
+      const usdPerUnit = Number(rule.unitPriceUsd);
+      const costCents = Math.max(0, Math.round(result.costRawUnits * usdPerUnit * 100));
+      return {
+        costCents,
+        rawUnits: String(result.costRawUnits),
+        rawUnitType: result.costRawUnitType ?? rule.unitType,
+        unitPriceId: rule.id,
+      };
+    }
+    logger.warn(
+      { companyId, biller, billingType, rawUnits: result.costRawUnits },
+      "no biller_unit_prices rule found for credit-denominated adapter result; cost recorded as 0",
+    );
+    return {
+      costCents: 0,
+      rawUnits: String(result.costRawUnits),
+      rawUnitType: result.costRawUnitType ?? null,
+      unitPriceId: null,
+    };
+  }
+  return {
+    costCents: normalizeBilledCostCents(result.costUsd, billingType),
+    rawUnits: null,
+    rawUnitType: null,
+    unitPriceId: null,
+  };
+}
+
 async function resolveLedgerScopeForRun(
   db: Db,
   companyId: string,
@@ -1827,6 +1873,7 @@ export function heartbeatService(db: Db) {
     result: AdapterExecutionResult,
     session: { legacySessionId: string | null },
     normalizedUsage?: UsageTotals | null,
+    preResolvedCost?: { costCents: number; rawUnits: string | null; rawUnitType: string | null; unitPriceId: string | null },
   ) {
     await ensureRuntimeState(agent);
     const usage = normalizedUsage ?? normalizeUsageTotals(result.usage);
@@ -1834,10 +1881,11 @@ export function heartbeatService(db: Db) {
     const outputTokens = usage?.outputTokens ?? 0;
     const cachedInputTokens = usage?.cachedInputTokens ?? 0;
     const billingType = normalizeLedgerBillingType(result.billingType);
-    const additionalCostCents = normalizeBilledCostCents(result.costUsd, billingType);
-    const hasTokenUsage = inputTokens > 0 || outputTokens > 0 || cachedInputTokens > 0;
     const provider = result.provider ?? "unknown";
     const biller = resolveLedgerBiller(result);
+    const { costCents: additionalCostCents, rawUnits, rawUnitType, unitPriceId } =
+      preResolvedCost ?? await resolveAdapterCostCents(db, agent.companyId, result, billingType, biller);
+    const hasTokenUsage = inputTokens > 0 || outputTokens > 0 || cachedInputTokens > 0;
     const ledgerScope = await resolveLedgerScopeForRun(db, agent.companyId, run);
 
     await db
@@ -1871,6 +1919,9 @@ export function heartbeatService(db: Db) {
         cachedInputTokens,
         outputTokens,
         costCents: additionalCostCents,
+        rawUnits: rawUnits ?? undefined,
+        rawUnitType: rawUnitType ?? undefined,
+        unitPriceId: unitPriceId ?? undefined,
         occurredAt: new Date(),
       });
     }
@@ -2567,8 +2618,20 @@ export function heartbeatService(db: Db) {
               ? "timed_out"
               : "failed";
 
+      // Resolve credit→USD conversion once so both usageJson and updateRuntimeState use the same value.
+      const _billingTypeForUsage = normalizeLedgerBillingType(adapterResult.billingType);
+      const _billerForUsage = resolveLedgerBiller(adapterResult);
+      const _resolvedCost = await resolveAdapterCostCents(
+        db,
+        agent.companyId,
+        adapterResult,
+        _billingTypeForUsage,
+        _billerForUsage,
+      );
+      const _costUsdForUsage = _resolvedCost.costCents > 0 ? _resolvedCost.costCents / 100 : null;
+
       const usageJson =
-        normalizedUsage || adapterResult.costUsd != null
+        normalizedUsage || adapterResult.costUsd != null || adapterResult.costRawUnits != null
           ? ({
               ...(normalizedUsage ?? {}),
               ...(rawUsage ? {
@@ -2588,7 +2651,10 @@ export function heartbeatService(db: Db) {
               provider: readNonEmptyString(adapterResult.provider) ?? "unknown",
               biller: resolveLedgerBiller(adapterResult),
               model: readNonEmptyString(adapterResult.model) ?? "unknown",
-              ...(adapterResult.costUsd != null ? { costUsd: adapterResult.costUsd } : {}),
+              ...(_costUsdForUsage != null ? { costUsd: _costUsdForUsage } : {}),
+              ...(_resolvedCost.rawUnits != null
+                ? { costRawUnits: Number(_resolvedCost.rawUnits), costRawUnitType: _resolvedCost.rawUnitType }
+                : {}),
               billingType: normalizeLedgerBillingType(adapterResult.billingType),
             } as Record<string, unknown>)
           : null;
@@ -2645,7 +2711,7 @@ export function heartbeatService(db: Db) {
       if (finalizedRun) {
         await updateRuntimeState(agent, finalizedRun, adapterResult, {
           legacySessionId: nextSessionState.legacySessionId,
-        }, normalizedUsage);
+        }, normalizedUsage, _resolvedCost);
         if (taskKey) {
           if (adapterResult.clearSession || (!nextSessionState.params && !nextSessionState.displayId)) {
             await clearTaskSessions(agent.companyId, agent.id, {

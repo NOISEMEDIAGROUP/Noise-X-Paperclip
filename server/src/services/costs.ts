@@ -1,6 +1,6 @@
-import { and, desc, eq, gte, isNotNull, lt, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { activityLog, agents, companies, costEvents, issues, projects } from "@paperclipai/db";
+import { activityLog, agents, billerUnitPrices, companies, costEvents, issues, projects } from "@paperclipai/db";
 import { notFound, unprocessable } from "../errors.js";
 import { budgetService, type BudgetServiceHooks } from "./budgets.js";
 
@@ -359,6 +359,66 @@ export function costService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
         .where(and(...conditions, sql`${effectiveProjectId} is not null`))
         .groupBy(effectiveProjectId, projects.name)
         .orderBy(desc(costCentsExpr));
+    },
+
+    // -------------------------------------------------------------------------
+    // Biller unit prices — convert credit-denominated adapters to USD
+    // -------------------------------------------------------------------------
+
+    lookupBillerUnitPrice: async (
+      companyId: string,
+      biller: string,
+      billingType: string,
+      at: Date = new Date(),
+    ) => {
+      return db
+        .select()
+        .from(billerUnitPrices)
+        .where(
+          and(
+            eq(billerUnitPrices.companyId, companyId),
+            eq(billerUnitPrices.biller, biller),
+            eq(billerUnitPrices.billingType, billingType),
+            lte(billerUnitPrices.effectiveFrom, at),
+            or(isNull(billerUnitPrices.effectiveTo), gte(billerUnitPrices.effectiveTo, at)),
+          ),
+        )
+        .orderBy(desc(billerUnitPrices.effectiveFrom))
+        .limit(1)
+        .then((rows) => rows[0] ?? null);
+    },
+
+    listBillerUnitPrices: async (companyId: string) => {
+      return db
+        .select()
+        .from(billerUnitPrices)
+        .where(eq(billerUnitPrices.companyId, companyId))
+        .orderBy(desc(billerUnitPrices.effectiveFrom));
+    },
+
+    createBillerUnitPrice: async (
+      companyId: string,
+      data: Omit<typeof billerUnitPrices.$inferInsert, "companyId">,
+    ) => {
+      return db
+        .insert(billerUnitPrices)
+        .values({ ...data, companyId })
+        .returning()
+        .then((rows) => rows[0]);
+    },
+
+    updateBillerUnitPrice: async (
+      companyId: string,
+      id: string,
+      data: Partial<Pick<typeof billerUnitPrices.$inferInsert, "unitPriceUsd" | "planName" | "effectiveTo" | "notes">>,
+    ) => {
+      const [row] = await db
+        .update(billerUnitPrices)
+        .set({ ...data, updatedAt: new Date() })
+        .where(and(eq(billerUnitPrices.id, id), eq(billerUnitPrices.companyId, companyId)))
+        .returning();
+      if (!row) throw notFound("Biller unit price not found");
+      return row;
     },
   };
 }

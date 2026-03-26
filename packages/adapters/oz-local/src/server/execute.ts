@@ -104,8 +104,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const envConfig = parseObject(config.env);
   const hasExplicitApiKey =
     typeof envConfig.PAPERCLIP_API_KEY === "string" && envConfig.PAPERCLIP_API_KEY.trim().length > 0;
-  const hasExplicitWarpApiKey =
-    typeof envConfig.WARP_API_KEY === "string" && envConfig.WARP_API_KEY.trim().length > 0;
 
   const env: Record<string, string> = { ...buildPaperclipEnv(agent) };
   env.PAPERCLIP_RUN_ID = runId;
@@ -154,12 +152,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     if (typeof value === "string") env[key] = value;
   }
 
-  // Inject auth token — Oz uses WARP_API_KEY
+  // Inject Paperclip API key so pcurl can authenticate back to the Paperclip server.
+  // WARP_API_KEY is intentionally NOT injected here: Oz authenticates to the Warp cloud
+  // via its own stored session (from `oz login`). Injecting the Paperclip API key as
+  // WARP_API_KEY causes Oz to use it for Warp cloud auth, which fails with 401.
   if (!hasExplicitApiKey && authToken) {
     env.PAPERCLIP_API_KEY = authToken;
-  }
-  if (!hasExplicitWarpApiKey && authToken) {
-    env.WARP_API_KEY = authToken;
   }
 
   const effectiveEnv = Object.fromEntries(
@@ -217,7 +215,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   let profile = profileId;
   if (!profile && profileName) {
     try {
-      const resolved = await resolveProfileByName(profileName, command, env);
+      const resolved = await resolveProfileByName(profileName, command, envWithScripts);
       if (resolved) {
         profile = resolved.id;
         await onLog(
@@ -426,24 +424,32 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 }
 
 /**
- * After a run completes, fetch its credit usage via `oz run get <runId> --output-format json`.
- * Returns total credits consumed (inference + compute), or null if unavailable.
+ * After a run completes, fetch credit usage from the Warp REST API.
+ *
+ * Calls: GET https://oz.warp.dev/api/v1/agent/runs/<ozRunId>
+ * Requires WARP_API_KEY in env (a real Warp API key, not the Paperclip agent key).
+ *
+ * Note: `oz run get --output-format json` is broken in the current CLI version —
+ * it ignores the flag and always outputs the TUI pretty format. The REST API is
+ * the only reliable way to obtain cost data.
+ *
+ * Returns inference_cost from request_usage, or null if unavailable.
  */
 async function fetchOzRunCredits(
-  command: string,
+  _command: string,
   runId: string | null,
   env: Record<string, string>,
 ): Promise<number | null> {
   if (!runId) return null;
+  const warpApiKey = env.WARP_API_KEY;
+  if (!warpApiKey) return null;
   try {
-    const proc = await runChildProcess(
-      `oz-run-get-${Date.now()}`,
-      command,
-      ["run", "get", runId, "--output-format", "json"],
-      { cwd: process.cwd(), env, timeoutSec: 15, graceSec: 5, onLog: async () => {} },
-    );
-    if ((proc.exitCode ?? 1) !== 0 || !proc.stdout.trim()) return null;
-    const data = JSON.parse(proc.stdout.trim()) as Record<string, unknown>;
+    const res = await fetch(`https://oz.warp.dev/api/v1/agent/runs/${encodeURIComponent(runId)}`, {
+      headers: { Authorization: `Bearer ${warpApiKey}` },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as Record<string, unknown>;
     const usage = data.request_usage as Record<string, unknown> | null | undefined;
     if (!usage) return null;
     const inference = typeof usage.inference_cost === "number" ? usage.inference_cost : 0;
@@ -509,7 +515,8 @@ function toResult(
     biller: "warp",
     billingType: "credits",
     model,
-    ...(costCredits !== null ? { costUsd: costCredits } : {}),
+    // Report raw Warp credits; the server converts to USD via biller_unit_prices.
+    ...(costCredits !== null ? { costRawUnits: costCredits, costRawUnitType: "credits" } : {}),
     resultJson: {
       stdout: proc.stdout,
       stderr: proc.stderr,

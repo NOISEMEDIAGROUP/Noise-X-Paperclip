@@ -80,6 +80,14 @@ export interface AdapterExecutionResult {
   model?: string | null;
   billingType?: AdapterBillingType | null;
   costUsd?: number | null;
+  /**
+   * Raw provider units when the biller charges in non-USD units (e.g. Warp credits).
+   * Set this instead of costUsd when billingType = "credits". The server will
+   * look up the configured unit price to derive costUsd.
+   */
+  costRawUnits?: number | null;
+  /** Human label for costRawUnits, e.g. "credits". */
+  costRawUnitType?: string | null;
   resultJson?: Record<string, unknown> | null;
   runtimeServices?: AdapterRuntimeServiceReport[];
   summary?: string | null;
