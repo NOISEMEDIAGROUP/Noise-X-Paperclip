@@ -72,14 +72,14 @@ function OverviewContent({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
         <div>
-          <span className="text-muted-foreground">Status</span>
+          <span className="text-muted-foreground">状态</span>
           <div className="mt-1">
             <StatusBadge status={project.status} />
           </div>
         </div>
         {project.targetDate && (
           <div>
-            <span className="text-muted-foreground">Target Date</span>
+            <span className="text-muted-foreground">目标日期</span>
             <p>{project.targetDate}</p>
           </div>
         )}
@@ -88,7 +88,7 @@ function OverviewContent({
   );
 }
 
-/* ── Color picker popover ── */
+/* ── 颜色选择器弹窗 ── */
 
 function ColorPicker({
   currentColor,

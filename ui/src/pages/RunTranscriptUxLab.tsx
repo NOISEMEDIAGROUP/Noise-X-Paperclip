@@ -311,7 +311,7 @@ export function RunTranscriptUxLab() {
                 className="rounded-full"
                 onClick={() => setStreaming((value) => !value)}
               >
-                {streaming ? "Show settled state" : "Show streaming state"}
+                {streaming ? "显示稳定状态" : "显示流式状态"}
               </Button>
             </div>
 

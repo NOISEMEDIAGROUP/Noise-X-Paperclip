@@ -748,10 +748,10 @@ export function OnboardingWizard() {
                     />
                   </div>
 
-                  {/* Adapter type radio cards */}
+                  {/* 适配器类型选择卡片 */}
                   <div>
                     <label className="text-xs text-muted-foreground mb-2 block">
-                      Adapter type
+                      适配器类型
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                       {[
@@ -759,14 +759,14 @@ export function OnboardingWizard() {
                           value: "claude_local" as const,
                           label: "Claude Code",
                           icon: Sparkles,
-                          desc: "Local Claude agent",
+                          desc: "本地 Claude 智能体",
                           recommended: true
                         },
                         {
                           value: "codex_local" as const,
                           label: "Codex",
                           icon: Code,
-                          desc: "Local Codex agent",
+                          desc: "本地 Codex 智能体",
                           recommended: true
                         }
                       ].map((opt) => (
@@ -791,7 +791,7 @@ export function OnboardingWizard() {
                         >
                           {opt.recommended && (
                             <span className="absolute -top-1.5 right-1.5 bg-green-500 text-white text-[9px] font-semibold px-1.5 py-0.5 rounded-full leading-none">
-                              Recommended
+                              推荐
                             </span>
                           )}
                           <opt.icon className="h-4 w-4" />

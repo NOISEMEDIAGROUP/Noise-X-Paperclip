@@ -50,9 +50,9 @@ export function FinanceTimelineCard({
                   {(row.description || row.externalInvoiceId || row.region || row.pricingTier) && (
                     <div className="space-y-1 text-xs text-muted-foreground">
                       {row.description ? <div>{row.description}</div> : null}
-                      {row.externalInvoiceId ? <div>invoice {row.externalInvoiceId}</div> : null}
-                      {row.region ? <div>region {row.region}</div> : null}
-                      {row.pricingTier ? <div>tier {row.pricingTier}</div> : null}
+                      {row.externalInvoiceId ? <div>发票 {row.externalInvoiceId}</div> : null}
+                      {row.region ? <div>区域 {row.region}</div> : null}
+                      {row.pricingTier ? <div>定价层级 {row.pricingTier}</div> : null}
                     </div>
                   )}
                 </div>
