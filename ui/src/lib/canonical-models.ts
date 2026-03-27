@@ -314,6 +314,7 @@ export const SHARED_ADAPTER_FIELDS = [
   "graceSec",
   "workspaceStrategy",
   "workspaceRuntime",
+  "paperclipSkillSync",
 ] as const;
 
 // ── Built-in reverse lookup maps ────────────────────────────────────────────
