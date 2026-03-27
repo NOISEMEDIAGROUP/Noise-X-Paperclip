@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { AGENT_ADAPTER_TYPES } from "@paperclipai/shared";
 import { ChevronDown } from "lucide-react";
 import {
@@ -26,8 +27,10 @@ export function AdapterTypeDropdown({
   value: string;
   onChange: (type: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent/50 transition-colors w-full justify-between">
           <span className="inline-flex items-center gap-1.5">
@@ -50,7 +53,9 @@ export function AdapterTypeDropdown({
               item.value === value && !item.comingSoon && "bg-accent",
             )}
             onClick={() => {
-              if (!item.comingSoon) onChange(item.value);
+              if (item.comingSoon) return;
+              if (item.value !== value) onChange(item.value);
+              setOpen(false);
             }}
           >
             <span className="inline-flex items-center gap-1.5">
