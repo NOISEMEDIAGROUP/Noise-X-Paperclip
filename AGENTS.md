@@ -27,6 +27,37 @@ Before making changes, read in this order:
 - `packages/db/`: Drizzle schema, migrations, DB clients
 - `packages/shared/`: shared types, constants, validators, API path constants
 - `doc/`: operational and product docs
+- `agents/`: importable `agentcompanies/v1` company packages (see below)
+- `skills/`: reusable agent skill packages (`SKILL.md` format)
+- `tests/`: schema validation test suites for company packages
+- `docs/`: Mintlify documentation site
+
+## Agent Companies
+
+The `agents/` directory contains ready-to-import `agentcompanies/v1` company packages. Each company is a complete org structure with agents, teams, projects, tasks, and runtime configuration.
+
+| Company | Slug | Mission |
+|---------|------|---------|
+| AJ AI Services Pvt Ltd | `aj-ai-services` | LinkedIn social media content generation and publishing |
+| CloudOps Pro | `cloudops-pro` | Managed cloud infrastructure and DevOps services |
+| SupportGenius | `support-genius` | AI-powered customer support operations |
+| CyberShield AI | `cybershield-ai` | Continuous threat detection, vulnerability management, and compliance auditing |
+| DevLaunch Studio | `devlaunch-studio` | MVP and production software delivery for startups (zero to shipped in 14 days) |
+| APIConnect Services | `apiconnect-services` | API development and system integration (OpenAPI-first, 5-day turnaround) |
+
+To import any company package into a running Paperclip instance:
+
+```sh
+paperclipai company import --from agents/<company-slug>
+```
+
+Each company package includes a schema validation test suite in `tests/<company-slug>/schema.test.ts`:
+
+```sh
+vitest run tests/cybershield-ai/schema.test.ts
+vitest run tests/devlaunch-studio/schema.test.ts
+vitest run tests/apiconnect-services/schema.test.ts
+```
 
 ## 4. Dev Setup (Auto DB)
 
