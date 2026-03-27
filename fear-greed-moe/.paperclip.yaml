@@ -13,8 +13,28 @@ agents:
     adapter:
       type: claude_local
 routines:
-  daily-fear-scan:
+  fear-scan-premarket:
+    triggers:
+      - kind: schedule
+        cronExpression: "0 8 * * 1-5"
+        timezone: America/New_York
+  fear-scan-open:
+    triggers:
+      - kind: schedule
+        cronExpression: "30 10 * * 1-5"
+        timezone: America/New_York
+  fear-scan-midday:
     triggers:
       - kind: schedule
         cronExpression: "0 13 * * 1-5"
+        timezone: America/New_York
+  fear-scan-afternoon:
+    triggers:
+      - kind: schedule
+        cronExpression: "30 15 * * 1-5"
+        timezone: America/New_York
+  fear-scan-close:
+    triggers:
+      - kind: schedule
+        cronExpression: "0 18 * * 1-5"
         timezone: America/New_York
