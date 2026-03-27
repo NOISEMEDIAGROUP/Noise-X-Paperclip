@@ -13,7 +13,7 @@ import {
   quotaSourceDisplayName,
 } from "@/lib/utils";
 
-// ordered display labels for rolling-window rows
+// 滚动窗口行的有序显示标签
 const ROLLING_WINDOWS = ["5h", "24h", "7d"] as const;
 
 interface ProviderQuotaCardProps {

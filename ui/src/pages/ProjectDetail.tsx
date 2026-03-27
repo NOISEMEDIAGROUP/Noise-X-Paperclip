@@ -290,10 +290,10 @@ export function ProjectDetail() {
       invalidateProject();
       const name = updatedProject?.name ?? project?.name ?? "Project";
       if (archived) {
-        pushToast({ title: `"${name}" has been archived`, tone: "success" });
+        pushToast({ title: `"${name}" 已归档`, tone: "success" });
         navigate("/dashboard");
       } else {
-        pushToast({ title: `"${name}" has been unarchived`, tone: "success" });
+        pushToast({ title: `"${name}" 已取消归档`, tone: "success" });
       }
     },
     onError: (_, archived) => {
