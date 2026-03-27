@@ -812,7 +812,7 @@ export function Inbox() {
       invalidateInboxIssueQueries();
     },
     onError: (err, id) => {
-      setActionError(err instanceof Error ? err.message : "Failed to archive issue");
+      setActionError(err instanceof Error ? err.message : "归档任务失败");
       setArchivingIssueIds((prev) => {
         const next = new Set(prev);
         next.delete(id);
@@ -909,7 +909,7 @@ export function Inbox() {
   };
 
   if (!selectedCompanyId) {
-    return <EmptyState icon={InboxIcon} message="Select a company to view inbox." />;
+    return <EmptyState icon={InboxIcon} message="请选择一个公司以查看收件箱。" />;
   }
 
   const hasRunFailures = failedRuns.length > 0;
@@ -960,14 +960,14 @@ export function Inbox() {
               items={[
                 {
                   value: "mine",
-                  label: "Mine",
+                  label: "我的",
                 },
                 {
                   value: "recent",
-                  label: "Recent",
+                  label: "最近",
                 },
-                { value: "unread", label: "Unread" },
-                { value: "all", label: "All" },
+                { value: "unread", label: "未读" },
+                { value: "all", label: "全部" },
               ]}
             />
           </Tabs>
@@ -981,7 +981,7 @@ export function Inbox() {
               onClick={() => markAllReadMutation.mutate(unreadIssueIds)}
               disabled={markAllReadMutation.isPending}
             >
-              {markAllReadMutation.isPending ? "Marking…" : "Mark all as read"}
+              {markAllReadMutation.isPending ? "标记中…" : "全部标为已读"}
             </Button>
           )}
         </div>
@@ -993,15 +993,15 @@ export function Inbox() {
               onValueChange={(value) => setAllCategoryFilter(value as InboxCategoryFilter)}
             >
               <SelectTrigger className="h-8 w-[170px] text-xs">
-                <SelectValue placeholder="Category" />
+                <SelectValue placeholder="分类" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="everything">All categories</SelectItem>
-                <SelectItem value="issues_i_touched">My recent issues</SelectItem>
-                <SelectItem value="join_requests">Join requests</SelectItem>
-                <SelectItem value="approvals">Approvals</SelectItem>
-                <SelectItem value="failed_runs">Failed runs</SelectItem>
-                <SelectItem value="alerts">Alerts</SelectItem>
+                <SelectItem value="everything">所有分类</SelectItem>
+                <SelectItem value="issues_i_touched">我最近的任务</SelectItem>
+                <SelectItem value="join_requests">加入请求</SelectItem>
+                <SelectItem value="approvals">审批</SelectItem>
+                <SelectItem value="failed_runs">失败的运行</SelectItem>
+                <SelectItem value="alerts">告警</SelectItem>
               </SelectContent>
             </Select>
 
@@ -1011,12 +1011,12 @@ export function Inbox() {
                 onValueChange={(value) => setAllApprovalFilter(value as InboxApprovalFilter)}
               >
                 <SelectTrigger className="h-8 w-[170px] text-xs">
-                  <SelectValue placeholder="Approval status" />
+                  <SelectValue placeholder="审批状态" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All approval statuses</SelectItem>
-                  <SelectItem value="actionable">Needs action</SelectItem>
-                  <SelectItem value="resolved">Resolved</SelectItem>
+                  <SelectItem value="all">所有审批状态</SelectItem>
+                  <SelectItem value="actionable">需要操作</SelectItem>
+                  <SelectItem value="resolved">已解决</SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -1036,12 +1036,12 @@ export function Inbox() {
           icon={InboxIcon}
           message={
             tab === "mine"
-              ? "Inbox zero."
+              ? "收件箱已清空。"
               : tab === "unread"
-              ? "No new inbox items."
+              ? "没有新的收件箱项目。"
               : tab === "recent"
-                ? "No recent inbox items."
-                : "No inbox items match these filters."
+                ? "没有最近的收件箱项目。"
+                : "没有匹配这些筛选条件的收件箱项目。"
           }
         />
       )}
@@ -1232,7 +1232,7 @@ export function Inbox() {
           {showSeparatorBefore("alerts") && <Separator />}
           <div>
             <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              Alerts
+              告警
             </h3>
             <div className="divide-y divide-border border border-border">
               {showAggregateAgentError && (
@@ -1244,7 +1244,7 @@ export function Inbox() {
                     <AlertTriangle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
                     <span className="text-sm">
                       <span className="font-medium">{dashboard!.agents.error}</span>{" "}
-                      {dashboard!.agents.error === 1 ? "agent has" : "agents have"} errors
+                      个智能体出现错误
                     </span>
                   </Link>
                   <button

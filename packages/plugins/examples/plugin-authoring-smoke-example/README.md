@@ -1,23 +1,23 @@
-# Plugin Authoring Smoke Example
+# 插件编写冒烟测试示例
 
-A Paperclip plugin
+一个 Paperclip 插件
 
-## Development
+## 开发
 
 ```bash
 pnpm install
-pnpm dev            # watch builds
-pnpm dev:ui         # local dev server with hot-reload events
+pnpm dev            # 监听构建
+pnpm dev:ui         # 带热重载事件的本地开发服务器
 pnpm test
 ```
 
-## Install Into Paperclip
+## 安装到 Paperclip
 
 ```bash
 pnpm paperclipai plugin install ./
 ```
 
-## Build Options
+## 构建选项
 
-- `pnpm build` uses esbuild presets from `@paperclipai/plugin-sdk/bundlers`.
-- `pnpm build:rollup` uses rollup presets from the same SDK.
+- `pnpm build` 使用 `@paperclipai/plugin-sdk/bundlers` 的 esbuild 预设。
+- `pnpm build:rollup` 使用同一 SDK 的 rollup 预设。
