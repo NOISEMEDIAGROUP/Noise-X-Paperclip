@@ -1,0 +1,20 @@
+schema: paperclip/v1
+agents:
+  portfolio-manager:
+    adapter:
+      type: claude_local
+  sentiment-analyst:
+    adapter:
+      type: claude_local
+  technical-analyst:
+    adapter:
+      type: claude_local
+  macro-analyst:
+    adapter:
+      type: claude_local
+routines:
+  daily-fear-scan:
+    triggers:
+      - kind: schedule
+        cronExpression: "0 13 * * 1-5"
+        timezone: America/New_York
