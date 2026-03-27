@@ -1,0 +1,129 @@
+schema: paperclip/v1
+
+agents:
+  ceo:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+  cto:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        GH_TOKEN:
+          kind: secret
+          requirement: required
+  api-architect:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        GH_TOKEN:
+          kind: secret
+          requirement: required
+  integration-developer:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        GH_TOKEN:
+          kind: secret
+          requirement: required
+  api-testing-engineer:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        GH_TOKEN:
+          kind: secret
+          requirement: required
+        POSTMAN_API_KEY:
+          kind: secret
+          requirement: optional
+  devops-engineer:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        GH_TOKEN:
+          kind: secret
+          requirement: required
+        API_GATEWAY_KEY:
+          kind: secret
+          requirement: optional
+        KONG_ADMIN_TOKEN:
+          kind: secret
+          requirement: optional
+        DATADOG_API_KEY:
+          kind: secret
+          requirement: optional
+  documentation-writer:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        GH_TOKEN:
+          kind: secret
+          requirement: required
+        POSTMAN_API_KEY:
+          kind: secret
+          requirement: optional
+  program-manager:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        SLACK_WEBHOOK_URL:
+          kind: secret
+          requirement: optional
+  api-security-engineer:
+    runtime:
+      heartbeat:
+        enabled: true
+        intervalSec: 300
+        wakeOnDemand: true
+    inputs:
+      env:
+        GH_TOKEN:
+          kind: secret
+          requirement: required
+
+routines:
+  daily-standup:
+    task: tasks/daily-standup/TASK.md
+    schedule:
+      timezone: UTC
+      cron: "0 9 * * 1-5"
+  weekly-api-health:
+    task: tasks/weekly-api-health/TASK.md
+    schedule:
+      timezone: UTC
+      cron: "0 8 * * 1"
+  monthly-api-metrics:
+    task: tasks/monthly-api-metrics/TASK.md
+    schedule:
+      timezone: UTC
+      cron: "0 9 1 * *"
