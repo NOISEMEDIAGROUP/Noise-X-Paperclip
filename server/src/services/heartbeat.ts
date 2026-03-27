@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
-import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, lt, or, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import type { BillingType } from "@paperclipai/shared";
 import {
@@ -1839,6 +1839,81 @@ export function heartbeatService(db: Db) {
     for (const agentId of agentIds) {
       await startNextQueuedRunForAgent(agentId);
     }
+  }
+
+  /**
+   * Sweep execution locks that have become orphaned: the associated run is in a
+   * terminal state (`succeeded`, `failed`, `cancelled`, `timed_out`) OR the lock
+   * has been held for longer than `staleThresholdMs` (default: 1 hour) without an
+   * active run. Clears `executionRunId`, `executionAgentNameKey`, and
+   * `executionLockedAt` on affected issues and returns a summary.
+   */
+  async function sweepOrphanedExecutionLocks(opts?: { staleThresholdMs?: number }) {
+    const staleThresholdMs = opts?.staleThresholdMs ?? 60 * 60 * 1000; // 1 hour
+    const staleCutoff = new Date(Date.now() - staleThresholdMs);
+
+    // Find issues with a populated executionRunId whose run is terminal OR whose
+    // lock timestamp is stale (fallback for runs whose records may be missing).
+    const candidates = await db
+      .select({
+        issueId: issues.id,
+        companyId: issues.companyId,
+        executionRunId: issues.executionRunId,
+        executionLockedAt: issues.executionLockedAt,
+        runStatus: heartbeatRuns.status,
+      })
+      .from(issues)
+      .leftJoin(heartbeatRuns, eq(heartbeatRuns.id, issues.executionRunId))
+      .where(
+        and(
+          isNotNull(issues.executionRunId),
+          or(
+            inArray(heartbeatRuns.status, ["succeeded", "failed", "cancelled", "timed_out"]),
+            // Lock held without an active run for longer than the stale threshold
+            and(
+              lt(issues.executionLockedAt, staleCutoff),
+              or(
+                sql`${heartbeatRuns.id} IS NULL`,
+                sql`${heartbeatRuns.status} NOT IN ('queued', 'running')`,
+              ),
+            ),
+          ),
+        ),
+      );
+
+    if (candidates.length === 0) {
+      return { cleaned: 0, issueIds: [] };
+    }
+
+    const issueIds = candidates.map((c) => c.issueId);
+
+    await db
+      .update(issues)
+      .set({
+        executionRunId: null,
+        executionAgentNameKey: null,
+        executionLockedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(inArray(issues.id, issueIds));
+
+    logger.warn(
+      {
+        cleanedCount: candidates.length,
+        issueIds,
+        staleCutoff: staleCutoff.toISOString(),
+        details: candidates.map((c) => ({
+          issueId: c.issueId,
+          companyId: c.companyId,
+          executionRunId: c.executionRunId,
+          runStatus: c.runStatus ?? "missing",
+          lockedAt: c.executionLockedAt?.toISOString() ?? null,
+        })),
+      },
+      "swept orphaned execution locks",
+    );
+
+    return { cleaned: candidates.length, issueIds };
   }
 
   async function updateRuntimeState(
@@ -3802,6 +3877,8 @@ export function heartbeatService(db: Db) {
     reapOrphanedRuns,
 
     resumeQueuedRuns,
+
+    sweepOrphanedExecutionLocks,
 
     tickTimers: async (now = new Date()) => {
       const allAgents = await db.select().from(agents);
