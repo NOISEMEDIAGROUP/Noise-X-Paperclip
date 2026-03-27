@@ -1,12 +1,12 @@
 # @paperclipai/create-paperclip-plugin
 
-Scaffolding tool for creating new Paperclip plugins.
+用于创建新 Paperclip 插件的脚手架工具。
 
 ```bash
 npx @paperclipai/create-paperclip-plugin my-plugin
 ```
 
-Or with options:
+或者带选项：
 
 ```bash
 npx @paperclipai/create-paperclip-plugin @acme/my-plugin \
@@ -17,21 +17,21 @@ npx @paperclipai/create-paperclip-plugin @acme/my-plugin \
   --author "Acme Inc"
 ```
 
-Supported templates: `default`, `connector`, `workspace`  
-Supported categories: `connector`, `workspace`, `automation`, `ui`
+支持的模板：`default`、`connector`、`workspace`
+支持的类别：`connector`、`workspace`、`automation`、`ui`
 
-Generates:
-- typed manifest + worker entrypoint
-- example UI widget using the supported `@paperclipai/plugin-sdk/ui` hooks
-- test file using `@paperclipai/plugin-sdk/testing`
-- `esbuild` and `rollup` config files using SDK bundler presets
-- dev server script for hot-reload (`paperclip-plugin-dev-server`)
+生成内容：
+- 带类型的清单文件 + Worker 入口点
+- 使用 `@paperclipai/plugin-sdk/ui` 钩子的示例 UI 组件
+- 使用 `@paperclipai/plugin-sdk/testing` 的测试文件
+- 使用 SDK 打包器预设的 `esbuild` 和 `rollup` 配置文件
+- 用于热重载的开发服务器脚本（`paperclip-plugin-dev-server`）
 
-The scaffold intentionally uses plain React elements rather than host-provided UI kit components, because the current plugin runtime does not ship a stable shared component library yet.
+脚手架特意使用纯 React 元素而非宿主提供的 UI 套件组件，因为当前插件运行时尚未提供稳定的共享组件库。
 
-Inside this repo, the generated package uses `@paperclipai/plugin-sdk` via `workspace:*`.
+在本仓库内部，生成的包通过 `workspace:*` 使用 `@paperclipai/plugin-sdk`。
 
-Outside this repo, the scaffold snapshots `@paperclipai/plugin-sdk` from your local Paperclip checkout into a `.paperclip-sdk/` tarball and points the generated package at that local file by default. You can override the SDK source explicitly:
+在本仓库外部，脚手架会从你本地的 Paperclip 签出代码中将 `@paperclipai/plugin-sdk` 快照为 `.paperclip-sdk/` 压缩包，并将生成的包默认指向该本地文件。你可以显式覆盖 SDK 来源：
 
 ```bash
 node packages/plugins/create-paperclip-plugin/dist/index.js @acme/my-plugin \
@@ -39,14 +39,14 @@ node packages/plugins/create-paperclip-plugin/dist/index.js @acme/my-plugin \
   --sdk-path /absolute/path/to/paperclip/packages/plugins/sdk
 ```
 
-That gives you an outside-repo local development path before the SDK is published to npm.
+这为你提供了在 SDK 发布到 npm 之前的仓库外本地开发路径。
 
-## Workflow after scaffolding
+## 脚手架生成后的工作流
 
 ```bash
 cd my-plugin
 pnpm install
-pnpm dev       # watch worker + manifest + ui bundles
-pnpm dev:ui    # local UI preview server with hot-reload events
+pnpm dev       # 监听 Worker + 清单 + UI 包的构建
+pnpm dev:ui    # 带热重载事件的本地 UI 预览服务器
 pnpm test
 ```

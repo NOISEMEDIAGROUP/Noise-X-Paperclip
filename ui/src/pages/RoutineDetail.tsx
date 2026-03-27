@@ -148,7 +148,7 @@ function TriggerEditor({
         </div>
         <span className="text-xs text-muted-foreground">
           {trigger.kind === "schedule" && trigger.nextRunAt
-            ? `Next: ${new Date(trigger.nextRunAt).toLocaleString()}`
+            ? `下次：${new Date(trigger.nextRunAt).toLocaleString()}`
             : trigger.kind === "webhook"
               ? "Webhook"
               : "API"}
@@ -202,7 +202,7 @@ function TriggerEditor({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        {trigger.lastResult && <span className="text-xs text-muted-foreground">上次：{trigger.lastResult}</span>}
+        {trigger.lastResult && <span className="text-xs text-muted-foreground">上次结果：{trigger.lastResult}</span>}
         <div className="ml-auto flex items-center gap-2">
           {trigger.kind === "webhook" && (
             <Button variant="outline" size="sm" onClick={() => onRotate(trigger.id)}>
@@ -473,6 +473,7 @@ export function RoutineDetail() {
       if (result.secretMaterial) {
         setSecretMessage({
           title: "Webhook 触发器已创建",
+
           webhookUrl: result.secretMaterial.webhookUrl,
           webhookSecret: result.secretMaterial.webhookSecret,
         });
@@ -895,6 +896,7 @@ export function RoutineDetail() {
                     {triggerKinds.map((kind) => (
                       <SelectItem key={kind} value={kind} disabled={kind === "webhook"}>
                         {kind}{kind === "webhook" ? " — 即将推出" : ""}
+
                       </SelectItem>
                     ))}
                   </SelectContent>

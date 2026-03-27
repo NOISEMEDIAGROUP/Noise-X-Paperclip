@@ -767,7 +767,7 @@ export function Inbox() {
         payload,
       });
       if (!("id" in result)) {
-        throw new Error("Retry was skipped because the agent is not currently invokable.");
+        throw new Error("重试被跳过，因为该智能体当前无法调用。");
       }
       return { newRun: result, originalRun: run };
     },
@@ -1191,8 +1191,8 @@ export function Inbox() {
                     )}
                     mobileMeta={
                       issue.lastExternalCommentAt
-                        ? `commented ${timeAgo(issue.lastExternalCommentAt)}`
-                        : `updated ${timeAgo(issue.updatedAt)}`
+                        ? `${timeAgo(issue.lastExternalCommentAt)} 评论`
+                        : `${timeAgo(issue.updatedAt)} 更新`
                     }
                     unreadState={
                       isUnread ? "visible" : isFading ? "fading" : "hidden"
@@ -1206,8 +1206,8 @@ export function Inbox() {
                     archiveDisabled={isArchiving || archiveIssueMutation.isPending}
                     trailingMeta={
                       issue.lastExternalCommentAt
-                        ? `commented ${timeAgo(issue.lastExternalCommentAt)}`
-                        : `updated ${timeAgo(issue.updatedAt)}`
+                        ? `${timeAgo(issue.lastExternalCommentAt)} 评论`
+                        : `${timeAgo(issue.updatedAt)} 更新`
                     }
                   />
                 );
@@ -1265,9 +1265,8 @@ export function Inbox() {
                   >
                     <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-400" />
                     <span className="text-sm">
-                      Budget at{" "}
-                      <span className="font-medium">{dashboard!.costs.monthUtilizationPercent}%</span>{" "}
-                      utilization this month
+                      本月预算使用率已达{" "}
+                      <span className="font-medium">{dashboard!.costs.monthUtilizationPercent}%</span>
                     </span>
                   </Link>
                   <button

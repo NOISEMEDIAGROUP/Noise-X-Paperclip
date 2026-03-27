@@ -120,21 +120,21 @@ function describeSchedule(cron: string): string {
 
   switch (preset) {
     case "every_minute":
-      return "Every minute";
+      return "每分钟";
     case "every_hour":
-      return `Every hour at :${minute.padStart(2, "0")}`;
+      return `每小时第 ${minute.padStart(2, "0")} 分`;
     case "every_day":
-      return `Every day at ${timeStr}`;
+      return `每天 ${timeStr}`;
     case "weekdays":
-      return `Weekdays at ${timeStr}`;
+      return `工作日 ${timeStr}`;
     case "weekly": {
       const day = DAYS_OF_WEEK.find((d) => d.value === dayOfWeek)?.label ?? dayOfWeek;
-      return `Every ${day} at ${timeStr}`;
+      return `每${day} ${timeStr}`;
     }
     case "monthly":
-      return `Monthly on the ${dayOfMonth}${ordinalSuffix(Number(dayOfMonth))} at ${timeStr}`;
+      return `每月第 ${dayOfMonth} 日 ${timeStr}`;
     case "custom":
-      return cron || "No schedule set";
+      return cron || "未设置计划";
   }
 }
 
@@ -196,7 +196,7 @@ export function ScheduleEditor({
     <div className="space-y-3">
       <Select value={preset} onValueChange={(v) => handlePresetChange(v as SchedulePreset)}>
         <SelectTrigger className="w-full">
-          <SelectValue placeholder="Choose frequency..." />
+          <SelectValue placeholder="选择频率..." />
         </SelectTrigger>
         <SelectContent>
           {PRESETS.map((p) => (
@@ -219,14 +219,14 @@ export function ScheduleEditor({
             className="font-mono text-sm"
           />
           <p className="text-xs text-muted-foreground">
-            Five fields: minute hour day-of-month month day-of-week
+            五个字段：分钟 小时 日 月 星期
           </p>
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
           {preset !== "every_minute" && preset !== "every_hour" && (
             <>
-              <span className="text-sm text-muted-foreground">at</span>
+              <span className="text-sm text-muted-foreground">时间</span>
               <Select
                 value={hour}
                 onValueChange={(h) => {
@@ -269,7 +269,7 @@ export function ScheduleEditor({
 
           {preset === "every_hour" && (
             <>
-              <span className="text-sm text-muted-foreground">at minute</span>
+              <span className="text-sm text-muted-foreground">第</span>
               <Select
                 value={minute}
                 onValueChange={(m) => {
@@ -293,7 +293,7 @@ export function ScheduleEditor({
 
           {preset === "weekly" && (
             <>
-              <span className="text-sm text-muted-foreground">on</span>
+              <span className="text-sm text-muted-foreground">在</span>
               <div className="flex gap-1">
                 {DAYS_OF_WEEK.map((d) => (
                   <Button
@@ -316,7 +316,7 @@ export function ScheduleEditor({
 
           {preset === "monthly" && (
             <>
-              <span className="text-sm text-muted-foreground">on day</span>
+              <span className="text-sm text-muted-foreground">第</span>
               <Select
                 value={dayOfMonth}
                 onValueChange={(dom) => {

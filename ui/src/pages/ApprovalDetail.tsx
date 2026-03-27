@@ -65,8 +65,8 @@ export function ApprovalDetail() {
 
   useEffect(() => {
     setBreadcrumbs([
-      { label: "Approvals", href: "/approvals" },
-      { label: approval?.id?.slice(0, 8) ?? approvalId ?? "Approval" },
+      { label: "审批", href: "/approvals" },
+      { label: approval?.id?.slice(0, 8) ?? approvalId ?? "审批" },
     ]);
   }, [setBreadcrumbs, approval, approvalId]);
 
@@ -91,7 +91,7 @@ export function ApprovalDetail() {
       refresh();
       navigate(`/approvals/${approvalId}?resolved=approved`, { replace: true });
     },
-    onError: (err) => setError(err instanceof Error ? err.message : "Approve failed"),
+    onError: (err) => setError(err instanceof Error ? err.message : "审批失败"),
   });
 
   const rejectMutation = useMutation({
@@ -100,7 +100,7 @@ export function ApprovalDetail() {
       setError(null);
       refresh();
     },
-    onError: (err) => setError(err instanceof Error ? err.message : "Reject failed"),
+    onError: (err) => setError(err instanceof Error ? err.message : "拒绝失败"),
   });
 
   const revisionMutation = useMutation({
@@ -109,7 +109,7 @@ export function ApprovalDetail() {
       setError(null);
       refresh();
     },
-    onError: (err) => setError(err instanceof Error ? err.message : "Revision request failed"),
+    onError: (err) => setError(err instanceof Error ? err.message : "修订请求失败"),
   });
 
   const resubmitMutation = useMutation({
@@ -118,7 +118,7 @@ export function ApprovalDetail() {
       setError(null);
       refresh();
     },
-    onError: (err) => setError(err instanceof Error ? err.message : "Resubmit failed"),
+    onError: (err) => setError(err instanceof Error ? err.message : "重新提交失败"),
   });
 
   const addCommentMutation = useMutation({
@@ -128,7 +128,7 @@ export function ApprovalDetail() {
       setError(null);
       refresh();
     },
-    onError: (err) => setError(err instanceof Error ? err.message : "Comment failed"),
+    onError: (err) => setError(err instanceof Error ? err.message : "评论失败"),
   });
 
   const deleteAgentMutation = useMutation({
@@ -138,7 +138,7 @@ export function ApprovalDetail() {
       refresh();
       navigate("/approvals");
     },
-    onError: (err) => setError(err instanceof Error ? err.message : "Delete failed"),
+    onError: (err) => setError(err instanceof Error ? err.message : "删除失败"),
   });
 
   if (isLoading) return <PageSkeleton variant="detail" />;
