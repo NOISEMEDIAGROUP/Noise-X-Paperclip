@@ -921,7 +921,12 @@ export function heartbeatService(db: Db) {
         .stat(agentConfigCwd)
         .then((s) => s.isDirectory())
         .catch(() => false);
-      if (agentConfigCwdExists) {
+      // Also verify the directory is inside a git repository — worktree agents require a valid
+      // git root. A misconfigured non-git directory would cause the same crash this fix prevents.
+      const agentConfigCwdIsGit = agentConfigCwdExists
+        ? await fs.stat(`${agentConfigCwd}/.git`).then(() => true).catch(() => false)
+        : false;
+      if (agentConfigCwdExists && agentConfigCwdIsGit) {
         return {
           cwd: agentConfigCwd,
           source: "agent_config" as const,
