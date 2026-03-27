@@ -33,7 +33,6 @@ import {
   HERMES_CLI,
   DEFAULT_TIMEOUT_SEC,
   DEFAULT_GRACE_SEC,
-  DEFAULT_MODEL,
   VALID_PROVIDERS,
 } from "../shared/constants.js";
 
@@ -328,7 +327,7 @@ export async function execute(
 
   // ── Resolve configuration ──────────────────────────────────────────────
   const hermesCmd = cfgString(config.hermesCommand) || HERMES_CLI;
-  const model = cfgString(config.model) || DEFAULT_MODEL;
+  const model = cfgString(config.model);
   const provider = cfgString(config.provider);
   const timeoutSec = cfgNumber(config.timeoutSec) || DEFAULT_TIMEOUT_SEC;
   const graceSec = cfgNumber(config.graceSec) || DEFAULT_GRACE_SEC;
@@ -347,7 +346,7 @@ export async function execute(
   const args: string[] = ["chat", "-q", prompt];
   if (useQuiet) args.push("-Q");
 
-  args.push("-m", model);
+  if (model) args.push("-m", model);
 
   // Only pass --provider if it's a valid Hermes provider choice.
   if (provider && (VALID_PROVIDERS as readonly string[]).includes(provider)) {
@@ -405,7 +404,7 @@ export async function execute(
   // ── Log start ──────────────────────────────────────────────────────────
   await ctx.onLog(
     "stdout",
-    `[hermes] Starting Hermes Agent (model=${model}, timeout=${timeoutSec}s)\n`,
+    `[hermes] Starting Hermes Agent (model=${model ?? "configured-default"}, timeout=${timeoutSec}s)\n`,
   );
   if (prevSessionId) {
     await ctx.onLog(
@@ -463,7 +462,7 @@ export async function execute(
     signal: result.signal,
     timedOut: result.timedOut,
     provider: provider || null,
-    model,
+    model: model || null,
   };
 
   if (parsed.errorMessage) {

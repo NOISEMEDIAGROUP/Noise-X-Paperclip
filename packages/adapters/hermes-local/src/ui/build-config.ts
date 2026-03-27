@@ -8,7 +8,6 @@
 import type { CreateConfigValues } from "@paperclipai/adapter-utils";
 
 import {
-  DEFAULT_MODEL,
   DEFAULT_TIMEOUT_SEC,
 } from "../shared/constants.js";
 
@@ -20,8 +19,10 @@ export function buildHermesConfig(
 ): Record<string, unknown> {
   const ac: Record<string, unknown> = {};
 
-  // Model
-  ac.model = v.model || DEFAULT_MODEL;
+  // Model — only set if explicitly provided; absence means Hermes uses its configured default.
+  if (v.model?.trim()) {
+    ac.model = v.model.trim();
+  }
 
   // Execution limits
   ac.timeoutSec = DEFAULT_TIMEOUT_SEC;
