@@ -960,13 +960,17 @@ export function Inbox() {
               items={[
                 {
                   value: "mine",
-                  label: `Mine (${mineIssues.length})`,
+                  label: `Mine${isMineIssuesLoading ? "" : ` (${mineIssues.length})`}`,
                 },
                 {
                   value: "recent",
-                  label: `Recent (${touchedIssues.length})`,
+                  label: `Recent${isTouchedIssuesLoading ? "" : ` (${touchedIssues.length})`}`,
                 },
-                { value: "unread", label: `Unread (${unreadTouchedIssues.length})` },
+                {
+                  value: "unread",
+                  // unread is derived from touchedIssues, so we use the same loading flag
+                  label: `Unread${isTouchedIssuesLoading ? "" : ` (${unreadTouchedIssues.length})`}`,
+                },
                 { value: "all", label: "All" },
               ]}
             />
