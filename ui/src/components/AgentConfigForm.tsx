@@ -317,6 +317,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
     adapterType === "opencode_local" ||
     adapterType === "pi_local" ||
     adapterType === "cursor";
+  const isHermesLocal = adapterType === "hermes_local";
   const showLegacyWorkingDirectoryField =
     isLocal && shouldShowLegacyWorkingDirectoryField({ isCreate, adapterConfig: config });
   const uiAdapter = useMemo(() => getUIAdapter(adapterType), [adapterType]);
@@ -333,18 +334,20 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
     enabled: Boolean(selectedCompanyId),
   });
   const models = fetchedModels ?? externalModels ?? [];
-
-  // Auto-detect model from Hermes config
-  const isHermesCreatable = adapterType === "hermes_local";
   const {
     data: detectedModelData,
     refetch: refetchDetectedModel,
   } = useQuery({
     queryKey: selectedCompanyId
-      ? queryKeys.agents.adapterModels(selectedCompanyId, `${adapterType}__detect`)
+      ? queryKeys.agents.detectModel(selectedCompanyId, adapterType)
       : ["agents", "none", "detect-model", adapterType],
-    queryFn: () => agentsApi.detectModel(selectedCompanyId!, adapterType),
-    enabled: isHermesCreatable && Boolean(selectedCompanyId),
+    queryFn: () => {
+      if (!selectedCompanyId) {
+        throw new Error("Select a company to detect the Hermes model");
+      }
+      return agentsApi.detectModel(selectedCompanyId, adapterType);
+    },
+    enabled: Boolean(selectedCompanyId && isHermesLocal),
   });
   const detectedModel = detectedModelData?.model ?? null;
 
@@ -720,14 +723,14 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                       ? "codex"
                       : adapterType === "gemini_local"
                         ? "gemini"
+                        : adapterType === "hermes_local"
+                          ? "hermes"
                         : adapterType === "pi_local"
                           ? "pi"
                         : adapterType === "cursor"
                           ? "agent"
                         : adapterType === "opencode_local"
                           ? "opencode"
-                        : adapterType === "hermes_local"
-                          ? "hermes"
                           : "claude"
                   }
                 />
@@ -746,9 +749,14 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                 allowDefault={adapterType !== "opencode_local" && adapterType !== "hermes_local"}
                 required={adapterType === "opencode_local" || adapterType === "hermes_local"}
                 groupByProvider={adapterType === "opencode_local"}
-                creatable={isHermesCreatable}
-                detectedModel={detectedModel}
-                onDetectModel={isHermesCreatable ? () => refetchDetectedModel() : undefined}
+                creatable={adapterType === "hermes_local"}
+                detectedModel={adapterType === "hermes_local" ? detectedModel : null}
+                onDetectModel={adapterType === "hermes_local"
+                  ? async () => {
+                      const result = await refetchDetectedModel();
+                      return result.data?.model ?? null;
+                    }
+                  : undefined}
               />
               {fetchedModelsError && (
                 <p className="text-xs text-destructive">
@@ -1344,10 +1352,17 @@ function ModelDropdown({
   groupByProvider: boolean;
   creatable?: boolean;
   detectedModel?: string | null;
-  onDetectModel?: () => void;
+  onDetectModel?: () => Promise<string | null>;
 }) {
   const [modelSearch, setModelSearch] = useState("");
+  const [detectingModel, setDetectingModel] = useState(false);
   const selected = models.find((m) => m.id === value);
+  const manualModel = modelSearch.trim();
+  const canCreateManualModel = Boolean(
+    creatable &&
+      manualModel &&
+      !models.some((m) => m.id.toLowerCase() === manualModel.toLowerCase()),
+  );
   const filteredModels = useMemo(() => {
     return models.filter((m) => {
       if (!modelSearch.trim()) return true;
@@ -1384,10 +1399,20 @@ function ModelDropdown({
       }));
   }, [filteredModels, groupByProvider]);
 
-  // For creatable mode: if search doesn't match any model, allow free-text input
-  const isCreatableMatch = creatable && modelSearch.trim() && !models.some(
-    (m) => m.id === modelSearch.trim(),
-  );
+  async function handleDetectModel() {
+    if (!onDetectModel) return;
+    setDetectingModel(true);
+    try {
+      const nextModel = await onDetectModel();
+      if (nextModel) {
+        onChange(nextModel);
+        onOpenChange(false);
+        setModelSearch("");
+      }
+    } finally {
+      setDetectingModel(false);
+    }
+  }
 
   return (
     <Field label="Model" hint={help.model}>
@@ -1399,7 +1424,7 @@ function ModelDropdown({
         }}
       >
         <PopoverTrigger asChild>
-          <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent/50 transition-colors w-full justify-between">
+          <button type="button" className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent/50 transition-colors w-full justify-between">
             <span className={cn(!value && "text-muted-foreground")}>
               {selected
                 ? selected.label
@@ -1412,10 +1437,9 @@ function ModelDropdown({
           <div className="relative mb-1">
             <input
               className="w-full px-2 py-1.5 pr-6 text-xs bg-transparent outline-none border-b border-border placeholder:text-muted-foreground/50"
-              placeholder="Search models... (type to create)"
+              placeholder={creatable ? "Search models... (type to create)" : "Search models..."}
               value={modelSearch}
               onChange={(e) => setModelSearch(e.target.value)}
-              autoFocus
             />
             {modelSearch && (
               <button
@@ -1430,21 +1454,22 @@ function ModelDropdown({
               </button>
             )}
           </div>
-          {/* Detect model button (Hermes) */}
-          {onDetectModel && (
+          {onDetectModel && !detectedModel && !modelSearch.trim() && (
             <button
               type="button"
               className="flex items-center gap-1.5 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 text-muted-foreground"
-              onClick={() => { onDetectModel(); onOpenChange(false); }}
+              onClick={() => {
+                void handleDetectModel();
+              }}
+              disabled={detectingModel}
             >
               <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
                 <path d="M3 3v5h5" />
               </svg>
-              Detect from Hermes config
+              {detectingModel ? "Detecting..." : "Detect from Hermes config"}
             </button>
           )}
-          {/* Current selection pinned at top */}
           {value && !models.some((m) => m.id === value) && (
             <button
               type="button"
@@ -1463,7 +1488,6 @@ function ModelDropdown({
               </span>
             </button>
           )}
-          {/* Detected model from Hermes config */}
           {detectedModel && detectedModel !== value && (
             <button
               type="button"
@@ -1499,6 +1523,20 @@ function ModelDropdown({
                 Default
               </button>
             )}
+            {canCreateManualModel && (
+              <button
+                type="button"
+                className="flex items-center justify-between gap-2 w-full px-2 py-1.5 text-sm rounded hover:bg-accent/50"
+                onClick={() => {
+                  onChange(manualModel);
+                  onOpenChange(false);
+                  setModelSearch("");
+                }}
+              >
+                <span>Use manual model</span>
+                <span className="text-xs font-mono text-muted-foreground">{manualModel}</span>
+              </button>
+            )}
             {groupedModels.map((group) => (
               <div key={group.provider} className="mb-1 last:mb-0">
                 {groupByProvider && (
@@ -1508,8 +1546,8 @@ function ModelDropdown({
                 )}
                 {group.entries.map((m) => (
                   <button
-                    key={m.id}
                     type="button"
+                    key={m.id}
                     className={cn(
                       "flex items-center w-full px-2 py-1.5 text-sm rounded hover:bg-accent/50",
                       m.id === value && "bg-accent",
@@ -1526,23 +1564,14 @@ function ModelDropdown({
                 ))}
               </div>
             ))}
-            {/* Creatable: free-text from search input */}
-            {isCreatableMatch && (
-              <button
-                type="button"
-                className="flex items-center w-full px-2 py-1.5 text-sm rounded hover:bg-accent/50 text-muted-foreground border-t border-border mt-1"
-                onClick={() => {
-                  onChange(modelSearch.trim());
-                  onOpenChange(false);
-                }}
-              >
-                <span className="block w-full text-left truncate font-mono text-xs">
-                  Use &quot;{modelSearch.trim()}&quot;
-                </span>
-              </button>
-            )}
-            {filteredModels.length === 0 && !isCreatableMatch && (
-              <p className="px-2 py-1.5 text-xs text-muted-foreground">No models found.</p>
+            {filteredModels.length === 0 && !canCreateManualModel && (
+              <div className="px-2 py-2 space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  {onDetectModel
+                    ? "No Hermes model detected yet. Configure Hermes or enter a provider/model manually."
+                    : "No models found."}
+                </p>
+              </div>
             )}
           </div>
         </PopoverContent>

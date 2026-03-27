@@ -27,6 +27,12 @@ export interface AdapterModel {
   label: string;
 }
 
+export interface DetectedAdapterModel {
+  model: string | null;
+  provider: string | null;
+  source: string | null;
+}
+
 export interface ClaudeLoginResult {
   exitCode: number | null;
   signal: string | null;
@@ -160,7 +166,7 @@ export const agentsApi = {
       `/companies/${encodeURIComponent(companyId)}/adapters/${encodeURIComponent(type)}/models`,
     ),
   detectModel: (companyId: string, type: string) =>
-    api.get<{ model: string | null; provider: string | null; source: string | null }>(
+    api.get<DetectedAdapterModel>(
       `/companies/${encodeURIComponent(companyId)}/adapters/${encodeURIComponent(type)}/detect-model`,
     ),
   testEnvironment: (
