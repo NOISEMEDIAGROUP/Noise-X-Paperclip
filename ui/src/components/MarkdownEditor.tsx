@@ -335,7 +335,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
     }
   }, [mentionOptionByKey]);
 
-  // Mention detection: listen for selection changes and input events
+  // 提及检测：监听选区变化和输入事件
   const checkMention = useCallback(() => {
     if (!mentions || mentions.length === 0 || !containerRef.current) {
       mentionStateRef.current = null;
@@ -356,8 +356,8 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
     if (!mentions || mentions.length === 0) return;
 
     const el = containerRef.current;
-    // Listen for input events on the container so mention detection
-    // also fires after typing (e.g. space to dismiss).
+    // 监听容器上的输入事件，使提及检测
+    // 在输入后也能触发（例如按空格关闭）。
     const onInput = () => requestAnimationFrame(checkMention);
 
     document.addEventListener("selectionchange", checkMention);

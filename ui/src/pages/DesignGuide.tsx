@@ -654,22 +654,22 @@ export function DesignGuide() {
           </SheetTrigger>
           <SheetContent side="right">
             <SheetHeader>
-              <SheetTitle>Issue Properties</SheetTitle>
-              <SheetDescription>Edit metadata without leaving the current page.</SheetDescription>
+              <SheetTitle>问题属性</SheetTitle>
+              <SheetDescription>无需离开当前页面即可编辑元数据。</SheetDescription>
             </SheetHeader>
             <div className="space-y-4 px-4">
               <div className="space-y-1">
-                <Label htmlFor="sheet-title">Title</Label>
-                <Input id="sheet-title" defaultValue="Improve onboarding docs" />
+                <Label htmlFor="sheet-title">标题</Label>
+                <Input id="sheet-title" defaultValue="改进入门文档" />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="sheet-description">Description</Label>
-                <Textarea id="sheet-description" defaultValue="Capture setup pitfalls and screenshots." />
+                <Label htmlFor="sheet-description">描述</Label>
+                <Textarea id="sheet-description" defaultValue="记录设置中的陷阱和截图。" />
               </div>
             </div>
             <SheetFooter>
-              <Button variant="outline">Cancel</Button>
-              <Button>Save</Button>
+              <Button variant="outline">取消</Button>
+              <Button>保存</Button>
             </SheetFooter>
           </SheetContent>
         </Sheet>
@@ -678,12 +678,12 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  SCROLL AREA                                                  */}
       {/* ============================================================ */}
-      <Section title="Scroll Area">
+      <Section title="滚动区域">
         <ScrollArea className="h-36 rounded-md border border-border">
           <div className="space-y-2 p-3">
             {Array.from({ length: 12 }).map((_, i) => (
               <div key={i} className="rounded-md border border-border p-2 text-sm">
-                Heartbeat run #{i + 1}: completed successfully
+                心跳运行 #{i + 1}：已成功完成
               </div>
             ))}
           </div>

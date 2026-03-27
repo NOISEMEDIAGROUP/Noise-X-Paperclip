@@ -186,7 +186,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
 
   const createSecret = useMutation({
     mutationFn: (input: { name: string; value: string }) => {
-      if (!selectedCompanyId) throw new Error("Select a company to create secrets");
+      if (!selectedCompanyId) throw new Error("请选择一个公司来创建密钥");
       return secretsApi.create(selectedCompanyId, input);
     },
     onSuccess: () => {
@@ -359,7 +359,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
   const testEnvironment = useMutation({
     mutationFn: async () => {
       if (!selectedCompanyId) {
-        throw new Error("Select a company to test adapter environment");
+        throw new Error("请选择一个公司来测试适配器环境");
       }
       return agentsApi.testEnvironment(selectedCompanyId, adapterType, {
         adapterConfig: buildAdapterConfigForTest(),

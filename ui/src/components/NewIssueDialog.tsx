@@ -1388,10 +1388,10 @@ export function NewIssueDialog() {
             </PopoverContent>
           </Popover>
 
-          {/* Labels chip (placeholder) */}
+          {/* 标签（占位符） */}
           <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/50 transition-colors text-muted-foreground">
             <Tag className="h-3 w-3" />
-            Labels
+            标签
           </button>
 
           <input
@@ -1408,10 +1408,10 @@ export function NewIssueDialog() {
             disabled={createIssue.isPending}
           >
             <Paperclip className="h-3 w-3" />
-            Upload
+            上传
           </button>
 
-          {/* More (dates) */}
+          {/* 更多（日期） */}
           <Popover open={moreOpen} onOpenChange={setMoreOpen}>
             <PopoverTrigger asChild>
               <button className="inline-flex items-center justify-center rounded-md border border-border p-1 text-xs hover:bg-accent/50 transition-colors text-muted-foreground">
@@ -1421,7 +1421,7 @@ export function NewIssueDialog() {
             <PopoverContent className="w-44 p-1" align="start">
               <button className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 text-muted-foreground">
                 <Calendar className="h-3 w-3" />
-                Start date
+                开始日期
               </button>
               <button className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 text-muted-foreground">
                 <Calendar className="h-3 w-3" />

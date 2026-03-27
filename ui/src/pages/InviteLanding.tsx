@@ -287,10 +287,10 @@ export function InviteLandingPage() {
 
         {requiresAuthForHuman && (
           <div className="mt-4 rounded-md border border-border bg-muted/30 p-3 text-sm">
-            Sign in or create an account before submitting a human join request.
+            在提交人类加入请求之前，请先登录或创建账户。
             <div className="mt-2">
               <Button asChild size="sm" variant="outline">
-                <Link to={`/auth?next=${encodeURIComponent(`/invite/${token}`)}`}>Sign in / Create account</Link>
+                <Link to={`/auth?next=${encodeURIComponent(`/invite/${token}`)}`}>登录 / 创建账户</Link>
               </Button>
             </div>
           </div>
@@ -308,10 +308,10 @@ export function InviteLandingPage() {
           onClick={() => acceptMutation.mutate()}
         >
           {acceptMutation.isPending
-            ? "Submitting…"
+            ? "提交中…"
             : invite.inviteType === "bootstrap_ceo"
-              ? "Accept bootstrap invite"
-              : "Submit join request"}
+              ? "接受初始化邀请"
+              : "提交加入请求"}
         </Button>
       </div>
     </div>
