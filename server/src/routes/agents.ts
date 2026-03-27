@@ -1771,13 +1771,23 @@ export function agentRoutes(db: Db) {
     }
 
     const actor = getActorInfo(req);
-    const agent = await svc.update(id, patchData, {
-      recordRevision: {
-        createdByAgentId: actor.agentId,
-        createdByUserId: actor.actorType === "user" ? actor.actorId : null,
-        source: "patch",
-      },
-    });
+    let agent;
+    try {
+      agent = await svc.update(id, patchData, {
+        recordRevision: {
+          createdByAgentId: actor.agentId,
+          createdByUserId: actor.actorType === "user" ? actor.actorId : null,
+          source: "patch",
+        },
+      });
+    } catch (err: any) {
+      if (err.status === 409 || err?.code === "23505") {
+        res.status(409).json({ error: "Agent name conflicts with an existing agent URL key. Please choose a different name." });
+        return;
+      }
+      throw err;
+    }
+
     if (!agent) {
       res.status(404).json({ error: "Agent not found" });
       return;
