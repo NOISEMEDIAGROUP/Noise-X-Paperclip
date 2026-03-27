@@ -70,11 +70,14 @@ import {
   execute as hermesExecute,
   testEnvironment as hermesTestEnvironment,
   sessionCodec as hermesSessionCodec,
-} from "hermes-paperclip-adapter/server";
+  listSkills as hermesListSkills,
+  syncSkills as hermesSyncSkills,
+} from "@paperclipai/adapter-hermes-local/server";
 import {
   agentConfigurationDoc as hermesAgentConfigurationDoc,
   models as hermesModels,
-} from "hermes-paperclip-adapter";
+} from "@paperclipai/adapter-hermes-local";
+import { detectModel as detectModelFromHermes } from "@paperclipai/adapter-hermes-local/server";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
 
@@ -176,9 +179,12 @@ const hermesLocalAdapter: ServerAdapterModule = {
   execute: hermesExecute,
   testEnvironment: hermesTestEnvironment,
   sessionCodec: hermesSessionCodec,
+  listSkills: hermesListSkills,
+  syncSkills: hermesSyncSkills,
   models: hermesModels,
   supportsLocalAgentJwt: true,
   agentConfigurationDoc: hermesAgentConfigurationDoc,
+  detectModel: () => detectModelFromHermes(),
 };
 
 const adaptersByType = new Map<string, ServerAdapterModule>(
@@ -215,7 +221,16 @@ export async function listAdapterModels(type: string): Promise<{ id: string; lab
   return adapter.models ?? [];
 }
 
-export function listServerAdapters(): ServerAdapterModule[] {
+export async function detectAdapterModel(
+  type: string,
+): Promise<{ model: string | null; provider: string | null; source: string | null } | null> {
+  const adapter = adaptersByType.get(type);
+  if (!adapter?.detectModel) return null;
+  const detected = await adapter.detectModel();
+  return detected ? { model: detected.model, provider: detected.provider, source: detected.source } : null;
+}
+
+export function listServerAdapters() {
   return Array.from(adaptersByType.values());
 }
 
