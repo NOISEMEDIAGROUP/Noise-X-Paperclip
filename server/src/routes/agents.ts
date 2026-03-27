@@ -1781,7 +1781,7 @@ export function agentRoutes(db: Db) {
         },
       });
     } catch (err: any) {
-      if (err.status === 409 || err?.code === "23505") {
+      if (err?.code === "23505") {
         res.status(409).json({ error: "Agent name conflicts with an existing agent URL key. Please choose a different name." });
         return;
       }
