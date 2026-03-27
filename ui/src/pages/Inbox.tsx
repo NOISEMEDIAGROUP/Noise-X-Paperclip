@@ -75,7 +75,7 @@ function firstNonEmptyLine(value: string | null | undefined): string | null {
 }
 
 function runFailureMessage(run: HeartbeatRun): string {
-  return firstNonEmptyLine(run.error) ?? firstNonEmptyLine(run.stderrExcerpt) ?? "Run exited with an error.";
+  return firstNonEmptyLine(run.error) ?? firstNonEmptyLine(run.stderrExcerpt) ?? "运行因错误退出。";
 }
 
 function approvalStatusLabel(status: Approval["status"]): string {
@@ -144,7 +144,7 @@ function FailedRunInboxRow({
                 type="button"
                 onClick={onMarkRead}
                 className="inline-flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-blue-500/20"
-                aria-label="Mark as read"
+                aria-label="标记为已读"
               >
                 <span className={cn(
                   "block h-2 w-2 rounded-full bg-blue-600 transition-opacity duration-300 dark:bg-blue-400",
@@ -291,7 +291,7 @@ function ApprovalInboxRow({
                 type="button"
                 onClick={onMarkRead}
                 className="inline-flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-blue-500/20"
-                aria-label="Mark as read"
+                aria-label="标记为已读"
               >
                 <span className={cn(
                   "block h-2 w-2 rounded-full bg-blue-600 transition-opacity duration-300 dark:bg-blue-400",
@@ -421,7 +421,7 @@ function JoinRequestInboxRow({
                 type="button"
                 onClick={onMarkRead}
                 className="inline-flex h-4 w-4 items-center justify-center rounded-full transition-colors hover:bg-blue-500/20"
-                aria-label="Mark as read"
+                aria-label="标记为已读"
               >
                 <span className={cn(
                   "block h-2 w-2 rounded-full bg-blue-600 transition-opacity duration-300 dark:bg-blue-400",

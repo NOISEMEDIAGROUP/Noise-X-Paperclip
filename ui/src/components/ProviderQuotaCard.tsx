@@ -19,9 +19,9 @@ const ROLLING_WINDOWS = ["5h", "24h", "7d"] as const;
 interface ProviderQuotaCardProps {
   provider: string;
   rows: CostByProviderModel[];
-  /** company monthly budget in cents (0 means unlimited) */
+  /** 公司月度预算（美分，0 表示无限制） */
   budgetMonthlyCents: number;
-  /** total company spend in this period in cents, all providers */
+  /** 本期间所有供应商的公司总支出（美分） */
   totalCompanySpendCents: number;
   /** spend in the current calendar week in cents, this provider only */
   weekSpendCents: number;

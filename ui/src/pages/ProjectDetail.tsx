@@ -298,7 +298,7 @@ export function ProjectDetail() {
     },
     onError: (_, archived) => {
       pushToast({
-        title: archived ? "Failed to archive project" : "Failed to unarchive project",
+        title: archived ? "归档项目失败" : "取消归档项目失败",
         tone: "error",
       });
     },
@@ -455,7 +455,7 @@ export function ProjectDetail() {
     return <Navigate to={`/projects/${canonicalProjectRef}/issues`} replace />;
   }
 
-  // Redirect bare /projects/:id to cached tab or default /issues
+  // 将裸路径 /projects/:id 重定向到缓存的标签页或默认的 /issues
   if (routeProjectRef && activeTab === null) {
     let cachedTab: string | null = null;
     if (project?.id) {
@@ -481,7 +481,7 @@ export function ProjectDetail() {
   if (!project) return null;
 
   const handleTabChange = (tab: ProjectTab) => {
-    // Cache the active tab per project
+    // 为每个项目缓存活跃的标签页
     if (project?.id) {
       try { localStorage.setItem(`paperclip:project-tab:${project.id}`, tab); } catch {}
     }
@@ -519,7 +519,7 @@ export function ProjectDetail() {
           {project.pauseReason === "budget" ? (
             <div className="inline-flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-red-200">
               <span className="h-2 w-2 rounded-full bg-red-400" />
-              Paused by budget hard stop
+              因预算硬限制已暂停
             </div>
           ) : null}
         </div>
@@ -559,10 +559,10 @@ export function ProjectDetail() {
       <Tabs value={activeTab ?? "list"} onValueChange={(value) => handleTabChange(value as ProjectTab)}>
         <PageTabBar
           items={[
-            { value: "list", label: "Issues" },
-            { value: "overview", label: "Overview" },
-            { value: "configuration", label: "Configuration" },
-            { value: "budget", label: "Budget" },
+            { value: "list", label: "任务" },
+            { value: "overview", label: "概览" },
+            { value: "configuration", label: "配置" },
+            { value: "budget", label: "预算" },
             ...pluginTabItems.map((item) => ({
               value: item.value,
               label: item.label,

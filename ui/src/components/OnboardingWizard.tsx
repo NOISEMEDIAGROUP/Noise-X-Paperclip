@@ -956,7 +956,7 @@ export function OnboardingWizard() {
                                   setModelOpen(false);
                                 }}
                               >
-                                Default
+                                默认
                               </button>
                             )}
                             <div className="max-h-[240px] overflow-y-auto">
@@ -997,7 +997,7 @@ export function OnboardingWizard() {
                             </div>
                             {filteredModels.length === 0 && (
                               <p className="px-2 py-1.5 text-xs text-muted-foreground">
-                                No models discovered.
+                                未发现模型。
                               </p>
                             )}
                           </PopoverContent>
@@ -1011,11 +1011,10 @@ export function OnboardingWizard() {
                       <div className="flex items-center justify-between gap-2">
                         <div>
                           <p className="text-xs font-medium">
-                            Adapter environment check
+                            适配器环境检查
                           </p>
                           <p className="text-[11px] text-muted-foreground">
-                            Runs a live probe that asks the adapter CLI to
-                            respond with hello.
+                            运行实时探测，要求适配器 CLI 回复 hello。
                           </p>
                         </div>
                         <Button
@@ -1025,7 +1024,7 @@ export function OnboardingWizard() {
                           disabled={adapterEnvLoading}
                           onClick={() => void runAdapterEnvironmentTest()}
                         >
-                          {adapterEnvLoading ? "Testing..." : "Test now"}
+                          {adapterEnvLoading ? "测试中..." : "立即测试"}
                         </Button>
                       </div>
 
