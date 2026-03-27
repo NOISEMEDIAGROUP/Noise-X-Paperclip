@@ -3,6 +3,8 @@ import { Menu } from "lucide-react";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useSidebar } from "../context/SidebarContext";
 import { useCompany } from "../context/CompanyContext";
+import { useLanguage } from "../context/LanguageContext";
+import { t } from "../lib/locale";
 import { Button } from "@/components/ui/button";
 import {
   Breadcrumb,
@@ -34,6 +36,7 @@ export function BreadcrumbBar() {
   const { breadcrumbs } = useBreadcrumbs();
   const { toggleSidebar, isMobile } = useSidebar();
   const { selectedCompanyId, selectedCompany } = useCompany();
+  useLanguage();
 
   const globalToolbarSlotContext = useMemo(
     () => ({
@@ -59,7 +62,7 @@ export function BreadcrumbBar() {
       size="icon-sm"
       className="mr-2 shrink-0"
       onClick={toggleSidebar}
-      aria-label="Open sidebar"
+      aria-label={t("Open sidebar")}
     >
       <Menu className="h-5 w-5" />
     </Button>

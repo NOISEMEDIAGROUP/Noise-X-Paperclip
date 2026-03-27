@@ -45,18 +45,26 @@ import { NotFoundPage } from "./pages/NotFound";
 import { queryKeys } from "./lib/queryKeys";
 import { useCompany } from "./context/CompanyContext";
 import { useDialog } from "./context/DialogContext";
+import { useLanguage } from "./context/LanguageContext";
 import { loadLastInboxTab } from "./lib/inbox";
 import { shouldRedirectCompanylessRouteToOnboarding } from "./lib/onboarding-route";
 
 function BootstrapPendingPage({ hasActiveInvite = false }: { hasActiveInvite?: boolean }) {
+  const { language } = useLanguage();
+  const isPt = language === "pt-BR";
+
   return (
     <div className="mx-auto max-w-xl py-10">
       <div className="rounded-lg border border-border bg-card p-6">
-        <h1 className="text-xl font-semibold">Instance setup required</h1>
+        <h1 className="text-xl font-semibold">{isPt ? "Configuracao da instancia necessaria" : "Instance setup required"}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {hasActiveInvite
-            ? "No instance admin exists yet. A bootstrap invite is already active. Check your Paperclip startup logs for the first admin invite URL, or run this command to rotate it:"
-            : "No instance admin exists yet. Run this command in your Paperclip environment to generate the first admin invite URL:"}
+            ? isPt
+              ? "Ainda nao existe um administrador da instancia. Ja ha um convite bootstrap ativo. Verifique os logs de inicializacao do Paperclip para encontrar a URL do primeiro convite de admin, ou rode este comando para gerar uma nova:"
+              : "No instance admin exists yet. A bootstrap invite is already active. Check your Paperclip startup logs for the first admin invite URL, or run this command to rotate it:"
+            : isPt
+              ? "Ainda nao existe um administrador da instancia. Rode este comando no ambiente do Paperclip para gerar a URL do primeiro convite de admin:"
+              : "No instance admin exists yet. Run this command in your Paperclip environment to generate the first admin invite URL:"}
         </p>
         <pre className="mt-4 overflow-x-auto rounded-md border border-border bg-muted/30 p-3 text-xs">
 {`pnpm paperclipai auth bootstrap-ceo`}
@@ -67,6 +75,8 @@ function BootstrapPendingPage({ hasActiveInvite = false }: { hasActiveInvite?: b
 }
 
 function CloudAccessGate() {
+  const { language } = useLanguage();
+  const isPt = language === "pt-BR";
   const location = useLocation();
   const healthQuery = useQuery({
     queryKey: queryKeys.health,
@@ -92,13 +102,13 @@ function CloudAccessGate() {
   });
 
   if (healthQuery.isLoading || (isAuthenticatedMode && sessionQuery.isLoading)) {
-    return <div className="mx-auto max-w-xl py-10 text-sm text-muted-foreground">Loading...</div>;
+    return <div className="mx-auto max-w-xl py-10 text-sm text-muted-foreground">{isPt ? "Carregando..." : "Loading..."}</div>;
   }
 
   if (healthQuery.error) {
     return (
       <div className="mx-auto max-w-xl py-10 text-sm text-destructive">
-        {healthQuery.error instanceof Error ? healthQuery.error.message : "Failed to load app state"}
+        {healthQuery.error instanceof Error ? healthQuery.error.message : isPt ? "Falha ao carregar o estado do aplicativo" : "Failed to load app state"}
       </div>
     );
   }
@@ -188,6 +198,8 @@ function LegacySettingsRedirect() {
 }
 
 function OnboardingRoutePage() {
+  const { language } = useLanguage();
+  const isPt = language === "pt-BR";
   const { companies } = useCompany();
   const { openOnboarding } = useDialog();
   const { companyPrefix } = useParams<{ companyPrefix?: string }>();
@@ -196,15 +208,15 @@ function OnboardingRoutePage() {
     : null;
 
   const title = matchedCompany
-    ? `Add another agent to ${matchedCompany.name}`
+    ? isPt ? `Adicionar outro agente em ${matchedCompany.name}` : `Add another agent to ${matchedCompany.name}`
     : companies.length > 0
-      ? "Create another company"
-      : "Create your first company";
+      ? isPt ? "Criar outra empresa" : "Create another company"
+      : isPt ? "Criar sua primeira empresa" : "Create your first company";
   const description = matchedCompany
-    ? "Run onboarding again to add an agent and a starter task for this company."
+    ? isPt ? "Execute o onboarding novamente para adicionar um agente e uma tarefa inicial para esta empresa." : "Run onboarding again to add an agent and a starter task for this company."
     : companies.length > 0
-      ? "Run onboarding again to create another company and seed its first agent."
-      : "Get started by creating a company and your first agent.";
+      ? isPt ? "Execute o onboarding novamente para criar outra empresa e configurar seu primeiro agente." : "Run onboarding again to create another company and seed its first agent."
+      : isPt ? "Comece criando uma empresa e seu primeiro agente." : "Get started by creating a company and your first agent.";
 
   return (
     <div className="mx-auto max-w-xl py-10">
@@ -219,7 +231,7 @@ function OnboardingRoutePage() {
                 : openOnboarding()
             }
           >
-            {matchedCompany ? "Add Agent" : "Start Onboarding"}
+            {matchedCompany ? (isPt ? "Adicionar agente" : "Add Agent") : (isPt ? "Iniciar onboarding" : "Start Onboarding")}
           </Button>
         </div>
       </div>
@@ -231,8 +243,11 @@ function CompanyRootRedirect() {
   const { companies, selectedCompany, loading } = useCompany();
   const location = useLocation();
 
+  const { language } = useLanguage();
+  const isPt = language === "pt-BR";
+
   if (loading) {
-    return <div className="mx-auto max-w-xl py-10 text-sm text-muted-foreground">Loading...</div>;
+    return <div className="mx-auto max-w-xl py-10 text-sm text-muted-foreground">{isPt ? "Carregando..." : "Loading..."}</div>;
   }
 
   const targetCompany = selectedCompany ?? companies[0] ?? null;
@@ -252,11 +267,13 @@ function CompanyRootRedirect() {
 }
 
 function UnprefixedBoardRedirect() {
+  const { language } = useLanguage();
+  const isPt = language === "pt-BR";
   const location = useLocation();
   const { companies, selectedCompany, loading } = useCompany();
 
   if (loading) {
-    return <div className="mx-auto max-w-xl py-10 text-sm text-muted-foreground">Loading...</div>;
+    return <div className="mx-auto max-w-xl py-10 text-sm text-muted-foreground">{isPt ? "Carregando..." : "Loading..."}</div>;
   }
 
   const targetCompany = selectedCompany ?? companies[0] ?? null;
@@ -281,17 +298,19 @@ function UnprefixedBoardRedirect() {
 }
 
 function NoCompaniesStartPage() {
+  const { language } = useLanguage();
+  const isPt = language === "pt-BR";
   const { openOnboarding } = useDialog();
 
   return (
     <div className="mx-auto max-w-xl py-10">
       <div className="rounded-lg border border-border bg-card p-6">
-        <h1 className="text-xl font-semibold">Create your first company</h1>
+        <h1 className="text-xl font-semibold">{isPt ? "Criar sua primeira empresa" : "Create your first company"}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Get started by creating a company.
+          {isPt ? "Comece criando uma empresa." : "Get started by creating a company."}
         </p>
         <div className="mt-4">
-          <Button onClick={() => openOnboarding()}>New Company</Button>
+          <Button onClick={() => openOnboarding()}>{isPt ? "Nova empresa" : "New Company"}</Button>
         </div>
       </div>
     </div>

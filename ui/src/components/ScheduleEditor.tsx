@@ -3,18 +3,21 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { t } from "../lib/locale";
 
 type SchedulePreset = "every_minute" | "every_hour" | "every_day" | "weekdays" | "weekly" | "monthly" | "custom";
 
-const PRESETS: { value: SchedulePreset; label: string }[] = [
-  { value: "every_minute", label: "Every minute" },
-  { value: "every_hour", label: "Every hour" },
-  { value: "every_day", label: "Every day" },
-  { value: "weekdays", label: "Weekdays" },
-  { value: "weekly", label: "Weekly" },
-  { value: "monthly", label: "Monthly" },
-  { value: "custom", label: "Custom (cron)" },
-];
+function getPresets(): { value: SchedulePreset; label: string }[] {
+  return [
+    { value: "every_minute", label: t("Every minute") },
+    { value: "every_hour", label: t("Every hour") },
+    { value: "every_day", label: t("Every day") },
+    { value: "weekdays", label: t("Weekdays") },
+    { value: "weekly", label: t("Weekly") },
+    { value: "monthly", label: t("Monthly") },
+    { value: "custom", label: t("Custom (cron)") },
+  ];
+}
 
 const HOURS = Array.from({ length: 24 }, (_, i) => ({
   value: String(i),
@@ -196,10 +199,10 @@ export function ScheduleEditor({
     <div className="space-y-3">
       <Select value={preset} onValueChange={(v) => handlePresetChange(v as SchedulePreset)}>
         <SelectTrigger className="w-full">
-          <SelectValue placeholder="Choose frequency..." />
+          <SelectValue placeholder={t("Choose frequency...")} />
         </SelectTrigger>
         <SelectContent>
-          {PRESETS.map((p) => (
+          {getPresets().map((p) => (
             <SelectItem key={p.value} value={p.value}>
               {p.label}
             </SelectItem>
@@ -219,14 +222,14 @@ export function ScheduleEditor({
             className="font-mono text-sm"
           />
           <p className="text-xs text-muted-foreground">
-            Five fields: minute hour day-of-month month day-of-week
+            {t("Five fields: minute hour day-of-month month day-of-week")}
           </p>
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
           {preset !== "every_minute" && preset !== "every_hour" && (
             <>
-              <span className="text-sm text-muted-foreground">at</span>
+              <span className="text-sm text-muted-foreground">{t("at")}</span>
               <Select
                 value={hour}
                 onValueChange={(h) => {
@@ -269,7 +272,7 @@ export function ScheduleEditor({
 
           {preset === "every_hour" && (
             <>
-              <span className="text-sm text-muted-foreground">at minute</span>
+              <span className="text-sm text-muted-foreground">{t("at minute")}</span>
               <Select
                 value={minute}
                 onValueChange={(m) => {
@@ -293,7 +296,7 @@ export function ScheduleEditor({
 
           {preset === "weekly" && (
             <>
-              <span className="text-sm text-muted-foreground">on</span>
+              <span className="text-sm text-muted-foreground">{t("on")}</span>
               <div className="flex gap-1">
                 {DAYS_OF_WEEK.map((d) => (
                   <Button
@@ -316,7 +319,7 @@ export function ScheduleEditor({
 
           {preset === "monthly" && (
             <>
-              <span className="text-sm text-muted-foreground">on day</span>
+              <span className="text-sm text-muted-foreground">{t("on day")}</span>
               <Select
                 value={dayOfMonth}
                 onValueChange={(dom) => {

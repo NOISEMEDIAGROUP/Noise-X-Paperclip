@@ -2,45 +2,32 @@ import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { deriveAgentUrlKey, deriveProjectUrlKey } from "@paperclipai/shared";
 import type { BillingType, FinanceDirection, FinanceEventKind } from "@paperclipai/shared";
+import {
+  formatCurrencyFromCents,
+  formatLocaleDate,
+  formatLocaleDateTime,
+  formatRelativeTimeFromNow,
+  getCurrentLanguage,
+} from "./locale";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
 export function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+  return formatCurrencyFromCents(cents);
 }
 
 export function formatDate(date: Date | string): string {
-  return new Date(date).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatLocaleDate(date);
 }
 
 export function formatDateTime(date: Date | string): string {
-  return new Date(date).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatLocaleDateTime(date);
 }
 
 export function relativeTime(date: Date | string): string {
-  const now = Date.now();
-  const then = new Date(date).getTime();
-  const diffSec = Math.round((now - then) / 1000);
-  if (diffSec < 60) return "just now";
-  const diffMin = Math.round(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.round(diffHr / 24);
-  if (diffDay < 30) return `${diffDay}d ago`;
-  return formatDate(date);
+  return formatRelativeTimeFromNow(date);
 }
 
 export function formatTokens(n: number): string {
@@ -64,13 +51,14 @@ export function providerDisplayName(provider: string): string {
 }
 
 export function billingTypeDisplayName(billingType: BillingType): string {
+  const isPt = getCurrentLanguage() === "pt-BR";
   const map: Record<BillingType, string> = {
     metered_api: "Metered API",
-    subscription_included: "Subscription",
-    subscription_overage: "Subscription overage",
-    credits: "Credits",
-    fixed: "Fixed",
-    unknown: "Unknown",
+    subscription_included: isPt ? "Assinatura" : "Subscription",
+    subscription_overage: isPt ? "Excedente da assinatura" : "Subscription overage",
+    credits: isPt ? "Creditos" : "Credits",
+    fixed: isPt ? "Fixo" : "Fixed",
+    unknown: isPt ? "Desconhecido" : "Unknown",
   };
   return map[billingType];
 }
@@ -118,27 +106,31 @@ export function visibleRunCostUsd(
 }
 
 export function financeEventKindDisplayName(eventKind: FinanceEventKind): string {
+  const isPt = getCurrentLanguage() === "pt-BR";
   const map: Record<FinanceEventKind, string> = {
     inference_charge: "Inference charge",
-    platform_fee: "Platform fee",
-    credit_purchase: "Credit purchase",
-    credit_refund: "Credit refund",
-    credit_expiry: "Credit expiry",
+    platform_fee: isPt ? "Taxa da plataforma" : "Platform fee",
+    credit_purchase: isPt ? "Compra de creditos" : "Credit purchase",
+    credit_refund: isPt ? "Reembolso de creditos" : "Credit refund",
+    credit_expiry: isPt ? "Expiracao de creditos" : "Credit expiry",
     byok_fee: "BYOK fee",
-    gateway_overhead: "Gateway overhead",
-    log_storage_charge: "Log storage",
+    gateway_overhead: isPt ? "Sobrecarga do gateway" : "Gateway overhead",
+    log_storage_charge: isPt ? "Armazenamento de logs" : "Log storage",
     logpush_charge: "Logpush",
-    provisioned_capacity_charge: "Provisioned capacity",
-    training_charge: "Training",
-    custom_model_import_charge: "Custom model import",
-    custom_model_storage_charge: "Custom model storage",
-    manual_adjustment: "Manual adjustment",
+    provisioned_capacity_charge: isPt ? "Capacidade provisionada" : "Provisioned capacity",
+    training_charge: isPt ? "Treinamento" : "Training",
+    custom_model_import_charge: isPt ? "Importacao de modelo customizado" : "Custom model import",
+    custom_model_storage_charge: isPt ? "Armazenamento de modelo customizado" : "Custom model storage",
+    manual_adjustment: isPt ? "Ajuste manual" : "Manual adjustment",
   };
   return map[eventKind];
 }
 
 export function financeDirectionDisplayName(direction: FinanceDirection): string {
-  return direction === "credit" ? "Credit" : "Debit";
+  const isPt = getCurrentLanguage() === "pt-BR";
+  return direction === "credit"
+    ? (isPt ? "Credito" : "Credit")
+    : (isPt ? "Debito" : "Debit");
 }
 
 /** Build an issue URL using the human-readable identifier when available. */

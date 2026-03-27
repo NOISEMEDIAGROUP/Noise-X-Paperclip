@@ -33,6 +33,7 @@ import { applyMentionChipDecoration, clearMentionChipDecoration, parseMentionChi
 import { MentionAwareLinkNode, mentionAwareLinkNodeReplacement } from "../lib/mention-aware-link-node";
 import { mentionDeletionPlugin } from "../lib/mention-deletion";
 import { cn } from "../lib/utils";
+import { t } from "../lib/locale";
 
 /* ---- Mention types ---- */
 
@@ -594,7 +595,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
                 <span>{option.name}</span>
                 {option.kind === "project" && option.projectId && (
                   <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Project
+                    {t("Project")}
                   </span>
                 )}
               </button>
@@ -610,7 +611,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
             !bordered && "inset-0 rounded-sm",
           )}
         >
-          Drop image to upload
+          {t("Drop image to upload")}
         </div>
       )}
       {uploadError && (
