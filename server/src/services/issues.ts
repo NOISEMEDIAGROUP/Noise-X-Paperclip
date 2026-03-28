@@ -763,6 +763,7 @@ export function issueService(db: Db) {
       if (!isUuidLike(companyId)) throw unprocessable("Invalid companyId");
       if (!isUuidLike(issueId)) throw notFound("Issue not found");
       if (typeof userId !== "string" || userId.trim().length === 0) throw unprocessable("Invalid userId");
+      if (!(readAt instanceof Date) || Number.isNaN(readAt.getTime())) throw unprocessable("Invalid readAt");
       const now = new Date();
       const [row] = await db
         .insert(issueReadStates)

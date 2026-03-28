@@ -759,6 +759,15 @@ describe("issueService.list participantAgentId", () => {
     });
   });
 
+  it("returns unprocessable for malformed readAt values on markRead", async () => {
+    await expect(
+      svc.markRead(randomUUID(), randomUUID(), "user-1", "not-a-date" as any),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: "Invalid readAt",
+    });
+  });
+
   it("returns null for malformed issue ids on getById", async () => {
     await expect(svc.getById("not-a-uuid")).resolves.toBeNull();
   });
