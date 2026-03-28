@@ -850,6 +850,17 @@ describe("issueService.list participantAgentId", () => {
     });
   });
 
+  it("returns unprocessable for malformed company ids on create", async () => {
+    await expect(
+      svc.create("not-a-uuid", {
+        title: "Invalid company guard",
+      } as any),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: "Invalid companyId",
+    });
+  });
+
   it("returns unprocessable for malformed workspace ids on create", async () => {
     await expect(
       svc.create(randomUUID(), {

@@ -809,6 +809,7 @@ export function issueService(db: Db) {
       companyId: string,
       data: Omit<typeof issues.$inferInsert, "companyId"> & { labelIds?: string[] },
     ) => {
+      if (!isUuidLike(companyId)) throw unprocessable("Invalid companyId");
       const { labelIds: inputLabelIds, ...issueData } = data;
       assertOptionalUuidField(issueData.projectId, "projectId");
       assertOptionalUuidField(issueData.parentId, "parentId");
