@@ -815,4 +815,75 @@ describe("issueService.list participantAgentId", () => {
       message: "One or more labels must be valid UUIDs",
     });
   });
+
+  it("returns unprocessable for malformed project/parent/goal ids on create", async () => {
+    await expect(
+      svc.create(randomUUID(), {
+        title: "Invalid project id guard",
+        projectId: "not-a-uuid",
+      } as any),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: "Invalid projectId",
+    });
+
+    await expect(
+      svc.create(randomUUID(), {
+        title: "Invalid parent id guard",
+        parentId: "not-a-uuid",
+      } as any),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: "Invalid parentId",
+    });
+
+    await expect(
+      svc.create(randomUUID(), {
+        title: "Invalid goal id guard",
+        goalId: "not-a-uuid",
+      } as any),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: "Invalid goalId",
+    });
+  });
+
+  it("returns unprocessable for malformed project/parent/goal ids on update", async () => {
+    const companyId = randomUUID();
+    const issueId = randomUUID();
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Update malformed ids guard",
+      status: "todo",
+      priority: "medium",
+    });
+
+    await expect(
+      svc.update(issueId, { projectId: "not-a-uuid" } as any),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: "Invalid projectId",
+    });
+
+    await expect(
+      svc.update(issueId, { parentId: "not-a-uuid" } as any),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: "Invalid parentId",
+    });
+
+    await expect(
+      svc.update(issueId, { goalId: "not-a-uuid" } as any),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: "Invalid goalId",
+    });
+  });
 });

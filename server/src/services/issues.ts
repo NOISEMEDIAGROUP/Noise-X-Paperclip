@@ -82,6 +82,13 @@ function asNonEmptyString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function assertOptionalUuidField(value: unknown, fieldName: string) {
+  if (value == null) return;
+  if (typeof value !== "string" || !isUuidLike(value.trim())) {
+    throw unprocessable(`Invalid ${fieldName}`);
+  }
+}
+
 type IssueRow = typeof issues.$inferSelect;
 type IssueLabelRow = typeof labels.$inferSelect;
 type IssueActiveRunRow = {
@@ -803,6 +810,12 @@ export function issueService(db: Db) {
       data: Omit<typeof issues.$inferInsert, "companyId"> & { labelIds?: string[] },
     ) => {
       const { labelIds: inputLabelIds, ...issueData } = data;
+      assertOptionalUuidField(issueData.projectId, "projectId");
+      assertOptionalUuidField(issueData.parentId, "parentId");
+      assertOptionalUuidField(issueData.goalId, "goalId");
+      assertOptionalUuidField(issueData.assigneeAgentId, "assigneeAgentId");
+      assertOptionalUuidField(issueData.projectWorkspaceId, "projectWorkspaceId");
+      assertOptionalUuidField(issueData.executionWorkspaceId, "executionWorkspaceId");
       const isolatedWorkspacesEnabled = (await instanceSettings.getExperimental()).enableIsolatedWorkspaces;
       if (!isolatedWorkspacesEnabled) {
         delete issueData.executionWorkspaceId;
@@ -919,6 +932,12 @@ export function issueService(db: Db) {
       if (!existing) return null;
 
       const { labelIds: nextLabelIds, ...issueData } = data;
+      assertOptionalUuidField(issueData.projectId, "projectId");
+      assertOptionalUuidField(issueData.parentId, "parentId");
+      assertOptionalUuidField(issueData.goalId, "goalId");
+      assertOptionalUuidField(issueData.assigneeAgentId, "assigneeAgentId");
+      assertOptionalUuidField(issueData.projectWorkspaceId, "projectWorkspaceId");
+      assertOptionalUuidField(issueData.executionWorkspaceId, "executionWorkspaceId");
       const isolatedWorkspacesEnabled = (await instanceSettings.getExperimental()).enableIsolatedWorkspaces;
       if (!isolatedWorkspacesEnabled) {
         delete issueData.executionWorkspaceId;
