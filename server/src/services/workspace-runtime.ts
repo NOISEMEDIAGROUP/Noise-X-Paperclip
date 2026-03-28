@@ -12,6 +12,10 @@ import { asNumber, asString, parseObject, renderTemplate } from "../adapters/uti
 import { resolveHomeAwarePath } from "../home-paths.js";
 import type { WorkspaceOperationRecorder } from "./workspace-operations.js";
 
+export function resolveShell(): string {
+  return process.env.SHELL?.trim() || (process.platform === "win32" ? "sh" : "/bin/sh");
+}
+
 export interface ExecutionWorkspaceInput {
   baseCwd: string;
   source: "project_primary" | "task_session" | "agent_home";
@@ -327,7 +331,7 @@ async function runWorkspaceCommand(input: {
   env: NodeJS.ProcessEnv;
   label: string;
 }) {
-  const shell = process.env.SHELL?.trim() || "/bin/sh";
+  const shell = resolveShell();
   const proc = await executeProcess({
     command: shell,
     args: ["-c", input.command],
@@ -423,7 +427,7 @@ async function recordWorkspaceCommandOperation(
     cwd: input.cwd,
     metadata: input.metadata ?? null,
     run: async () => {
-      const shell = process.env.SHELL?.trim() || "/bin/sh";
+      const shell = resolveShell();
       const result = await executeProcess({
         command: shell,
         args: ["-c", input.command],
@@ -1122,7 +1126,7 @@ async function startLocalRuntimeService(input: {
     const portEnvKey = asString(portConfig.envKey, "PORT");
     env[portEnvKey] = String(port);
   }
-  const shell = process.env.SHELL?.trim() || "/bin/sh";
+  const shell = resolveShell();
   const child = spawn(shell, ["-lc", command], {
     cwd: serviceCwd,
     env,
