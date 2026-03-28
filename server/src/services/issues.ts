@@ -1732,6 +1732,8 @@ export function issueService(db: Db) {
         }
       }
       if (mentionedIds.size === 0) return [];
+      const candidateProjectIds = [...mentionedIds].filter((projectId) => isUuidLike(projectId));
+      if (candidateProjectIds.length === 0) return [];
 
       const rows = await db
         .select({ id: projects.id })
@@ -1739,11 +1741,11 @@ export function issueService(db: Db) {
         .where(
           and(
             eq(projects.companyId, issue.companyId),
-            inArray(projects.id, [...mentionedIds]),
+            inArray(projects.id, candidateProjectIds),
           ),
         );
       const valid = new Set(rows.map((row) => row.id));
-      return [...mentionedIds].filter((projectId) => valid.has(projectId));
+      return candidateProjectIds.filter((projectId) => valid.has(projectId));
     },
 
     getAncestors: async (issueId: string) => {

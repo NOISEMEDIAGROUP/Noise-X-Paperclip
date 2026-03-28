@@ -754,6 +754,35 @@ describe("issueService.list participantAgentId", () => {
     await expect(svc.findMentionedProjectIds("not-a-uuid")).resolves.toEqual([]);
   });
 
+  it("ignores malformed project mention ids instead of throwing", async () => {
+    const companyId = randomUUID();
+    const issueId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Mention parser safety [bad](project://not-a-uuid)",
+      description: "Also malformed [project](project://still-not-a-uuid)",
+      status: "todo",
+      priority: "medium",
+    });
+
+    await db.insert(issueComments).values({
+      issueId,
+      companyId,
+      body: "comment malformed mention [oops](project://definitely-not-a-uuid)",
+    });
+
+    await expect(svc.findMentionedProjectIds(issueId)).resolves.toEqual([]);
+  });
+
   it("returns an empty list for malformed issue ids on getAncestors", async () => {
     await expect(svc.getAncestors("not-a-uuid")).resolves.toEqual([]);
   });
