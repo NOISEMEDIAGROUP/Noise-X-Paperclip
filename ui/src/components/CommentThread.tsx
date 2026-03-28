@@ -15,6 +15,7 @@ import { PluginSlotOutlet } from "@/plugins/slots";
 interface CommentWithRunMeta extends IssueComment {
   runId?: string | null;
   runAgentId?: string | null;
+  injected?: boolean;
 }
 
 interface LinkedRunItem {
@@ -203,6 +204,11 @@ const TimelineList = memo(function TimelineList({
                     missingBehavior="placeholder"
                   />
                 ) : null}
+                {comment.injected && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                    delivered live
+                  </span>
+                )}
                 <a
                   href={`#comment-${comment.id}`}
                   className="text-xs text-muted-foreground hover:text-foreground hover:underline transition-colors"
