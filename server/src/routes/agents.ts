@@ -1710,9 +1710,18 @@ export function agentRoutes(db: Db) {
       Object.prototype.hasOwnProperty.call(patchData, "adapterType") ||
       Object.prototype.hasOwnProperty.call(patchData, "adapterConfig");
     if (touchesAdapterConfiguration) {
-      const rawEffectiveAdapterConfig = Object.prototype.hasOwnProperty.call(patchData, "adapterConfig")
+      const existingAdapterConfig = asRecord(existing.adapterConfig) ?? {};
+      const incomingAdapterConfig = Object.prototype.hasOwnProperty.call(patchData, "adapterConfig")
         ? (asRecord(patchData.adapterConfig) ?? {})
-        : (asRecord(existing.adapterConfig) ?? {});
+        : existingAdapterConfig;
+      // Merge incoming config with existing so that fields not managed by the
+      // UI (e.g. dangerouslySkipPermissions, instructionsRootPath) are preserved.
+      // When adapter type changes, skip the merge — old fields are meaningless.
+      const isAdapterTypeChange = Object.prototype.hasOwnProperty.call(patchData, "adapterType") &&
+        patchData.adapterType !== existing.adapterType;
+      const rawEffectiveAdapterConfig = isAdapterTypeChange
+        ? incomingAdapterConfig
+        : { ...existingAdapterConfig, ...incomingAdapterConfig };
       const effectiveAdapterConfig = applyCreateDefaultsByAdapterType(
         requestedAdapterType,
         rawEffectiveAdapterConfig,
