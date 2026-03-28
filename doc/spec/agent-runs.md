@@ -72,45 +72,45 @@
 7. Agent 设置中缺少提示词模板变量/pill 系统。
 8. 缺少感知部署环境的完整运行日志存储适配器（磁盘/对象存储等）。
 
-## 5. Architecture Overview
+## 5. 架构概览
 
-The subsystem introduces six cooperating components:
+该子系统引入六个协同组件：
 
-1. `Adapter Registry`
-   - Maps `adapter_type` to implementation.
-   - Exposes capability metadata and config validation.
+1. `Adapter Registry`（适配器注册表）
+   - 将 `adapter_type` 映射到具体实现。
+   - 暴露能力元数据及配置校验。
 
-2. `Wakeup Coordinator`
-   - Single entrypoint for all wakeups (`timer`, `assignment`, `on_demand`, `automation`).
-   - Applies dedupe/coalescing and queue rules.
+2. `Wakeup Coordinator`（唤醒协调器）
+   - 所有唤醒的单一入口（`timer`、`assignment`、`on_demand`、`automation`）。
+   - 应用去重/合并与队列规则。
 
-3. `Run Executor`
-   - Claims queued wakeups.
-   - Creates `heartbeat_runs`.
-   - Spawns/monitors child processes for local adapters.
-   - Handles timeout/cancel/graceful kill.
+3. `Run Executor`（运行执行器）
+   - 认领队列中的唤醒请求。
+   - 创建 `heartbeat_runs`。
+   - 为本地适配器派生/监控子进程。
+   - 处理超时/取消/优雅终止。
 
-4. `Runtime State Store`
-   - Persists resumable adapter state per agent.
-   - Persists run usage summaries and lightweight run-event timeline.
+4. `Runtime State Store`（运行时状态存储）
+   - 按 agent 持久化可恢复的适配器状态。
+   - 持久化运行用量摘要及轻量运行事件时间线。
 
-5. `Run Log Store`
-   - Persists full stdout/stderr streams via pluggable storage adapter.
-   - Returns stable `logRef` for retrieval (local path, object key, or DB reference).
+5. `Run Log Store`（运行日志存储）
+   - 通过可插拔存储适配器持久化完整的 stdout/stderr 流。
+   - 返回用于检索的稳定 `logRef`（本地路径、对象键或 DB 引用）。
 
-6. `Realtime Event Hub`
-   - Publishes run/agent/task updates over websocket.
-   - Supports selective subscription by company.
+6. `Realtime Event Hub`（实时事件中心）
+   - 通过 websocket 发布运行/agent/任务更新。
+   - 支持按公司进行选择性订阅。
 
-Control flow (happy path):
+控制流（正常路径）：
 
-1. Trigger arrives (`timer`, `assignment`, `on_demand`, or `automation`).
-2. Wakeup coordinator enqueues/merges wake request.
-3. Executor claims request, creates run row, marks agent `running`.
-4. Adapter executes, emits status/log/usage events.
-5. Full logs stream to `RunLogStore`; metadata/events are persisted to DB and pushed to websocket subscribers.
-6. Process exits, output parser updates run result + runtime state.
-7. Agent returns to `idle` or `error`; UI updates in real time.
+1. 触发器到达（`timer`、`assignment`、`on_demand` 或 `automation`）。
+2. 唤醒协调器将唤醒请求入队/合并。
+3. 执行器认领请求，创建运行行，将 agent 标记为 `running`。
+4. 适配器执行，发出 status/log/usage 事件。
+5. 完整日志流入 `RunLogStore`；元数据/事件持久化到 DB 并推送至 websocket 订阅者。
+6. 进程退出，输出解析器更新运行结果 + 运行时状态。
+7. Agent 返回 `idle` 或 `error`；UI 实时更新。
 
 ## 6. Agent Run Protocol (Version `agent-run/v1`)
 

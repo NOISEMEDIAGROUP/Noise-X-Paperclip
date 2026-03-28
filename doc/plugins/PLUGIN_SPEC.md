@@ -88,15 +88,15 @@ Paperclip 插件设计基于以下假设：
 6. 使用简单、明确、有类型的合约。
 7. 保持故障隔离，使单个插件不会导致整个实例崩溃。
 
-## 4. Non-Goals
+## 4. 非目标
 
-The first plugin system must not:
+第一个插件系统不得：
 
-1. Allow arbitrary plugins to override core routes or core invariants.
-2. Allow arbitrary plugins to mutate approval, auth, issue checkout, or budget enforcement logic.
-3. Allow arbitrary third-party plugins to run free-form DB migrations.
-4. Depend on project-local plugin folders such as `.paperclip/plugins`.
-5. Depend on automatic install-and-execute behavior at server startup from arbitrary config files.
+1. 允许任意插件覆盖核心路由或核心不变量。
+2. 允许任意插件修改审批、认证、问题签出或预算执行逻辑。
+3. 允许任意第三方插件运行自由格式的数据库迁移。
+4. 依赖项目本地插件文件夹（如 `.paperclip/plugins`）。
+5. 依赖服务器启动时从任意配置文件自动安装并执行的行为。
 
 ## 5. Terminology
 

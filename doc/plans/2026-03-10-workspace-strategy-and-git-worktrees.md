@@ -44,49 +44,49 @@ Paperclip 应建模**执行工作区（execution workspaces）**，而非 **work
 - 远程或云适配器可以以结构化形式接收相同的执行意图，并在其自己的环境中实现
 - Paperclip 不应假设每个适配器都能看到或直接使用宿主文件系统路径
 
-## Answer to the Main Framing Questions
+## 主要框架问题的解答
 
-### Are worktrees for agents or for repos/projects?
+### Worktrees 是用于代理的还是用于仓库/项目的？
 
-They should be treated as **repo/project-scoped infrastructure**, not agent identity.
+它们应被视为**仓库/项目范围的基础设施**，而非代理身份的一部分。
 
-The stable object is the project workspace. Agents come and go, ownership changes, and the same issue may be reassigned. A git worktree is a derived checkout of a repo workspace for a specific task or issue. The agent uses it, but should not own the abstraction.
+稳定的对象是项目工作区。代理来来去去，所有权会发生变化，同一个问题也可能被重新分配。git worktree 是针对特定任务或问题从仓库工作区派生的检出。代理使用它，但不应拥有该抽象。
 
-If Paperclip makes worktrees agent-first, it will blur:
+如果 Paperclip 将 worktrees 以代理为先，将会混淆：
 
-- agent home directories
-- project repo roots
-- issue-specific branches/checkouts
+- 代理主目录
+- 项目仓库根目录
+- 问题特定的分支/检出
 
-That makes reuse, reassignment, cleanup, and UI visibility harder.
+这会使复用、重新分配、清理和 UI 可见性变得更加困难。
 
-### How do we preserve optionality?
+### 我们如何保持灵活性？
 
-By making execution workspace strategy **opt-in at the adapter/config layer**, not a global invariant.
+通过使执行工作区策略**在适配器/配置层面选择性启用**，而非作为全局不变量。
 
-Defaults should remain:
+默认值应保持：
 
-- existing project workspace resolution
-- existing task-session resume
-- existing agent-home fallback
+- 现有的项目工作区解析
+- 现有的任务会话恢复
+- 现有的代理主目录回退
 
-Then local coding agents can opt into a strategy like `git_worktree`.
+然后本地编码代理可以选择加入 `git_worktree` 这样的策略。
 
-### How do we make this portable and adapter-appropriate?
+### 我们如何使其可移植且适配器友好？
 
-By splitting responsibilities:
+通过拆分职责：
 
-- Paperclip core resolves and records execution workspace state
-- a shared local runtime helper can implement git-based checkout strategies
-- each adapter launches its tool inside the resolved cwd using adapter-specific flags
+- Paperclip 核心解析并记录执行工作区状态
+- 共享的本地运行时助手可以实现基于 git 的检出策略
+- 每个适配器使用适配器特定的标志在解析后的 cwd 内启动其工具
 
-This avoids forcing a Claude-shaped or Codex-shaped model onto all adapters.
+这避免了将 Claude 形态或 Codex 形态的模型强加给所有适配器。
 
-It also avoids forcing a host-filesystem model onto cloud agents. A cloud adapter may interpret the same requested strategy as:
+这也避免了将宿主文件系统模型强加给云代理。云适配器可以将相同的请求策略解释为：
 
-- create a fresh sandbox checkout from repo + ref
-- create an isolated branch/workspace inside the provider's remote environment
-- ignore local-only fields like host cwd while still honoring branch/ref/isolation intent
+- 从 repo + ref 创建一个全新的沙盒检出
+- 在提供商的远程环境中创建一个隔离的分支/工作区
+- 忽略宿主 cwd 等仅限本地的字段，同时仍遵循分支/ref/隔离意图
 
 ## Product and UX Requirements
 

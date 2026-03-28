@@ -82,42 +82,42 @@ HOST_PORT=3233 DATA_DIR=./data/release-smoke-stable PAPERCLIPAI_VERSION=latest .
 
 因此，正确的做法是扩展现有的测试/发布体系，而非另起炉灶。
 
-## Product Decision
+## 产品决策
 
-### 1. The release smoke should stay deterministic and token-free
+### 1. 发布冒烟应保持确定性且无需外部 token
 
-The first version should not require OpenAI, Anthropic, or external agent credentials.
+第一个版本不应依赖 OpenAI、Anthropic 或外部智能体凭据。
 
-Use the onboarding flow with a deterministic adapter that can run on a stock GitHub runner and inside the published Docker install. The existing `process` adapter with a trivial command is the right base path for this release gate.
+使用确定性适配器的引导流程，该适配器可在标准 GitHub runner 和已发布的 Docker 安装中运行。现有的 `process` 适配器配合一个简单命令是此发布门禁的正确基础路径。
 
-That keeps this test focused on:
+这样可以让该测试聚焦于：
 
-- release packaging
-- auth/bootstrap
-- UI routing
-- onboarding contract
-- agent creation
-- heartbeat invocation plumbing
+- 发布打包
+- 认证/引导
+- UI 路由
+- 引导流程契约
+- 智能体创建
+- 心跳调用管道
 
-Later we can add a second credentialed smoke lane for real model-backed agents.
+之后可以为真实模型驱动的智能体添加第二条需要凭据的冒烟通道。
 
-### 2. Smoke credentials become an explicit test contract
+### 2. 冒烟凭据成为明确的测试契约
 
-The current defaults in `scripts/docker-onboard-smoke.sh` should be treated as stable test fixtures:
+`scripts/docker-onboard-smoke.sh` 中的当前默认值应被视为稳定的测试固件：
 
-- email: `smoke-admin@paperclip.local`
-- password: `paperclip-smoke-password`
+- 邮箱：`smoke-admin@paperclip.local`
+- 密码：`paperclip-smoke-password`
 
-The browser test should log in with those exact values unless overridden by env vars.
+除非通过环境变量覆盖，否则浏览器测试应使用这些确切值登录。
 
-### 3. Published-package smoke and source-tree E2E stay separate
+### 3. 已发布包的冒烟测试与源代码树端到端测试保持独立
 
-Keep two lanes:
+维护两条通道：
 
-- source-tree E2E for feature development
-- published Docker release smoke for release confidence
+- 源代码树端到端测试用于功能开发
+- 已发布 Docker 发布冒烟测试用于发布信心保障
 
-They overlap on onboarding assertions, but they guard different failure classes.
+两者在引导流程断言上有重叠，但它们防护的是不同类别的故障。
 
 ## Proposed Design
 

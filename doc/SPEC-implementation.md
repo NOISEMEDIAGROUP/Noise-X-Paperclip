@@ -143,11 +143,11 @@ V1 不需要独立的队列基础设施。
 - `spent_monthly_cents` int not null default 0
 - `last_heartbeat_at` timestamptz null
 
-Invariants:
+不变量：
 
-- agent and manager must be in same company
-- no cycles in reporting tree
-- `terminated` agents cannot be resumed
+- 智能体与其上级必须属于同一公司
+- 汇报树中不允许出现循环
+- `terminated` 状态的智能体无法恢复
 
 ## 7.3 `agent_api_keys`
 
@@ -159,7 +159,7 @@ Invariants:
 - `last_used_at` timestamptz null
 - `revoked_at` timestamptz null
 
-Invariant: plaintext key shown once at creation; only hash stored.
+不变量：明文密钥仅在创建时展示一次；仅存储哈希值。
 
 ## 7.4 `goals`
 
@@ -172,7 +172,7 @@ Invariant: plaintext key shown once at creation; only hash stored.
 - `owner_agent_id` uuid fk `agents.id` null
 - `status` enum: `planned | active | achieved | cancelled`
 
-Invariant: at least one root `company` level goal per company.
+不变量：每个公司至少有一个根级 `company` 层级目标。
 
 ## 7.5 `projects`
 
@@ -185,7 +185,7 @@ Invariant: at least one root `company` level goal per company.
 - `lead_agent_id` uuid fk `agents.id` null
 - `target_date` date null
 
-## 7.6 `issues` (core task entity)
+## 7.6 `issues`（核心任务实体）
 
 - `id` uuid pk
 - `company_id` uuid fk not null
