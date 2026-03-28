@@ -44,77 +44,77 @@ Paperclip 应允许运营人员：
 
 两者相关，但不是同一概念。
 
-## Product Decisions
+## 产品决策
 
-### V1 Budget Defaults
+### V1 预算默认值
 
-For the next implementation pass, Paperclip should enforce these defaults:
+在下一轮实现中，Paperclip 应执行以下默认设置：
 
-- agent budgets are recurring monthly budgets
-- project budgets are lifetime total budgets
-- hard-stop enforcement uses billed dollars, not tokens
-- monthly windows use UTC calendar months
-- project total budgets do not reset automatically
+- 代理预算为周期性月度预算
+- 项目预算为生命周期总额预算
+- 硬停止执行使用计费金额，而非 token
+- 月度窗口使用 UTC 自然月
+- 项目总额预算不自动重置
 
-This gives a clean mental model:
+这提供了清晰的心智模型：
 
-- agents are ongoing workers, so monthly recurring budget is natural
-- projects are bounded workstreams, so lifetime cap is natural
+- 代理是持续工作的，因此月度循环预算是自然的选择
+- 项目是有边界的工作流，因此生命周期上限是自然的选择
 
-### Metric To Enforce First
+### 首先执行的指标
 
-The first enforceable metric should be `billed_cents`.
+第一个可执行指标应为 `billed_cents`。
 
-Reasoning:
+理由：
 
-- it works across providers, billers, and models
-- it maps directly to real financial risk
-- it handles overage and metered usage consistently
-- it avoids cross-provider token normalization problems
-- it applies cleanly even when future finance events are not token-based
+- 适用于所有提供商、计费方和模型
+- 直接映射到真实的财务风险
+- 一致地处理超额用量和计量用量
+- 避免跨提供商的 token 规范化问题
+- 即使未来的财务事件不基于 token，仍可干净地应用
 
-Token budgets should not be the first hard-stop policy.
-They should come later as advisory usage controls once the money-based system is solid.
+Token 预算不应作为第一个硬停止策略。
+等基于金额的系统稳固后，它们应作为咨询性用量控制稍后加入。
 
-### Subscription Usage Decision
+### 订阅用量决策
 
-Paperclip should separate subscription-included usage from billed spend:
+Paperclip 应将订阅内含用量与计费消费区分开来：
 
 - `subscription_included`
-  - visible in reporting
-  - visible in usage summaries
-  - does not count against money budget
+  - 在报告中可见
+  - 在用量摘要中可见
+  - 不计入金额预算
 - `subscription_overage`
-  - visible in reporting
-  - counts against money budget
+  - 在报告中可见
+  - 计入金额预算
 - `metered_api`
-  - visible in reporting
-  - counts against money budget
+  - 在报告中可见
+  - 计入金额预算
 
-This keeps the budget system honest:
+这确保了预算系统的诚实性：
 
-- users should not see "spend" rise for usage that did not incur marginal billed cost
-- users should still see the token usage and provider quota state
+- 用户不应看到"消费"因未产生边际计费成本的用量而增加
+- 用户仍应看到 token 用量和提供商配额状态
 
-### Soft Alert Versus Hard Stop
+### 软警告与硬停止
 
-Paperclip should have two threshold classes:
+Paperclip 应有两个阈值等级：
 
-- soft alert
-  - creates visible notification state
-  - does not create an approval
-  - does not pause work
-- hard stop
-  - pauses the affected scope automatically
-  - creates an approval requiring human resolution
-  - prevents additional heartbeats or task pickup in that scope
+- 软警告
+  - 创建可见的通知状态
+  - 不创建审批
+  - 不暂停工作
+- 硬停止
+  - 自动暂停受影响的范围
+  - 创建需要人工处理的审批
+  - 阻止该范围内的额外心跳或任务接取
 
-Default thresholds:
+默认阈值：
 
-- soft alert at `80%`
-- hard stop at `100%`
+- 软警告在 `80%`
+- 硬停止在 `100%`
 
-These should be configurable per policy later, but they are good defaults now.
+这些应在后续可按策略配置，但目前作为默认值是合适的。
 
 ## Scope Model
 

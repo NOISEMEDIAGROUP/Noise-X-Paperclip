@@ -574,16 +574,16 @@ interface AgentAdapter {
 }
 ```
 
-Behavior:
+行为：
 
-- spawn child process
-- stream stdout/stderr to run logs
-- mark run status on exit code/timeout
-- cancel sends SIGTERM then SIGKILL after grace
+- 派生子进程
+- 将 stdout/stderr 流式传输到运行日志
+- 根据退出码/超时标记运行状态
+- 取消时先发送 SIGTERM，宽限期后发送 SIGKILL
 
-## 11.3 HTTP Adapter
+## 11.3 HTTP 适配器
 
-Config shape:
+配置结构：
 
 ```json
 {
@@ -595,31 +595,31 @@ Config shape:
 }
 ```
 
-Behavior:
+行为：
 
-- invoke by outbound HTTP request
-- 2xx means accepted
-- non-2xx marks failed invocation
-- optional callback endpoint allows asynchronous completion updates
+- 通过出站 HTTP 请求调用
+- 2xx 表示已接受
+- 非 2xx 标记调用失败
+- 可选的回调端点允许异步完成状态更新
 
-## 11.4 Context Delivery
+## 11.4 上下文传递
 
-- `thin`: send IDs and pointers only; agent fetches context via API
-- `fat`: include current assignments, goal summary, budget snapshot, and recent comments
+- `thin`：仅发送 ID 和指针；智能体通过 API 获取上下文
+- `fat`：包含当前分配、目标摘要、预算快照和最近评论
 
-## 11.5 Scheduler Rules
+## 11.5 调度规则
 
-Per-agent schedule fields in `adapter_config`:
+`adapter_config` 中每个智能体的调度字段：
 
-- `enabled` boolean
-- `intervalSec` integer (minimum 30)
-- `maxConcurrentRuns` fixed at `1` for V1
+- `enabled` 布尔值
+- `intervalSec` 整数（最小值为 30）
+- `maxConcurrentRuns` V1 中固定为 `1`
 
-Scheduler must skip invocation when:
+调度器在以下情况必须跳过调用：
 
-- agent is paused/terminated
-- an existing run is active
-- hard budget limit has been hit
+- 智能体已暂停/已终止
+- 存在活跃的运行
+- 已触达硬预算上限
 
 ## 12. Governance and Approval Flows
 

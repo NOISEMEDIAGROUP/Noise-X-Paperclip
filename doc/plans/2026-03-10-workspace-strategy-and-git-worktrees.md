@@ -409,16 +409,16 @@ type ProjectExecutionWorkspacePolicy = {
 };
 ```
 
-Notes:
+注意：
 
-- `enabled` controls whether the project exposes isolated issue checkout behavior at all
-- `defaultMode` controls issue creation defaults
-- `implementation` stays generic enough for local or remote adapters
-- runtime service config stays nested here, not in the default agent form
+- `enabled` 控制项目是否完全暴露独立问题检出行为
+- `defaultMode` 控制问题创建的默认值
+- `implementation` 保持足够通用以适配本地或远程适配器
+- 运行时服务配置嵌套在此处，不在默认代理表单中
 
-### Issue-level fields
+### 问题级字段
 
-Add issue-owned opt-in/override fields. Suggested shape:
+添加问题拥有的选择加入/覆盖字段。建议的形态：
 
 ```ts
 type IssueExecutionWorkspaceSettings = {
@@ -428,19 +428,19 @@ type IssueExecutionWorkspaceSettings = {
 };
 ```
 
-This should usually be hidden behind simple UI:
+这通常应隐藏在简单 UI 背后：
 
-- a checkbox like `Use isolated issue checkout`
-- advanced controls only when needed
+- 一个复选框，如 `使用独立问题检出（Use isolated issue checkout）`
+- 仅在需要时显示高级控件
 
-### Agent-level fields
+### 代理级字段
 
-Keep agent-level workspace/runtime configuration, but reposition it as advanced override only.
+保留代理级工作区/运行时配置，但将其重新定位为仅限高级覆盖。
 
-Suggested semantics:
+建议的语义：
 
-- if absent, inherit project + issue policy
-- if present, override only the implementation detail needed for that adapter
+- 如果不存在，继承项目 + 问题策略
+- 如果存在，仅覆盖该适配器所需的实现细节
 
 ## Shared Type and API Changes
 

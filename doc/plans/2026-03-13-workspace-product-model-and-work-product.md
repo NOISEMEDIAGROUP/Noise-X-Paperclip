@@ -705,47 +705,47 @@ Paperclip 需要一个统一的地方来显示：
 - 如果来源类型是远程管理，显示提供商/引用字段并隐藏仅限本地路径的配置
 - 对于简单的独立用户，这可以是一个路径字段和一个保存按钮
 
-## 4. Issue Create Flow
+## 4. Issue 创建流程
 
-Issue creation should stay simple by default.
+Issue 创建默认应保持简单。
 
-### Default behavior
+### 默认行为
 
-If the selected project:
+如果选定的项目：
 
-- has no workspace automation: show no workspace UI
-- has one default project workspace and default execution mode: inherit silently
+- 没有工作区自动化：不显示工作区 UI
+- 有一个默认项目工作区和默认执行模式：静默继承
 
-### Show a `Workspace` section only when relevant
+### 仅在相关时显示 `Workspace` 区域
 
-#### Basic fields
+#### 基本字段
 
 - `Codebase`
-  - default selected project workspace
+  - 默认选定的项目工作区
 - `Execution mode`
   - `Project default`
   - `Shared workspace`
   - `Isolated workspace`
   - `Operator branch`
 
-#### Advanced-only field
+#### 仅限高级用户的字段
 
 - `Reuse existing execution workspace`
 
-This dropdown should show only active execution workspaces for the selected project workspace, with labels like:
+此下拉菜单应仅显示所选项目工作区的活跃执行工作区，标签如：
 
 - `dotta/integration-branch`
 - `PAP-447-add-worktree-support`
 - `shared primary workspace`
 
-### Important rule
+### 重要规则
 
-Do not show a picker containing every possible workspace object by default.
+默认不要显示包含所有可能工作区对象的选择器。
 
-The normal flow should feel like:
+正常流程应感觉像：
 
-- choose project
-- optionally choose codebase
+- 选择项目
+- 可选择代码库
 - optionally choose execution mode
 
 not:

@@ -535,21 +535,21 @@ Agent 级控制平面设置（非适配器专属）：
 }
 ```
 
-Rules:
+规则：
 
-1. `log_ref` must be opaque and provider-neutral at API boundaries.
-2. UI/API must not assume local filesystem semantics.
-3. Provider-specific secrets/credentials stay in server config, never in agent config.
+1. 在 API 边界处，`log_ref` 必须是不透明且 provider 中立的。
+2. UI/API 不得假设本地文件系统语义。
+3. Provider 专属的密钥/凭据保留在服务端配置中，绝不放入 agent 配置。
 
-## 10. Prompt Template and Pill System
+## 10. 提示词模板与 Pill 系统
 
-## 10.1 Template format
+## 10.1 模板格式
 
-- Mustache-style placeholders: `{{path.to.value}}`
-- No arbitrary code execution.
-- Unknown variable on save = validation error.
+- Mustache 风格占位符：`{{path.to.value}}`
+- 不允许任意代码执行。
+- 保存时遇到未知变量 = 校验错误。
 
-## 10.2 Initial variable catalog
+## 10.2 初始变量目录
 
 - `company.id`
 - `company.name`
@@ -561,37 +561,37 @@ Rules:
 - `run.source`
 - `run.startedAt`
 - `heartbeat.reason`
-- `paperclip.skill` (shared Paperclip skill text block)
+- `paperclip.skill`（共享的 Paperclip skill 文本块）
 - `credentials.apiBaseUrl`
-- `credentials.apiKey` (optional, sensitive)
+- `credentials.apiKey`（可选，敏感）
 
-## 10.3 Prompt fields
+## 10.3 提示词字段
 
 1. `promptTemplate`
-   - Used on every wakeup (first run and resumed runs).
-   - Can include run source/reason pills.
+   - 每次唤醒时使用（首次运行及恢复运行）。
+   - 可包含运行来源/原因 pills。
 
-## 10.4 UI requirements
+## 10.4 UI 要求
 
-1. Agent setup/edit form includes prompt editors with pill insertion.
-2. Variables are shown as clickable pills for fast insertion.
-3. Save-time validation indicates unknown/missing variables.
-4. Sensitive pills (`credentials.*`) show explicit warning badge.
+1. Agent 设置/编辑表单包含带 pill 插入功能的提示词编辑器。
+2. 变量显示为可点击的 pills 以便快速插入。
+3. 保存时校验提示未知/缺失的变量。
+4. 敏感 pills（`credentials.*`）显示明确的警告徽章。
 
-## 10.5 Security notes for credentials
+## 10.5 凭据安全说明
 
-1. Credentials in prompt are allowed for initial simplicity but discouraged.
-2. Preferred transport is env vars (`PAPERCLIP_*`) injected at runtime.
-3. Prompt preview and logs must redact sensitive values.
+1. 提示词中包含凭据在初期为方便而允许，但不建议使用。
+2. 首选传输方式是在运行时注入的 env vars（`PAPERCLIP_*`）。
+3. 提示词预览和日志必须对敏感值进行脱敏处理。
 
-## 11. Realtime Status Delivery
+## 11. 实时状态推送
 
-## 11.1 Transport
+## 11.1 传输方式
 
-Primary transport: websocket channel per company.
+主要传输方式：按公司的 websocket 通道。
 
-- Endpoint: `GET /api/companies/:companyId/events/ws`
-- Auth: board session or agent API key (company-bound)
+- 端点：`GET /api/companies/:companyId/events/ws`
+- 认证：看板 session 或 agent API key（公司绑定）
 
 ## 11.2 Event envelope
 

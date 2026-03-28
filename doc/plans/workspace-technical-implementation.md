@@ -1,55 +1,55 @@
 # Workspace Technical Implementation Spec
 
-## Role of This Document
+## 本文档的作用
 
-This document translates [workspace-product-model-and-work-product.md](/Users/dotta/paperclip-subissues/doc/plans/workspace-product-model-and-work-product.md) into an implementation-ready engineering plan.
+本文档将 [workspace-product-model-and-work-product.md](/Users/dotta/paperclip-subissues/doc/plans/workspace-product-model-and-work-product.md) 转化为可直接执行的工程实施计划。
 
-It is intentionally concrete:
+本文档有意保持具体性，涵盖以下内容：
 
-- schema and migration shape
-- shared contract updates
-- route and service changes
-- UI changes
-- rollout and compatibility rules
+- schema 与迁移结构
+- 共享契约更新
+- 路由与服务变更
+- UI 变更
+- 发布与兼容性规则
 
-This is the implementation target for the first workspace-aware delivery slice.
+这是第一个具备 workspace 感知能力的交付切片的实施目标。
 
-## Locked Decisions
+## 已锁定决策
 
-These decisions are treated as settled for this implementation:
+以下决策在本次实施中视为已确定：
 
-1. Add a new durable `execution_workspaces` table now.
-2. Each issue has at most one current execution workspace at a time.
-3. `issues` get explicit `project_workspace_id` and `execution_workspace_id`.
-4. Workspace reuse is in scope for V1.
-5. The feature is gated in the UI by `/instance/settings > Experimental > Workspaces`.
-6. The gate is UI-only. Backend model changes and migrations always ship.
-7. Existing users upgrade into compatibility-preserving defaults.
-8. `project_workspaces` evolves in place rather than being replaced.
-9. Work product is issue-first, with optional links to execution workspaces and runtime services.
-10. GitHub is the only PR provider in the first slice.
-11. Both `adapter_managed` and `cloud_sandbox` execution modes are in scope.
-12. Workspace controls ship first inside existing project properties, not in a new global navigation area.
-13. Subissues are out of scope for this implementation slice.
+1. 现在新增一张持久化的 `execution_workspaces` 表。
+2. 每个 issue 同一时刻最多关联一个当前执行 workspace。
+3. `issues` 表新增显式字段 `project_workspace_id` 和 `execution_workspace_id`。
+4. Workspace 复用在 V1 范围之内。
+5. 该功能通过 UI 路径 `/instance/settings > Experimental > Workspaces` 进行开关控制。
+6. 开关仅限 UI 层。后端模型变更和迁移始终随版本发布。
+7. 现有用户升级后将自动获得保持兼容性的默认值。
+8. `project_workspaces` 原地演进，不做替换。
+9. 工作产物以 issue 为核心，可选地与执行 workspace 和运行时服务关联。
+10. 第一个切片中 GitHub 是唯一的 PR 提供方。
+11. `adapter_managed` 和 `cloud_sandbox` 两种执行模式均在范围之内。
+12. Workspace 控件优先集成到现有项目属性中发布，不在新的全局导航区域中发布。
+13. 子 issue 不在本实施切片范围之内。
 
-## Non-Goals
+## 非目标
 
-- Building a full code review system
-- Solving subissue UX in this slice
-- Implementing reusable shared workspace definitions across projects in this slice
-- Reworking all current runtime service behavior before introducing execution workspaces
+- 构建完整的代码审查系统
+- 在本切片中解决子 issue 的用户体验
+- 在本切片中实现跨项目的可复用共享 workspace 定义
+- 在引入执行 workspace 之前重构所有现有运行时服务行为
 
-## Existing Baseline
+## 现有基线
 
-The repo already has:
+该代码库已包含：
 
 - `project_workspaces`
 - `projects.execution_workspace_policy`
 - `issues.execution_workspace_settings`
-- runtime service persistence in `workspace_runtime_services`
-- local git-worktree realization in `workspace-runtime.ts`
+- `workspace_runtime_services` 中的运行时服务持久化
+- `workspace-runtime.ts` 中的本地 git-worktree 实现
 
-This implementation should build on that baseline rather than fork it.
+本次实施应在现有基线之上构建，而非另起炉灶。
 
 ## Terminology
 

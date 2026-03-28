@@ -427,11 +427,11 @@ interface ModuleWidgetProps {
 
 ---
 
-## Company Templates
+## 公司模板
 
-### Format
+### 格式
 
-A company template is a JSON file describing a full company structure:
+公司模板是描述完整公司结构的 JSON 文件：
 
 ```json
 {
@@ -530,37 +530,37 @@ A company template is a JSON file describing a full company structure:
 }
 ```
 
-Templates use `ref` strings (not UUIDs) for internal cross-references. On import, the system maps refs to generated UUIDs.
+模板使用 `ref` 字符串（非 UUID）进行内部交叉引用。导入时，系统将 ref 映射为生成的 UUID。
 
-### Import Flow
-
-```
-1. Parse and validate the template JSON
-2. Check for ref uniqueness and dangling references
-3. Insert agents (topological sort by reportsTo)
-4. Insert goals (topological sort by parentRef)
-5. Insert projects
-6. Insert issues (resolve projectRef, assigneeRef, goalRef to real IDs)
-7. Log activity events for everything created
-```
-
-### Export Flow
-
-You can also export a running company as a template:
+### 导入流程
 
 ```
-GET /api/templates/export → downloads the current company as a template JSON
+1. 解析并验证模板 JSON
+2. 检查 ref 唯一性和悬空引用
+3. 插入智能体（按 reportsTo 拓扑排序）
+4. 插入目标（按 parentRef 拓扑排序）
+5. 插入项目
+6. 插入 issue（将 projectRef、assigneeRef、goalRef 解析为真实 ID）
+7. 为所有创建的内容记录活动事件
 ```
 
-This makes companies shareable and clonable.
+### 导出流程
+
+你也可以将运行中的公司导出为模板：
+
+```
+GET /api/templates/export → 以模板 JSON 形式下载当前公司
+```
+
+这使公司可以分享和克隆。
 
 ---
 
-## Company Store
+## 公司商店
 
-The Company Store is a registry for discovering and installing modules and templates. For v1, it's a curated GitHub repo with a JSON index. Later it could become a hosted service.
+公司商店是用于发现和安装模块与模板的注册表。v1 版本是一个带有 JSON 索引的精选 GitHub 仓库，后续可演变为托管服务。
 
-### Index Format
+### 索引格式
 
 ```json
 {
@@ -586,7 +586,7 @@ The Company Store is a registry for discovering and installing modules and templ
 }
 ```
 
-### CLI Commands
+### CLI 命令
 
 ```bash
 pnpm paperclipai store list                    # browse available modules and templates

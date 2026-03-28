@@ -14,40 +14,40 @@ Paperclip 的 UI 是专业级控制平面，而非玩具式仪表板。它应该
 - **情境化，非模态化。** 内联编辑优先于对话框，下拉菜单优先于页面跳转。用户的操作上下文不应被无谓地打断。
 - **默认深色主题。** 中性灰色，而非纯黑色。强调色仅用于状态和优先级。文本是主要视觉元素。
 
-### Color System
+### 颜色系统
 
-- **Background:** `hsl(220, 13%, 10%)` (dark charcoal, not pure black)
-- **Surface/Card:** `hsl(220, 13%, 13%)`
-- **Border:** `hsl(220, 10%, 18%)`
-- **Text primary:** `hsl(220, 10%, 90%)`
-- **Text secondary:** `hsl(220, 10%, 55%)`
-- **Accent (interactive):** `hsl(220, 80%, 60%)` (muted blue)
+- **背景色（Background）：** `hsl(220, 13%, 10%)`（深炭灰，非纯黑）
+- **表面/卡片（Surface/Card）：** `hsl(220, 13%, 13%)`
+- **边框（Border）：** `hsl(220, 10%, 18%)`
+- **主文本（Text primary）：** `hsl(220, 10%, 90%)`
+- **次要文本（Text secondary）：** `hsl(220, 10%, 55%)`
+- **强调色（Accent，可交互）：** `hsl(220, 80%, 60%)`（柔和蓝）
 
-Status colors (consistent across all entities):
-- **Backlog:** gray `hsl(220, 10%, 45%)`
-- **Todo:** gray-blue `hsl(220, 20%, 55%)`
-- **In Progress:** yellow `hsl(45, 90%, 55%)`
-- **In Review:** violet `hsl(270, 60%, 60%)`
-- **Done:** green `hsl(140, 60%, 50%)`
-- **Cancelled:** gray `hsl(220, 10%, 40%)`
-- **Blocked:** amber `hsl(25, 90%, 55%)`
+状态颜色（在所有实体中保持一致）：
+- **Backlog（积压）：** 灰色 `hsl(220, 10%, 45%)`
+- **Todo（待办）：** 灰蓝色 `hsl(220, 20%, 55%)`
+- **In Progress（进行中）：** 黄色 `hsl(45, 90%, 55%)`
+- **In Review（审核中）：** 紫罗兰色 `hsl(270, 60%, 60%)`
+- **Done（已完成）：** 绿色 `hsl(140, 60%, 50%)`
+- **Cancelled（已取消）：** 灰色 `hsl(220, 10%, 40%)`
+- **Blocked（被阻塞）：** 琥珀色 `hsl(25, 90%, 55%)`
 
-Priority indicators:
-- **Critical:** red circle, filled
-- **High:** orange circle, half-filled
-- **Medium:** yellow circle, outline
-- **Low:** gray circle, outline, dashed
+优先级指示器：
+- **Critical（紧急）：** 红色实心圆
+- **High（高）：** 橙色半填充圆
+- **Medium（中）：** 黄色空心圆
+- **Low（低）：** 灰色虚线空心圆
 
-### Typography
+### 字体排印
 
-- **Font:** System font stack (Inter if loaded, else `-apple-system, BlinkMacSystemFont, 'Segoe UI'`)
-- **Body:** 13px / 1.5 line-height
-- **Labels/metadata:** 11px / uppercase tracking
-- **Headings:** 14-18px / semi-bold, never all-caps
+- **字体（Font）：** 系统字体栈（优先加载 Inter，否则使用 `-apple-system, BlinkMacSystemFont, 'Segoe UI'`）
+- **正文（Body）：** 13px / 行高 1.5
+- **标签/元数据（Labels/metadata）：** 11px / 大写字母间距
+- **标题（Headings）：** 14-18px / 半粗体，绝不全大写
 
-### Icons
+### 图标
 
-Use `lucide-react` throughout. Every sidebar item, every status indicator, every action button should have an icon. Icons are 16px in nav, 14px inline.
+全程使用 `lucide-react`。每个侧边栏项目、每个状态指示器、每个操作按钮都应有图标。导航中图标为 16px，内联图标为 14px。
 
 ---
 

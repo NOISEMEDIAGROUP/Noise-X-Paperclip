@@ -37,32 +37,32 @@
 3. 使上下文检索增量化
 4. 添加 session 压缩/轮换，防止长期 session 变得越来越昂贵
 
-## Validated Findings
+## 已验证的发现
 
-### 1. Token telemetry is at least partly overstated today
+### 1. Token 遥测数据目前至少存在部分虚高
 
-Observed from the local default instance:
+从本地默认实例观察到：
 
-- `heartbeat_runs`: 11,360 runs between 2026-02-18 and 2026-03-13
-- summed `usage_json.inputTokens`: `2,272,142,368,952`
-- summed `usage_json.cachedInputTokens`: `2,217,501,559,420`
+- `heartbeat_runs`：2026-02-18 至 2026-03-13 期间共 11,360 次运行
+- `usage_json.inputTokens` 汇总：`2,272,142,368,952`
+- `usage_json.cachedInputTokens` 汇总：`2,217,501,559,420`
 
-Those totals are not credible as true per-heartbeat usage for the observed prompt sizes.
+对于观测到的提示大小，这些总量作为真实的每次心跳使用量是不可信的。
 
-Supporting evidence:
+佐证：
 
-- `adapter.invoke.payload.prompt` averages were small:
-  - `codex_local`: ~193 chars average, 6,067 chars max
-  - `claude_local`: ~160 chars average, 1,160 chars max
-- despite that, many `codex_local` runs report millions of input tokens
-- one reused Codex session in local data spans 3,607 runs and recorded `inputTokens` growing up to `1,155,283,166`
+- `adapter.invoke.payload.prompt` 平均值较小：
+  - `codex_local`：平均约 193 字符，最大 6,067 字符
+  - `claude_local`：平均约 160 字符，最大 1,160 字符
+- 尽管如此，许多 `codex_local` 运行报告了数百万个输入 token
+- 本地数据中某个复用的 Codex session 跨越 3,607 次运行，记录的 `inputTokens` 增长至 `1,155,283,166`
 
-Interpretation:
+解读：
 
-- for sessioned adapters, especially Codex, we are likely storing usage reported by the runtime as a **session total**, not a **per-run delta**
-- this makes trend reporting, optimization work, and customer trust worse
+- 对于有 session 的 adapter，尤其是 Codex，我们很可能将运行时报告的使用量存储为 **session 总量**，而非**每次运行的增量**
+- 这使趋势报告、优化工作和客户信任都变得更差
 
-This does **not** mean there is no real token problem. It means we need a trustworthy baseline before we can judge optimization impact.
+这**并不**意味着没有真实的 token 问题。这意味着我们在评估优化效果之前，需要一个可信的基准。
 
 ### 2. Timer wakes currently throw away reusable task sessions
 

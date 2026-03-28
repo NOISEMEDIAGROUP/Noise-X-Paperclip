@@ -21,59 +21,59 @@
 
 Paperclip 不应将某一特定记忆引擎嵌入核心。它应添加一个公司级范围的记忆控制平面，并附带一套小型规范化适配器契约，然后由内置实现和插件负责提供商特定的行为。
 
-## Product Decisions
+## 产品决策
 
-### 1. Memory is company-scoped by default
+### 1. 记忆默认以公司为范围
 
-Every memory binding belongs to exactly one company.
+每个记忆绑定恰好属于一家公司。
 
-That binding can then be:
+该绑定随后可以是：
 
-- the company default
-- an agent override
-- a project override later if we need it
+- 公司默认绑定
+- Agent 覆盖绑定
+- 如有需要，后续添加项目级覆盖绑定
 
-No cross-company memory sharing in the initial design.
+初始设计中不支持跨公司记忆共享。
 
-### 2. Providers are selected by key
+### 2. 提供商通过键名选择
 
-Each configured memory provider gets a stable key inside a company, for example:
+每个已配置的记忆提供商在公司内部拥有一个稳定的键名，例如：
 
 - `default`
 - `mem0-prod`
 - `local-markdown`
 - `research-kb`
 
-Agents and services resolve the active provider by key, not by hard-coded vendor logic.
+Agent 和服务通过键名解析活跃提供商，而非通过硬编码的供应商逻辑。
 
-### 3. Plugins are the primary provider path
+### 3. 插件是主要的提供商接入路径
 
-Built-ins are useful for a zero-config local path, but most providers should arrive through the existing Paperclip plugin runtime.
+内置实现对零配置的本地路径很有价值，但大多数提供商应通过现有的 Paperclip 插件运行时接入。
 
-That keeps the core small and matches the current direction that optional knowledge-like systems live at the edges.
+这样可以保持核心精简，并与当前将可选知识型系统置于边缘的方向保持一致。
 
-### 4. Paperclip owns routing, provenance, and accounting
+### 4. Paperclip 负责路由、溯源和计费
 
-Providers should not decide how Paperclip entities map to governance.
+提供商不应决定 Paperclip 实体如何映射到治理机制。
 
-Paperclip core should own:
+Paperclip 核心应负责：
 
-- who is allowed to call a memory operation
-- which company / agent / project scope is active
-- what issue / run / comment / document the operation belongs to
-- how usage gets recorded
+- 哪些主体被允许调用记忆操作
+- 当前活跃的公司 / Agent / 项目范围
+- 该操作属于哪个工单 / 运行 / 评论 / 文档
+- 使用量如何被记录
 
-### 5. Automatic memory should be narrow at first
+### 5. 自动记忆在初期应保持范围收窄
 
-Automatic capture is useful, but broad silent capture is dangerous.
+自动捕获很有价值，但大范围的静默捕获是危险的。
 
-Initial automatic hooks should be:
+初始自动钩子应为：
 
-- post-run capture from agent runs
-- issue comment / document capture when the binding enables it
-- pre-run recall for agent context hydration
+- Agent 运行结束后的捕获
+- 绑定启用时的工单评论 / 文档捕获
+- 运行前的记忆召回，用于 Agent 上下文预填充
 
-Everything else should start explicit.
+其他所有情况应从显式操作开始。
 
 ## Proposed Concepts
 

@@ -550,53 +550,53 @@ CLI 应继续支持无需注册中心的直接导入/导出。
 - 将期望的包 skill 与实际适配器状态分开展示
 - 在适配器支持同步时提供协调操作
 
-## 14. Rollout Phases
+## 14. 推广阶段
 
-### Phase 1: Stabilize Current V1 Portability
+### 第一阶段：稳定当前 V1 可移植性
 
-- add tests for current portability flows
-- replace the frontmatter parser
-- add Company Settings UI for current import/export capabilities
-- start cutover work toward the markdown-first package reader
+- 为当前可移植性流程添加测试
+- 替换 frontmatter 解析器
+- 为当前导入/导出功能添加公司设置界面
+- 启动向 markdown 优先包读取器的切换工作
 
-### Phase 2: Markdown-First Package Reader
+### 第二阶段：Markdown 优先包读取器
 
-- support `COMPANY.md` / `TEAM.md` / `AGENTS.md` root detection
-- build internal graph from markdown-first packages
-- support local folder and GitHub repo inputs natively
-- support agent skill references by shortname/slug
-- resolve local `skills/<slug>/SKILL.md` packages by convention
-- support `skills.sh`-compatible skill repos as V1 package sources
+- 支持 `COMPANY.md` / `TEAM.md` / `AGENTS.md` 根节点检测
+- 从 markdown 优先包构建内部图谱
+- 原生支持本地文件夹和 GitHub 仓库输入
+- 支持通过短名称/slug 引用 agent skill
+- 按约定解析本地 `skills/<slug>/SKILL.md` 包
+- 支持 `skills.sh` 兼容的 skill 仓库作为 V1 包来源
 
-### Phase 3: Graph-Based Import UX And Skill Surfaces
+### 第三阶段：基于图谱的导入界面与 Skill 界面
 
-- entity tree preview
-- checkbox selection
-- team subtree attach flow
-- licensing/trust/reference warnings
-- company skill library groundwork
-- dedicated agent `Skills` tab groundwork
-- adapter skill read/sync UI groundwork
+- 实体树预览
+- 复选框选择
+- 团队子树挂载流程
+- 许可证/信任/引用警告
+- 公司 skill 库基础建设
+- 专属 agent `Skills` 标签页基础建设
+- 适配器 skill 读取/同步界面基础建设
 
-### Phase 4: New Export Model
+### 第四阶段：新导出模型
 
-- export markdown-first folder structure by default
+- 默认导出 markdown 优先的文件夹结构
 
-### Phase 5: Provenance And Upgrades
+### 第五阶段：来源追踪与升级
 
-- persist install provenance
-- support package-aware re-import and upgrades
-- improve collision matching beyond slug-only
-- add imported-team provenance grouping
-- add desired-vs-actual skill sync state
+- 持久化安装来源信息
+- 支持包感知的重新导入和升级
+- 改进超越纯 slug 匹配的冲突匹配
+- 添加导入团队的来源分组
+- 添加期望状态与实际状态的 skill 同步状态
 
-### Phase 6: Optional Seed Content
+### 第六阶段：可选种子内容
 
-- goals
-- projects
-- starter issues/tasks
+- 目标
+- 项目
+- 初始议题/任务
 
-This phase is intentionally after the structural model is stable.
+此阶段有意安排在结构模型稳定之后。
 
 ## 15. Documentation Plan
 

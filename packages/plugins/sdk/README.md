@@ -220,59 +220,59 @@ ctx.jobs.register("heartbeat", async (job) => {
 
 **实体类型**（用于插槽的 `entityTypes`）：`project` \| `issue` \| `agent` \| `goal` \| `run` \| `comment`。完整列表：从 `@paperclipai/plugin-sdk` 导入 `PLUGIN_UI_SLOT_TYPES` 和 `PLUGIN_UI_SLOT_ENTITY_TYPES`。
 
-### Slot component descriptions
+### 插槽组件说明
 
 #### `page`
 
-A full-page extension mounted at `/plugins/:pluginId` (global) or `/:company/plugins/:pluginId` (company-context route). Use this for rich, standalone plugin experiences such as dashboards, configuration wizards, or multi-step workflows. Receives `PluginPageProps` with `context.companyId` set to the active company. Requires the `ui.page.register` capability.
+挂载在 `/plugins/:pluginId`（全局）或 `/:company/plugins/:pluginId`（公司上下文路由）的全页面扩展。适用于仪表板、配置向导或多步骤工作流等丰富的独立插件体验。接收 `PluginPageProps`，其中 `context.companyId` 设置为当前活跃公司。需要 `ui.page.register` 能力。
 
 #### `sidebar`
 
-Adds a navigation-style entry to the main company sidebar navigation area, rendered alongside the core nav items (Dashboard, Issues, Goals, etc.). Use this for lightweight, always-visible links or status indicators that feel native to the sidebar. Receives `PluginSidebarProps` with `context.companyId` set to the active company. Requires the `ui.sidebar.register` capability.
+在公司主侧边栏导航区域添加导航式条目，与核心导航项（仪表板、问题、目标等）并排渲染。适用于感觉原生于侧边栏的轻量级、始终可见的链接或状态指示器。接收 `PluginSidebarProps`，其中 `context.companyId` 设置为当前活跃公司。需要 `ui.sidebar.register` 能力。
 
 #### `sidebarPanel`
 
-Renders richer inline content in a dedicated panel area below the company sidebar navigation sections. Use this for mini-widgets, summary cards, quick-action panels, or at-a-glance status views that need more vertical space than a nav link. Receives `context.companyId` set to the active company via `useHostContext()`. Requires the `ui.sidebar.register` capability.
+在公司侧边栏导航区域下方的专用面板区域渲染更丰富的内联内容。适用于需要比导航链接更多垂直空间的迷你小部件、摘要卡片、快速操作面板或概览状态视图。通过 `useHostContext()` 接收设置为当前活跃公司的 `context.companyId`。需要 `ui.sidebar.register` 能力。
 
 #### `settingsPage`
 
-Replaces the auto-generated JSON Schema settings form with a custom React component. Use this when the default form is insufficient — for example, when your plugin needs multi-step configuration, OAuth flows, "Test Connection" buttons, or rich input controls. Receives `PluginSettingsPageProps` with `context.companyId` set to the active company. The component is responsible for reading and writing config through the bridge (via `usePluginData` and `usePluginAction`).
+用自定义 React 组件替换自动生成的 JSON Schema 设置表单。当默认表单不够用时使用——例如插件需要多步骤配置、OAuth 流程、"测试连接"按钮或富文本输入控件时。接收 `PluginSettingsPageProps`，其中 `context.companyId` 设置为当前活跃公司。该组件负责通过 bridge（经由 `usePluginData` 和 `usePluginAction`）读写配置。
 
 #### `dashboardWidget`
 
-A card or section rendered on the main dashboard. Use this for at-a-glance metrics, status indicators, or summary views that surface plugin data alongside core Paperclip information. Receives `PluginWidgetProps` with `context.companyId` set to the active company. Requires the `ui.dashboardWidget.register` capability.
+在主仪表板上渲染的卡片或区块。适用于与核心 Paperclip 信息并列展示插件数据的概览指标、状态指示器或摘要视图。接收 `PluginWidgetProps`，其中 `context.companyId` 设置为当前活跃公司。需要 `ui.dashboardWidget.register` 能力。
 
 #### `detailTab`
 
-An additional tab on a project, issue, agent, goal, or run detail page. Rendered when the user navigates to that entity's detail view. Receives `PluginDetailTabProps` with `context.companyId` set to the active company and `context.entityId` / `context.entityType` guaranteed to be non-null, so you can immediately scope data fetches to the relevant entity. Specify which entity types the tab applies to via the `entityTypes` array in the manifest slot declaration. Requires the `ui.detailTab.register` capability.
+项目、问题、代理、目标或运行详情页面上的附加标签页。当用户导航到该实体的详情视图时渲染。接收 `PluginDetailTabProps`，其中 `context.companyId` 设置为当前活跃公司，`context.entityId` / `context.entityType` 保证非空，因此可立即将数据获取限定在相关实体范围内。通过 manifest 插槽声明中的 `entityTypes` 数组指定标签页适用的实体类型。需要 `ui.detailTab.register` 能力。
 
 #### `taskDetailView`
 
-A specialized slot rendered in the context of a task or issue detail view. Similar to `detailTab` but designed for inline content within the task detail layout rather than a separate tab. Receives `context.companyId`, `context.entityId`, and `context.entityType` like `detailTab`. Requires the `ui.detailTab.register` capability.
+在任务或问题详情视图上下文中渲染的专用插槽。类似于 `detailTab`，但设计用于任务详情布局内的内联内容，而非独立标签页。与 `detailTab` 一样接收 `context.companyId`、`context.entityId` 和 `context.entityType`。需要 `ui.detailTab.register` 能力。
 
 #### `projectSidebarItem`
 
-A link or small component rendered **once per project** under that project's row in the sidebar Projects list. Use this to add project-scoped navigation entries (e.g. "Files", "Linear Sync") that deep-link into a plugin detail tab: `/:company/projects/:projectRef?tab=plugin:<key>:<slotId>`. Receives `PluginProjectSidebarItemProps` with `context.companyId` set to the active company, `context.entityId` set to the project id, and `context.entityType` set to `"project"`. Use the optional `order` field in the manifest slot to control sort position. Requires the `ui.sidebar.register` capability.
+在侧边栏项目列表中，在每个项目行下方**每个项目渲染一次**的链接或小组件。适用于添加可深度链接到插件详情标签页的项目作用域导航条目（例如"文件"、"Linear 同步"）：`/:company/projects/:projectRef?tab=plugin:<key>:<slotId>`。接收 `PluginProjectSidebarItemProps`，其中 `context.companyId` 设置为当前活跃公司，`context.entityId` 设置为项目 id，`context.entityType` 设置为 `"project"`。使用 manifest 插槽中的可选 `order` 字段控制排序位置。需要 `ui.sidebar.register` 能力。
 
 #### `globalToolbarButton`
 
-A button rendered in the global top bar (breadcrumb bar) that appears on every page. Use this for company-wide actions that are not scoped to a specific entity — for example, a universal search trigger, a global sync status indicator, or a floating action that applies across the whole workspace. Receives only `context.companyId` and `context.companyPrefix`; no entity context is available. Requires the `ui.action.register` capability.
+在全局顶部栏（面包屑栏）渲染的按钮，出现在每个页面上。适用于未限定到特定实体的全公司操作——例如通用搜索触发器、全局同步状态指示器，或适用于整个工作区的浮动操作。仅接收 `context.companyId` 和 `context.companyPrefix`；无实体上下文可用。需要 `ui.action.register` 能力。
 
 #### `toolbarButton`
 
-A button rendered in the toolbar of an entity page (e.g. project detail, issue detail). Use this for short-lived, contextual actions scoped to the current entity — like triggering a project sync, opening a picker, or running a quick command on that entity. The component can open a plugin-owned modal internally for confirmations or compact forms. Receives `context.companyId`, `context.entityId`, and `context.entityType`; declare `entityTypes` in the manifest to control which entity pages the button appears on. Requires the `ui.action.register` capability.
+在实体页面（例如项目详情、问题详情）工具栏中渲染的按钮。适用于限定到当前实体的短暂上下文操作——例如触发项目同步、打开选择器或在该实体上运行快速命令。该组件可在内部打开插件自有的模态框用于确认或紧凑表单。接收 `context.companyId`、`context.entityId` 和 `context.entityType`；在 manifest 中声明 `entityTypes` 以控制按钮出现在哪些实体页面上。需要 `ui.action.register` 能力。
 
 #### `contextMenuItem`
 
-An entry added to a right-click or overflow context menu on a host surface. Use this for secondary actions that apply to the entity under the cursor (e.g. "Copy to Linear", "Re-run analysis"). Receives `context.companyId` set to the active company; entity context varies by host surface. Requires the `ui.action.register` capability.
+添加到宿主界面右键或溢出上下文菜单中的条目。适用于应用于光标下实体的辅助操作（例如"复制到 Linear"、"重新分析"）。接收设置为当前活跃公司的 `context.companyId`；实体上下文因宿主界面而异。需要 `ui.action.register` 能力。
 
 #### `commentAnnotation`
 
-A per-comment annotation region rendered below each individual comment in the issue detail timeline. Use this to augment comments with parsed file links, sentiment badges, inline actions, or any per-comment metadata. Receives `PluginCommentAnnotationProps` with `context.entityId` set to the comment UUID, `context.entityType` set to `"comment"`, `context.parentEntityId` set to the parent issue UUID, `context.projectId` set to the issue's project (if any), and `context.companyPrefix` set to the active company slug. Requires the `ui.commentAnnotation.register` capability.
+在问题详情时间轴中每条评论下方渲染的逐条注释区域。适用于为评论添加解析后的文件链接、情感徽章、内联操作或任何逐条元数据。接收 `PluginCommentAnnotationProps`，其中 `context.entityId` 设置为评论 UUID，`context.entityType` 设置为 `"comment"`，`context.parentEntityId` 设置为父问题 UUID，`context.projectId` 设置为问题所属项目（如有），`context.companyPrefix` 设置为当前活跃公司的 slug。需要 `ui.commentAnnotation.register` 能力。
 
 #### `commentContextMenuItem`
 
-A per-comment context menu item rendered in the "more" dropdown menu (⋮) on each comment in the issue detail timeline. Use this to add per-comment actions such as "Create sub-issue from comment", "Translate", "Flag for review", or custom plugin actions. Receives `PluginCommentContextMenuItemProps` with `context.entityId` set to the comment UUID, `context.entityType` set to `"comment"`, `context.parentEntityId` set to the parent issue UUID, `context.projectId` set to the issue's project (if any), and `context.companyPrefix` set to the active company slug. Plugins can open drawers, modals, or popovers scoped to that comment. The ⋮ menu button only appears on comments where at least one plugin renders visible content. Requires the `ui.action.register` capability.
+在问题详情时间轴中每条评论的"更多"下拉菜单（⋮）中渲染的逐条上下文菜单项。适用于添加逐条操作，例如"从评论创建子问题"、"翻译"、"标记审阅"或自定义插件操作。接收 `PluginCommentContextMenuItemProps`，其中 `context.entityId` 设置为评论 UUID，`context.entityType` 设置为 `"comment"`，`context.parentEntityId` 设置为父问题 UUID，`context.projectId` 设置为问题所属项目（如有），`context.companyPrefix` 设置为当前活跃公司的 slug。插件可以打开限定到该评论的抽屉、模态框或弹出框。⋮ 菜单按钮仅在至少有一个插件渲染可见内容的评论上显示。需要 `ui.action.register` 能力。
 
 ### Launcher actions and render options
 
