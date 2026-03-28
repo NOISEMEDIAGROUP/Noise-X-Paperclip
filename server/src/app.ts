@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { Db } from "@paperclipai/db";
 import type { DeploymentExposure, DeploymentMode } from "@paperclipai/shared";
 import type { StorageService } from "./storage/types.js";
-import { httpLogger, errorHandler } from "./middleware/index.js";
+import { httpLogger, errorHandler, localeMiddleware } from "./middleware/index.js";
 import { actorMiddleware } from "./middleware/auth.js";
 import { boardMutationGuard } from "./middleware/board-mutation-guard.js";
 import { privateHostnameGuard, resolvePrivateHostnameAllowSet } from "./middleware/private-hostname-guard.js";
@@ -86,6 +86,7 @@ export async function createApp(
     },
   }));
   app.use(httpLogger);
+  app.use(localeMiddleware);
   const privateHostnameGateEnabled =
     opts.deploymentMode === "authenticated" && opts.deploymentExposure === "private";
   const privateHostnameAllowSet = resolvePrivateHostnameAllowSet({
@@ -107,7 +108,7 @@ export async function createApp(
   );
   app.get("/api/auth/get-session", (req, res) => {
     if (req.actor.type !== "board" || !req.actor.userId) {
-      res.status(401).json({ error: "Unauthorized" });
+      res.status(401).json({ error: req.t("errors.unauthorized") });
       return;
     }
     res.json({
@@ -227,8 +228,8 @@ export async function createApp(
     }),
   );
   app.use("/api", api);
-  app.use("/api", (_req, res) => {
-    res.status(404).json({ error: "API route not found" });
+  app.use("/api", (req, res) => {
+    res.status(404).json({ error: req.t("errors.apiRouteNotFound") });
   });
   app.use(pluginUiStaticRoutes(db, {
     localPluginDir: opts.localPluginDir ?? DEFAULT_LOCAL_PLUGIN_DIR,

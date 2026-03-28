@@ -2,6 +2,7 @@ import * as React from "react";
 import { StrictMode } from "react";
 import * as ReactDOM from "react-dom";
 import { createRoot } from "react-dom/client";
+import { I18nextProvider, useTranslation } from "react-i18next";
 import { BrowserRouter } from "@/lib/router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./App";
@@ -16,6 +17,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { initPluginBridge } from "./plugins/bridge-init";
 import { PluginLauncherProvider } from "./plugins/launchers";
+import i18n from "./i18n";
 import "@mdxeditor/editor/style.css";
 import "./index.css";
 
@@ -36,8 +38,8 @@ const queryClient = new QueryClient({
   },
 });
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
+function AppProviders() {
+  return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <BrowserRouter>
@@ -63,5 +65,20 @@ createRoot(document.getElementById("root")!).render(
         </BrowserRouter>
       </ThemeProvider>
     </QueryClientProvider>
+  );
+}
+
+function LocalizedApp() {
+  const { i18n: activeI18n } = useTranslation();
+  const localeKey = activeI18n.resolvedLanguage ?? activeI18n.language;
+
+  return <AppProviders key={localeKey} />;
+}
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <I18nextProvider i18n={i18n}>
+      <LocalizedApp />
+    </I18nextProvider>
   </StrictMode>
 );

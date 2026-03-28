@@ -1,4 +1,5 @@
 import type { HeartbeatRun } from "@paperclipai/shared";
+import { translateInstant } from "../i18n";
 
 /* ---- Utilities ---- */
 
@@ -75,7 +76,9 @@ export function RunActivityChart({ runs }: { runs: HeartbeatRun[] }) {
   const maxValue = Math.max(...Array.from(grouped.values()).map(v => v.succeeded + v.failed + v.other), 1);
   const hasData = Array.from(grouped.values()).some(v => v.succeeded + v.failed + v.other > 0);
 
-  if (!hasData) return <p className="text-xs text-muted-foreground">No runs yet</p>;
+  if (!hasData) {
+    return <p className="text-xs text-muted-foreground">{translateInstant("No runs yet")}</p>;
+  }
 
   return (
     <div>
@@ -127,7 +130,7 @@ export function PriorityChart({ issues }: { issues: { priority: string; createdA
   const maxValue = Math.max(...Array.from(grouped.values()).map(v => Object.values(v).reduce((a, b) => a + b, 0)), 1);
   const hasData = Array.from(grouped.values()).some(v => Object.values(v).reduce((a, b) => a + b, 0) > 0);
 
-  if (!hasData) return <p className="text-xs text-muted-foreground">No issues</p>;
+  if (!hasData) return <p className="text-xs text-muted-foreground">{translateInstant("No issues")}</p>;
 
   return (
     <div>
@@ -152,7 +155,14 @@ export function PriorityChart({ issues }: { issues: { priority: string; createdA
         })}
       </div>
       <DateLabels days={days} />
-      <ChartLegend items={priorityOrder.map(p => ({ color: priorityColors[p], label: p.charAt(0).toUpperCase() + p.slice(1) }))} />
+      <ChartLegend
+        items={priorityOrder.map((p) => ({
+          color: priorityColors[p],
+          label: translateInstant(`priority.${p}`, {
+            defaultValue: p.charAt(0).toUpperCase() + p.slice(1),
+          }),
+        }))}
+      />
     </div>
   );
 }
@@ -168,13 +178,13 @@ const statusColors: Record<string, string> = {
 };
 
 const statusLabels: Record<string, string> = {
-  todo: "To Do",
-  in_progress: "In Progress",
-  in_review: "In Review",
-  done: "Done",
-  blocked: "Blocked",
-  cancelled: "Cancelled",
-  backlog: "Backlog",
+  todo: "待办",
+  in_progress: "进行中",
+  in_review: "审核中",
+  done: "已完成",
+  blocked: "阻塞",
+  cancelled: "已取消",
+  backlog: "待规划",
 };
 
 export function IssueStatusChart({ issues }: { issues: { status: string; createdAt: Date }[] }) {
@@ -194,7 +204,7 @@ export function IssueStatusChart({ issues }: { issues: { status: string; created
   const maxValue = Math.max(...Array.from(grouped.values()).map(v => Object.values(v).reduce((a, b) => a + b, 0)), 1);
   const hasData = allStatuses.size > 0;
 
-  if (!hasData) return <p className="text-xs text-muted-foreground">No issues</p>;
+  if (!hasData) return <p className="text-xs text-muted-foreground">{translateInstant("No issues")}</p>;
 
   return (
     <div>
@@ -237,7 +247,7 @@ export function SuccessRateChart({ runs }: { runs: HeartbeatRun[] }) {
   }
 
   const hasData = Array.from(grouped.values()).some(v => v.total > 0);
-  if (!hasData) return <p className="text-xs text-muted-foreground">No runs yet</p>;
+  if (!hasData) return <p className="text-xs text-muted-foreground">{translateInstant("No runs yet")}</p>;
 
   return (
     <div>
