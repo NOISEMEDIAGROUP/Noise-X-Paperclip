@@ -728,6 +728,14 @@ describe("issueService.list participantAgentId", () => {
     await expect(svc.deleteLabel("not-a-uuid")).resolves.toBeNull();
   });
 
+  it("returns an empty list for malformed issue ids on findMentionedProjectIds", async () => {
+    await expect(svc.findMentionedProjectIds("not-a-uuid")).resolves.toEqual([]);
+  });
+
+  it("returns an empty list for malformed issue ids on getAncestors", async () => {
+    await expect(svc.getAncestors("not-a-uuid")).resolves.toEqual([]);
+  });
+
   it("returns null for malformed issue ids on release", async () => {
     await expect(svc.release("not-a-uuid")).resolves.toBeNull();
   });

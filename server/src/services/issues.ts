@@ -1671,6 +1671,7 @@ export function issueService(db: Db) {
     },
 
     findMentionedProjectIds: async (issueId: string) => {
+      if (!isUuidLike(issueId)) return [];
       const issue = await db
         .select({
           companyId: issues.companyId,
@@ -1713,6 +1714,7 @@ export function issueService(db: Db) {
     },
 
     getAncestors: async (issueId: string) => {
+      if (!isUuidLike(issueId)) return [];
       const raw: Array<{
         id: string; identifier: string | null; title: string; description: string | null;
         status: string; priority: string;
