@@ -534,6 +534,12 @@ export {
   type PluginStateScopeKey,
   type SetPluginState,
   type ListPluginState,
+  knowledgeTierSchema,
+  createCompanyKnowledgeSchema,
+  updateCompanyKnowledgeSchema,
+  type CreateCompanyKnowledge,
+  type UpdateCompanyKnowledge,
+  type KnowledgeTier,
 } from "./validators/index.js";
 
 export { API_PREFIX, API } from "./api.js";
