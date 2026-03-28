@@ -494,6 +494,14 @@ describe("issueService.list participantAgentId", () => {
     expect(comments).toEqual([]);
   });
 
+  it("ignores malformed non-string comment cursors instead of throwing", async () => {
+    const comments = await svc.listComments(randomUUID(), {
+      afterCommentId: { bad: true } as any,
+      order: "asc",
+    });
+    expect(comments).toEqual([]);
+  });
+
   it("returns an empty comment page when issueId is malformed", async () => {
     const comments = await svc.listComments("not-a-uuid", {
       order: "asc",

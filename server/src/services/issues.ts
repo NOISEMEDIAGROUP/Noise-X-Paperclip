@@ -1386,7 +1386,7 @@ export function issueService(db: Db) {
     ) => {
       const order = opts?.order === "asc" ? "asc" : "desc";
       if (!isUuidLike(issueId)) return [];
-      const afterCommentId = opts?.afterCommentId?.trim() || null;
+      const afterCommentId = asNonEmptyString(opts?.afterCommentId) ?? null;
       const limit =
         opts?.limit && opts.limit > 0
           ? Math.min(Math.floor(opts.limit), MAX_ISSUE_COMMENT_PAGE_LIMIT)
