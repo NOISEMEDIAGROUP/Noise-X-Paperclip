@@ -1855,6 +1855,8 @@ export function heartbeatService(db: Db) {
     const cachedInputTokens = usage?.cachedInputTokens ?? 0;
     const billingType = normalizeLedgerBillingType(result.billingType);
     const additionalCostCents = normalizeBilledCostCents(result.costUsd, billingType);
+    const rawCostUsd = typeof result.costUsd === "number" && Number.isFinite(result.costUsd) ? result.costUsd : 0;
+    const shadowCostCents = Math.max(0, Math.round(rawCostUsd * 100));
     const hasTokenUsage = inputTokens > 0 || outputTokens > 0 || cachedInputTokens > 0;
     const provider = result.provider ?? "unknown";
     const biller = resolveLedgerBiller(result);
@@ -1876,7 +1878,7 @@ export function heartbeatService(db: Db) {
       })
       .where(eq(agentRuntimeState.agentId, agent.id));
 
-    if (additionalCostCents > 0 || hasTokenUsage) {
+    if (additionalCostCents > 0 || shadowCostCents > 0 || hasTokenUsage) {
       const costs = costService(db, budgetHooks);
       await costs.createEvent(agent.companyId, {
         heartbeatRunId: run.id,
@@ -1891,6 +1893,7 @@ export function heartbeatService(db: Db) {
         cachedInputTokens,
         outputTokens,
         costCents: additionalCostCents,
+        shadowCostCents,
         occurredAt: new Date(),
       });
     }
