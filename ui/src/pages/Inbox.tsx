@@ -40,6 +40,8 @@ import {
   RotateCcw,
   UserPlus,
 } from "lucide-react";
+import { Identity } from "../components/Identity";
+import { PrBadge } from "../components/PrBadge";
 import { PageTabBar } from "../components/PageTabBar";
 import type { Approval, HeartbeatRun, Issue, JoinRequest } from "@paperclipai/shared";
 import {
@@ -1189,6 +1191,7 @@ export function Inbox() {
                         )}
                       </>
                     )}
+                    desktopTrailing={<PrBadge workProducts={issue.workProducts} />}
                     mobileMeta={
                       issue.lastExternalCommentAt
                         ? `commented ${timeAgo(issue.lastExternalCommentAt)}`
