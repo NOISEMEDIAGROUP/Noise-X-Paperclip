@@ -385,6 +385,82 @@ describe("issueService.list participantAgentId", () => {
     });
   });
 
+  it("returns not found for malformed issue ids on checkout", async () => {
+    await expect(
+      svc.checkout("not-a-uuid", randomUUID(), ["todo"], null),
+    ).rejects.toMatchObject({
+      status: 404,
+      message: "Issue not found",
+    });
+  });
+
+  it("returns unprocessable for malformed agent ids on checkout", async () => {
+    const companyId = randomUUID();
+    const issueId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Malformed agent id checkout",
+      status: "todo",
+      priority: "medium",
+    });
+
+    await expect(
+      svc.checkout(issueId, "not-a-uuid", ["todo"], null),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: "Invalid agentId",
+    });
+  });
+
+  it("returns unprocessable for malformed checkout run ids", async () => {
+    const companyId = randomUUID();
+    const issueId = randomUUID();
+    const agentId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(agents).values({
+      id: agentId,
+      companyId,
+      name: "CheckoutAgent",
+      role: "engineer",
+      status: "active",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Malformed run id checkout",
+      status: "todo",
+      priority: "medium",
+    });
+
+    await expect(
+      svc.checkout(issueId, agentId, ["todo"], "not-a-uuid"),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: "Invalid checkoutRunId",
+    });
+  });
+
   it("returns an empty page for malformed non-uuid comment cursors", async () => {
     const companyId = randomUUID();
     const issueId = randomUUID();

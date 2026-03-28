@@ -1032,6 +1032,10 @@ export function issueService(db: Db) {
       }),
 
     checkout: async (id: string, agentId: string, expectedStatuses: string[], checkoutRunId: string | null) => {
+      if (!isUuidLike(id)) throw notFound("Issue not found");
+      if (!isUuidLike(agentId)) throw unprocessable("Invalid agentId");
+      if (checkoutRunId && !isUuidLike(checkoutRunId)) throw unprocessable("Invalid checkoutRunId");
+
       const issueCompany = await db
         .select({ companyId: issues.companyId })
         .from(issues)
