@@ -1,14 +1,14 @@
-# Paperclip Module System
+# Paperclip 模块系统
 
-> Supersession note: the company-template/package-format direction in this document is no longer current. For the current markdown-first company import/export plan, see `doc/plans/2026-03-13-company-import-export-v2.md` and `docs/companies/companies-spec.md`.
+> 取代说明：本文档中关于公司模板/包格式的方向已不再适用。当前以 Markdown 优先的公司导入/导出方案，请参阅 `doc/plans/2026-03-13-company-import-export-v2.md` 和 `docs/companies/companies-spec.md`。
 
-## Overview
+## 概述
 
-Paperclip's module system lets you extend the control plane with new capabilities — revenue tracking, observability, notifications, dashboards — without forking core. Modules are self-contained packages that register routes, UI pages, database tables, and lifecycle hooks.
+Paperclip 的模块系统让你可以在不分叉核心代码的情况下，为控制平面扩展新能力——收入追踪、可观测性、通知、仪表盘等。模块是自包含的包，可注册路由、UI 页面、数据库表和生命周期钩子。
 
-Separately, **Company Templates** are code-free data packages (agent teams, org charts, goal hierarchies) that you can import to bootstrap a new company.
+另外，**公司模板**是无代码的数据包（智能体团队、组织结构图、目标层级），可导入以快速初始化一家新公司。
 
-Both are discoverable through the **Company Store**.
+两者都可通过**公司商店**发现。
 
 ---
 

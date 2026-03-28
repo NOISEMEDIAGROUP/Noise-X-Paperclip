@@ -1,56 +1,56 @@
-# 2026-03-13 Company Import / Export V2 Plan
+# 2026-03-13 公司导入/导出 V2 计划
 
-Status: Proposed implementation plan
-Date: 2026-03-13
-Audience: Product and engineering
-Supersedes for package-format direction:
-- `doc/plans/2026-02-16-module-system.md` sections that describe company templates as JSON-only
-- `docs/specs/cliphub-plan.md` assumptions about blueprint bundle shape where they conflict with the markdown-first package model
+状态：拟议实施方案
+日期：2026-03-13
+受众：产品与工程团队
+在包格式方向上取代以下文档：
+- `doc/plans/2026-02-16-module-system.md` 中将公司模板描述为仅 JSON 的相关章节
+- `docs/specs/cliphub-plan.md` 中与 markdown 优先包模型冲突的蓝图包结构假设
 
-## 1. Purpose
+## 1. 目的
 
-This document defines the next-stage plan for Paperclip company import/export.
+本文档定义 Paperclip 公司导入/导出的下一阶段计划。
 
-The core shift is:
+核心转变包括：
 
-- move from a Paperclip-specific JSON-first portability package toward a markdown-first package format
-- make GitHub repositories first-class package sources
-- treat the company package model as an extension of the existing Agent Skills ecosystem instead of inventing a separate skill format
-- support company, team, agent, and skill reuse without requiring a central registry
+- 从 Paperclip 专有的 JSON 优先可移植包转向 markdown 优先包格式
+- 将 GitHub 仓库作为一级包来源
+- 将公司包模型视为现有 Agent Skills 生态的扩展，而非另起炉灶创建独立的 skill 格式
+- 支持公司、团队、agent 及 skill 的复用，无需中央注册中心
 
-The normative package format draft lives in:
+规范性包格式草案位于：
 
 - `docs/companies/companies-spec.md`
 
-This plan is about implementation and rollout inside Paperclip.
+本计划涉及 Paperclip 内部的实施与推广工作。
 
-Adapter-wide skill rollout details live in:
+适配器层面的 skill 推广详情请参见：
 
 - `doc/plans/2026-03-14-adapter-skill-sync-rollout.md`
 
-## 2. Executive Summary
+## 2. 执行摘要
 
-Paperclip already has portability primitives in the repo:
+Paperclip 代码库中已具备可移植性基础原语：
 
-- server import/export/preview APIs
-- CLI import/export commands
-- shared portability types and validators
+- 服务端导入/导出/预览 API
+- CLI 导入/导出命令
+- 共享可移植性类型与验证器
 
-Those primitives are being cut over to the new package model rather than extended for backward compatibility.
+这些基础原语将被切换到新包模型，而非为向后兼容性进行扩展。
 
-The new direction is:
+新方向如下：
 
-1. markdown-first package authoring
-2. GitHub repo or local folder as the default source of truth
-3. a vendor-neutral base package spec for agent-company runtimes, not just Paperclip
-4. the company package model is explicitly an extension of Agent Skills
-5. no future dependency on `paperclip.manifest.json`
-6. implicit folder discovery by convention for the common case
-7. an always-emitted `.paperclip.yaml` sidecar for high-fidelity Paperclip-specific details
-8. package graph resolution at import time
-9. entity-level import UI with dependency-aware tree selection
-10. `skills.sh` compatibility is a V1 requirement for skill packages and skill installation flows
-11. adapter-aware skill sync surfaces so Paperclip can read, diff, enable, disable, and reconcile skills where the adapter supports it
+1. markdown 优先的包编写方式
+2. GitHub 仓库或本地文件夹作为默认的真实来源
+3. 面向 agent-company 运行时（而非仅限 Paperclip）的厂商中立基础包规范
+4. 公司包模型明确作为 Agent Skills 的扩展
+5. 未来不再依赖 `paperclip.manifest.json`
+6. 针对常见场景按约定进行隐式文件夹发现
+7. 始终生成 `.paperclip.yaml` 附加文件，用于存放高保真的 Paperclip 专有详情
+8. 导入时进行包图谱解析
+9. 支持依赖感知树形选择的实体级导入界面
+10. `skills.sh` 兼容性是 V1 阶段对 skill 包及 skill 安装流程的硬性要求
+11. 适配器感知的 skill 同步界面，使 Paperclip 能在适配器支持时读取、对比、启用、禁用并协调 skill
 
 ## 3. Product Goals
 

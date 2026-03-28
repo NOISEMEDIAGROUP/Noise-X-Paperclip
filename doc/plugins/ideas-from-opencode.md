@@ -1,40 +1,40 @@
-# Plugin Ideas From OpenCode
+# 来自 OpenCode 的插件想法
 
-Status: design report, not a V1 commitment
+状态：设计报告，非 V1 承诺
 
-Paperclip V1 explicitly excludes a plugin framework in [doc/SPEC-implementation.md](../SPEC-implementation.md), but the long-horizon spec says the architecture should leave room for extensions. This report studies the `opencode` plugin system and translates the useful patterns into a Paperclip-shaped design.
+Paperclip V1 在 [doc/SPEC-implementation.md](../SPEC-implementation.md) 中明确排除了插件框架，但长期规范指出架构应为扩展留有余地。本报告研究了 `opencode` 的插件系统，并将其有用的模式转化为适合 Paperclip 的设计。
 
-Assumption for this document: Paperclip is a single-tenant operator-controlled instance. Plugin installation should therefore be global across the instance. "Companies" are still first-class Paperclip objects, but they are organizational records, not tenant-isolation boundaries for plugin trust or installation.
+本文档的假设前提：Paperclip 是单租户、由运营商管控的实例。因此，插件安装应在整个实例范围内全局生效。"Companies" 仍是 Paperclip 的一等公民对象，但它们是组织记录，而非插件信任或安装的租户隔离边界。
 
-## Executive Summary
+## 执行摘要
 
-`opencode` has a real plugin system already. It is intentionally low-friction:
+`opencode` 已经拥有一套真实的插件系统，其设计刻意保持低摩擦：
 
-- plugins are plain JS/TS modules
-- they load from local directories and npm packages
-- they can hook many runtime events
-- they can add custom tools
-- they can extend provider auth flows
-- they run in-process and can mutate runtime behavior directly
+- 插件是普通的 JS/TS 模块
+- 可从本地目录和 npm 包加载
+- 可挂钩许多运行时事件
+- 可添加自定义工具
+- 可扩展提供商的认证流程
+- 在进程内运行，可直接修改运行时行为
 
-That model works well for a local coding tool. It should not be copied literally into Paperclip.
+该模型非常适合本地编码工具，但不应原样照搬到 Paperclip 中。
 
-The main conclusion is:
+主要结论：
 
-- Paperclip should copy `opencode`'s typed SDK, deterministic loading, low authoring friction, and clear extension surfaces.
-- Paperclip should not copy `opencode`'s trust model, project-local plugin loading, "override by name collision" behavior, or arbitrary in-process mutation hooks for core business logic.
-- Paperclip should use multiple extension classes instead of one generic plugin bag:
-  - trusted in-process modules for low-level platform concerns like agent adapters, storage providers, secret providers, and possibly run-log backends
-  - out-of-process plugins for most third-party integrations like Linear, GitHub Issues, Grafana, Stripe, and schedulers
-  - plugin-contributed agent tools (namespaced, not override-by-collision)
-  - plugin-shipped React UI loaded into host extension slots via a typed bridge
-  - a typed event bus with server-side filtering and plugin-to-plugin events, plus scheduled jobs for automation
+- Paperclip 应借鉴 `opencode` 的类型化 SDK、确定性加载、低创作摩擦以及清晰的扩展接口。
+- Paperclip 不应照搬 `opencode` 的信任模型、项目级本地插件加载、"按名称冲突覆盖"行为，以及针对核心业务逻辑的任意进程内变更挂钩。
+- Paperclip 应使用多种扩展类别，而非一个通用插件包：
+  - 面向底层平台关注点（如 agent 适配器、存储提供商、密钥提供商，以及可能的运行日志后端）的受信任进程内模块
+  - 面向大多数第三方集成（如 Linear、GitHub Issues、Grafana、Stripe 及调度器）的进程外插件
+  - 插件贡献的 agent 工具（带命名空间，不允许覆盖碰撞）
+  - 通过类型化 bridge 加载到宿主扩展槽中的插件提供的 React UI
+  - 带服务端过滤和插件间事件的类型化事件总线，以及用于自动化的定时任务
 
-If Paperclip does this well, the examples you listed become straightforward:
+如果 Paperclip 能做好这一点，你列举的示例都将变得直接：
 
-- file browser / terminal / git workflow / child process tracking become workspace plugins that resolve paths from the host and handle OS operations directly
-- Linear / GitHub / Grafana / Stripe become connector plugins
-- future knowledge base and accounting features can also fit the same model
+- 文件浏览器 / 终端 / git 工作流 / 子进程追踪将成为从宿主解析路径、直接处理操作系统操作的工作区插件
+- Linear / GitHub / Grafana / Stripe 将成为连接器插件
+- 未来的知识库和会计功能也可以适配同一模型
 
 ## Sources Examined
 

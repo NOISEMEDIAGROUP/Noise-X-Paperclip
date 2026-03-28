@@ -1,58 +1,54 @@
-# Task Management Data Model
+# 任务管理数据模型
 
-Reference for how task tracking works in Paperclip. Describes the entities, their
-relationships, and the rules governing task lifecycle. Written as a target model
--- some of this is already implemented, some is aspirational.
+本文是 Paperclip 任务跟踪机制的参考文档，描述了各实体、它们之间的关系以及任务生命周期的管理规则。本文作为目标模型编写——其中部分内容已实现，部分为规划中的目标。
 
 ---
 
-## Entity Hierarchy
+## 实体层级
 
 ```
 Workspace
-  Initiatives          (roadmap-level objectives, span quarters)
-    Projects           (time-bound deliverables, can span teams)
-      Milestones       (stages within a project)
-        Issues         (units of work, the core entity)
-          Sub-issues   (broken-down work under a parent issue)
+  Initiatives          (路线图级别的目标，跨季度)
+    Projects           (有时间限制的可交付成果，可跨团队)
+      Milestones       (项目内的阶段)
+        Issues         (工作单元，核心实体)
+          Sub-issues   (拆解自父 issue 的子工作)
 ```
 
-Everything flows down. An initiative contains projects; a project contains
-milestones and issues; an issue can have sub-issues. Each level adds
-granularity.
+所有内容自上而下流动。一个 initiative 包含多个 project；一个 project 包含 milestone 和 issue；一个 issue 可以有子 issue。每一层都增加粒度。
 
 ---
 
-## Issues (Core Entity)
+## Issues（核心实体）
 
-An issue is the fundamental unit of work.
+Issue 是工作的基本单元。
 
-### Fields
+### 字段
 
-| Field         | Type             | Required | Notes                                                             |
-| ------------- | ---------------- | -------- | ----------------------------------------------------------------- |
-| `id`          | uuid             | yes      | Primary key                                                       |
-| `identifier`  | string           | computed | Human-readable, e.g. `ENG-123` (team key + auto-increment number) |
-| `title`       | string           | yes      | Short summary                                                     |
-| `description` | text/markdown    | no       | Full description, supports markdown                               |
-| `status`      | WorkflowState FK | yes      | Defaults to team's default state                                  |
-| `priority`    | enum (0-4)       | no       | Defaults to 0 (none). See Priority section.                       |
-| `estimate`    | number           | no       | Complexity/size points                                            |
-| `dueDate`     | date             | no       |                                                                   |
-| `teamId`      | uuid FK          | yes      | Every issue belongs to exactly one team                           |
-| `projectId`   | uuid FK          | no       | At most one project per issue                                     |
-| `milestoneId` | uuid FK          | no       | At most one milestone per issue                                   |
-| `assigneeId`  | uuid FK          | no       | **Single assignee.** See Assignees section.                       |
-| `creatorId`   | uuid FK          | no       | Who created it                                                    |
-| `parentId`    | uuid FK (self)   | no       | Parent issue, for sub-issue relationships                         |
-| `goalId`      | uuid FK          | no       | Linked objective/goal                                             |
-| `sortOrder`   | float            | no       | Ordering within views                                             |
-| `createdAt`   | timestamp        | yes      |                                                                   |
-| `updatedAt`   | timestamp        | yes      |                                                                   |
-| `startedAt`   | timestamp        | computed | When issue entered a "started" state                              |
-| `completedAt` | timestamp        | computed | When issue entered a "completed" state                            |
-| `cancelledAt` | timestamp        | computed | When issue entered a "cancelled" state                            |
-| `archivedAt`  | timestamp        | no       | Soft archive                                                      |
+| 字段          | 类型             | 必填 | 说明                                                              |
+| ------------- | ---------------- | ---- | ----------------------------------------------------------------- |
+| `id`          | uuid             | 是   | 主键                                                              |
+| `identifier`  | string           | 计算 | 人类可读，例如 `ENG-123`（团队前缀 + 自增编号）                   |
+| `title`       | string           | 是   | 简短摘要                                                          |
+| `description` | text/markdown    | 否   | 完整描述，支持 markdown                                           |
+| `status`      | WorkflowState FK | 是   | 默认为团队的默认状态                                              |
+| `priority`    | enum (0-4)       | 否   | 默认为 0（无优先级），参见优先级章节                              |
+| `estimate`    | number           | 否   | 复杂度/规模点数                                                   |
+| `dueDate`     | date             | 否   |                                                                   |
+| `teamId`      | uuid FK          | 是   | 每个 issue 必须属于且只属于一个团队                               |
+| `projectId`   | uuid FK          | 否   | 每个 issue 最多关联一个 project                                   |
+| `milestoneId` | uuid FK          | 否   | 每个 issue 最多关联一个 milestone                                 |
+| `assigneeId`  | uuid FK          | 否   | **单一负责人**，参见负责人章节                                    |
+| `creatorId`   | uuid FK          | 否   | 创建者                                                            |
+| `parentId`    | uuid FK (self)   | 否   | 父 issue，用于子 issue 关系                                       |
+| `goalId`      | uuid FK          | 否   | 关联的目标/goal                                                   |
+| `sortOrder`   | float            | 否   | 视图内的排序顺序                                                  |
+| `createdAt`   | timestamp        | 是   |                                                                   |
+| `updatedAt`   | timestamp        | 是   |                                                                   |
+| `startedAt`   | timestamp        | 计算 | issue 进入"已开始"状态的时间                                      |
+| `completedAt` | timestamp        | 计算 | issue 进入"已完成"状态的时间                                      |
+| `cancelledAt` | timestamp        | 计算 | issue 进入"已取消"状态的时间                                      |
+| `archivedAt`  | timestamp        | 否   | 软归档                                                            |
 
 ---
 

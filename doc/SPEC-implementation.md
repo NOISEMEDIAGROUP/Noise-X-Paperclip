@@ -1,58 +1,58 @@
-# Paperclip V1 Implementation Spec
+# Paperclip V1 实现规范
 
-Status: Implementation contract for first release (V1)
-Date: 2026-02-17
-Audience: Product, engineering, and agent-integration authors
-Source inputs: `GOAL.md`, `PRODUCT.md`, `SPEC.md`, `DATABASE.md`, current monorepo code
+状态：首次发布（V1）的实现契约
+日期：2026-02-17
+受众：产品、工程及智能体集成开发者
+来源输入：`GOAL.md`、`PRODUCT.md`、`SPEC.md`、`DATABASE.md`、当前 monorepo 代码
 
-## 1. Document Role
+## 1. 文档定位
 
-`SPEC.md` remains the long-horizon product spec.
-This document is the concrete, build-ready V1 contract.
-When there is a conflict, `SPEC-implementation.md` controls V1 behavior.
+`SPEC.md` 仍为长期产品规范。
+本文档是具体的、可直接构建的 V1 契约。
+如有冲突，以 `SPEC-implementation.md` 为 V1 行为的准则。
 
-## 2. V1 Outcomes
+## 2. V1 目标成果
 
-Paperclip V1 must provide a full control-plane loop for autonomous agents:
+Paperclip V1 必须为自主智能体提供完整的控制平面循环：
 
-1. A human board creates a company and defines goals.
-2. The board creates and manages agents in an org tree.
-3. Agents receive and execute tasks via heartbeat invocations.
-4. All work is tracked through tasks/comments with audit visibility.
-5. Token/cost usage is reported and budget limits can stop work.
-6. The board can intervene anywhere (pause agents/tasks, override decisions).
+1. 人类董事会创建公司并定义目标。
+2. 董事会在组织树中创建并管理智能体。
+3. 智能体通过心跳调用接收并执行任务。
+4. 所有工作通过任务/评论进行跟踪，并具备审计可见性。
+5. Token/成本用量被上报，预算限制可终止工作。
+6. 董事会可随时介入（暂停智能体/任务、覆盖决策）。
 
-Success means one operator can run a small AI-native company end-to-end with clear visibility and control.
+成功标准：单个运营者能够端到端运营一家小型 AI 原生公司，具备清晰的可见性与控制力。
 
-## 3. Explicit V1 Product Decisions
+## 3. V1 明确产品决策
 
-These decisions close open questions from `SPEC.md` for V1.
+这些决策针对 V1 关闭了 `SPEC.md` 中的未解问题。
 
-| Topic | V1 Decision |
+| 主题 | V1 决策 |
 |---|---|
-| Tenancy | Single-tenant deployment, multi-company data model |
-| Company model | Company is first-order; all business entities are company-scoped |
-| Board | Single human board operator per deployment |
-| Org graph | Strict tree (`reports_to` nullable root); no multi-manager reporting |
-| Visibility | Full visibility to board and all agents in same company |
-| Communication | Tasks + comments only (no separate chat system) |
-| Task ownership | Single assignee; atomic checkout required for `in_progress` transition |
-| Recovery | No automatic reassignment; work recovery stays manual/explicit |
-| Agent adapters | Built-in `process` and `http` adapters |
-| Auth | Mode-dependent human auth (`local_trusted` implicit board in current code; authenticated mode uses sessions), API keys for agents |
-| Budget period | Monthly UTC calendar window |
-| Budget enforcement | Soft alerts + hard limit auto-pause |
-| Deployment modes | Canonical model is `local_trusted` + `authenticated` with `private/public` exposure policy (see `doc/DEPLOYMENT-MODES.md`) |
+| 租户模式 | 单租户部署，多公司数据模型 |
+| 公司模型 | 公司为一等实体；所有业务实体均属于公司范围 |
+| 董事会 | 每个部署对应单一人类董事会运营者 |
+| 组织图 | 严格树形结构（`reports_to` 可为 null 的根节点）；不支持多上级汇报 |
+| 可见性 | 董事会及同公司所有智能体拥有完全可见性 |
+| 沟通方式 | 仅通过任务 + 评论（无独立聊天系统） |
+| 任务归属 | 单一受理人；`in_progress` 状态转换需要原子检出 |
+| 恢复机制 | 无自动重新分配；工作恢复保持手动/明确方式 |
+| 智能体适配器 | 内置 `process` 和 `http` 适配器 |
+| 认证 | 与模式相关的人类认证（当前代码中 `local_trusted` 为隐式董事会；认证模式使用会话），智能体使用 API 密钥 |
+| 预算周期 | 每月 UTC 日历窗口 |
+| 预算执行 | 软性警报 + 硬上限自动暂停 |
+| 部署模式 | 规范模型为 `local_trusted` + `authenticated`，配合 `private/public` 暴露策略（参见 `doc/DEPLOYMENT-MODES.md`） |
 
-## 4. Current Baseline (Repo Snapshot)
+## 4. 当前基线（代码库快照）
 
-As of 2026-02-17, the repo already includes:
+截至 2026-02-17，代码库已包含：
 
-- Node + TypeScript backend with REST CRUD for `agents`, `projects`, `goals`, `issues`, `activity`
-- React UI pages for dashboard/agents/projects/goals/issues lists
-- PostgreSQL schema via Drizzle with embedded PostgreSQL fallback when `DATABASE_URL` is unset
+- Node + TypeScript 后端，为 `agents`、`projects`、`goals`、`issues`、`activity` 提供 REST CRUD
+- React UI 页面，用于仪表盘/智能体/项目/目标/问题列表
+- 通过 Drizzle 管理的 PostgreSQL 架构，当 `DATABASE_URL` 未设置时回退到内嵌 PostgreSQL
 
-V1 implementation extends this baseline into a company-centric, governance-aware control plane.
+V1 实现在此基线上扩展为以公司为中心、具备治理意识的控制平面。
 
 ## 5. V1 Scope
 

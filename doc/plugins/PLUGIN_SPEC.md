@@ -1,35 +1,35 @@
-# Paperclip Plugin System Specification
+# Paperclip 插件系统规范
 
-Status: proposed complete spec for the post-V1 plugin system
+状态：V1 之后插件系统的完整拟议规范
 
-This document is the complete specification for Paperclip's plugin and extension architecture.
-It expands the brief plugin notes in [doc/SPEC.md](../SPEC.md) and should be read alongside the comparative analysis in [doc/plugins/ideas-from-opencode.md](./ideas-from-opencode.md).
+本文档是 Paperclip 插件与扩展架构的完整规范。
+它扩展了 [doc/SPEC.md](../SPEC.md) 中的简要插件说明，应与 [doc/plugins/ideas-from-opencode.md](./ideas-from-opencode.md) 中的比较分析一同阅读。
 
-This is not part of the V1 implementation contract in [doc/SPEC-implementation.md](../SPEC-implementation.md).
-It is the full target architecture for the plugin system that should follow V1.
+本文档不属于 [doc/SPEC-implementation.md](../SPEC-implementation.md) 中 V1 实施合同的范畴。
+它是 V1 之后插件系统的完整目标架构。
 
-## Current implementation caveats
+## 当前实现注意事项
 
-The code in this repo now includes an early plugin runtime and admin UI, but it does not yet deliver the full deployment model described in this spec.
+本仓库中的代码已包含早期插件运行时和管理界面，但尚未实现本规范所描述的完整部署模型。
 
-Today, the practical deployment model is:
+目前，实际部署模型为：
 
-- single-tenant
-- self-hosted
-- single-node or otherwise filesystem-persistent
+- 单租户
+- 自托管
+- 单节点或具有文件系统持久化
 
-Current limitations to keep in mind:
+当前需要注意的限制：
 
-- Plugin UI bundles currently run as same-origin JavaScript inside the main Paperclip app. Treat plugin UI as trusted code, not a sandboxed frontend capability boundary.
-- Manifest capabilities currently gate worker-side host RPC calls. They do not prevent plugin UI code from calling ordinary Paperclip HTTP APIs directly.
-- Runtime installs assume a writable local filesystem for the plugin package directory and plugin data directory.
-- Runtime npm installs assume `npm` is available in the running environment and that the host can reach the configured package registry.
-- Published npm packages are the intended install artifact for deployed plugins.
-- The repo example plugins under `packages/plugins/examples/` are development conveniences. They work from a source checkout and should not be assumed to exist in a generic published build unless they are explicitly shipped with that build.
-- Dynamic plugin install is not yet cloud-ready for horizontally scaled or ephemeral deployments. There is no shared artifact store, install coordination, or cross-node distribution layer yet.
-- The current runtime does not yet ship a real host-provided plugin UI component kit, and it does not support plugin asset uploads/reads. Treat those as future-scope ideas in this spec, not current implementation promises.
+- 插件 UI 包目前作为同源 JavaScript 在 Paperclip 主应用中运行。请将插件 UI 视为受信任代码，而非沙箱化的前端能力边界。
+- 清单（Manifest）能力目前仅对 worker 侧的主机 RPC 调用进行管控，无法阻止插件 UI 代码直接调用普通的 Paperclip HTTP API。
+- 运行时安装假定插件包目录和插件数据目录所在的本地文件系统可写。
+- 运行时 npm 安装假定运行环境中存在 `npm`，且主机能够访问配置的包注册表。
+- 已发布的 npm 包是已部署插件的预期安装产物。
+- `packages/plugins/examples/` 下的示例插件是开发便利工具，仅在源码检出时可用，不应假定其存在于通用发布构建中（除非该构建明确包含这些插件）。
+- 动态插件安装尚未针对水平扩展或临时部署的云环境做好准备。目前尚无共享制品存储、安装协调或跨节点分发层。
+- 当前运行时尚未提供真正由主机提供的插件 UI 组件套件，也不支持插件资产的上传/读取。请将这些内容视为本规范中的未来功能设想，而非当前实现承诺。
 
-In practice, that means the current implementation is a good fit for local development and self-hosted persistent deployments, but not yet for multi-instance cloud plugin distribution.
+实际上，当前实现适用于本地开发和自托管持久化部署，但尚不适用于多实例云端插件分发。
 
 ## 1. Scope
 

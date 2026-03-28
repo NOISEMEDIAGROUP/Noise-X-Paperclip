@@ -1,47 +1,47 @@
-# Docker Release Browser E2E Plan
+# Docker 发布浏览器端到端测试计划
 
-## Context
+## 背景
 
-Today release smoke testing for published Paperclip packages is manual and shell-driven:
+目前，针对已发布 Paperclip 包的发布冒烟测试是手动且依赖 shell 脚本的：
 
 ```sh
 HOST_PORT=3232 DATA_DIR=./data/release-smoke-canary PAPERCLIPAI_VERSION=canary ./scripts/docker-onboard-smoke.sh
 HOST_PORT=3233 DATA_DIR=./data/release-smoke-stable PAPERCLIPAI_VERSION=latest ./scripts/docker-onboard-smoke.sh
 ```
 
-That is useful because it exercises the same public install surface users hit:
+这种方式的价值在于，它与用户实际使用的公开安装路径完全一致：
 
 - Docker
 - `npx paperclipai@canary`
 - `npx paperclipai@latest`
-- authenticated bootstrap flow
+- 已认证的引导流程
 
-But it still leaves the most important release questions to a human with a browser:
+但最关键的发布问题仍然需要人工在浏览器中验证：
 
-- can I sign in with the smoke credentials?
-- do I land in onboarding?
-- can I complete onboarding?
-- does the initial CEO agent actually get created and run?
+- 能否使用冒烟凭据登录？
+- 是否进入了引导流程页面？
+- 能否完成引导流程？
+- 初始 CEO 智能体是否真正被创建并运行？
 
-The repo already has two adjacent pieces:
+代码仓库中已有两个相关组件：
 
-- `tests/e2e/onboarding.spec.ts` covers the onboarding wizard against the local source tree
-- `scripts/docker-onboard-smoke.sh` boots a published Docker install and auto-bootstraps authenticated mode, but only verifies the API/session layer
+- `tests/e2e/onboarding.spec.ts` 负责针对本地源代码树验证引导向导
+- `scripts/docker-onboard-smoke.sh` 启动已发布的 Docker 安装并自动引导已认证模式，但仅验证 API/会话层
 
-What is missing is one deterministic browser test that joins those two paths.
+目前缺失的是一个能将这两条路径衔接起来的确定性浏览器测试。
 
-## Goal
+## 目标
 
-Add a release-grade Docker-backed browser E2E that validates the published `canary` and `latest` installs end to end:
+添加一套以 Docker 为后端的发布级浏览器端到端测试，全面验证已发布的 `canary` 和 `latest` 安装：
 
-1. boot the published package in Docker
-2. sign in with known smoke credentials
-3. verify the user is routed into onboarding
-4. complete onboarding in the browser
-5. verify the first CEO agent exists
-6. verify the initial CEO run was triggered and reached a terminal or active state
+1. 在 Docker 中启动已发布的包
+2. 使用已知冒烟凭据登录
+3. 验证用户被正确路由至引导流程页面
+4. 在浏览器中完成引导流程
+5. 验证首个 CEO 智能体已存在
+6. 验证初始 CEO 运行已触发，并达到终态或活跃状态
 
-Then wire that test into GitHub Actions so release validation is no longer manual-only.
+然后将该测试接入 GitHub Actions，使发布验证不再只是手动操作。
 
 ## Recommendation In One Sentence
 

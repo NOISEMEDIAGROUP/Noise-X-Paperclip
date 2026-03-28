@@ -1,41 +1,41 @@
-# Humans and Permissions Plan
+# 人类用户与权限方案
 
-Status: Draft
-Date: 2026-02-21
-Owner: Server + UI + Shared + DB
+状态：草稿
+日期：2026-02-21
+负责人：Server + UI + Shared + DB
 
-## Goal
+## 目标
 
-Add first-class human users and permissions while preserving two deployment modes:
+在保留两种部署模式的同时，添加一流的人类用户支持和权限体系：
 
-- local trusted single-user mode with no login friction
-- cloud-hosted multi-user mode with mandatory authentication and authorization
+- 无登录摩擦的本地受信单用户模式
+- 强制身份验证和授权的云托管多用户模式
 
-## Why this plan
+## 为什么需要此方案
 
-Current V1 assumptions are centered on one board operator. We now need:
+当前 V1 假设以单一看板操作员为中心。我们现在需要：
 
-- multi-human collaboration with per-user permissions
-- safe cloud deployment defaults (no accidental loginless production)
-- local mode that still feels instant (`npx paperclipai run` and go)
-- agent-to-human task delegation, including a human inbox
-- one user account with access to multiple companies in one deployment
-- instance admins who can manage company access across the instance
-- join approvals surfaced as actionable inbox alerts, not buried in admin-only pages
-- a symmetric invite-and-approve onboarding path for both humans and agents
-- one shared membership and permission model for both humans and agents
+- 支持按用户权限的多人协作
+- 安全的云部署默认值（避免意外上线无登录的生产环境）
+- 本地模式仍保持即时体验（`npx paperclipai run` 即可使用）
+- 智能体向人类委派任务，包括人类收件箱
+- 一个用户账户可在同一部署中访问多家公司
+- 实例管理员可跨实例管理公司访问权限
+- 加入审批以可操作收件箱提醒的形式呈现，而非埋在仅管理员可见的页面
+- 人类与智能体均采用对称的邀请-审批入职路径
+- 人类与智能体共用同一套成员资格与权限模型
 
-## Product constraints
+## 产品约束
 
-1. Keep company scoping strict for every new table, endpoint, and permission check.
-2. Preserve existing control-plane invariants:
+1. 对每个新表、端点和权限检查严格保持公司作用域隔离。
+2. 保留现有控制平面不变量：
 
-- single-assignee task model
-- approval gates
-- budget hard-stop behavior
-- mutation activity logging
+- 单一受托人任务模型
+- 审批关卡
+- 预算硬停止行为
+- 变更操作日志记录
 
-3. Keep local mode easy and trusted, but prevent unsafe cloud posture.
+3. 保持本地模式简便可信，但防止不安全的云姿态。
 
 ## Deployment modes
 

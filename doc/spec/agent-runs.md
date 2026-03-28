@@ -1,37 +1,37 @@
-# Agent Runs Subsystem Spec
+# Agent Runs 子系统规格说明
 
-Status: Draft  
-Date: 2026-02-17  
-Audience: Product + Engineering  
-Scope: Agent execution runtime, adapter protocol, wakeup orchestration, and live status delivery
+状态：草稿
+日期：2026-02-17
+受众：产品 + 工程
+范围：Agent 执行运行时、适配器协议、唤醒编排及实时状态推送
 
-## 1. Document Role
+## 1. 文档定位
 
-This spec defines how Paperclip actually runs agents while staying runtime-agnostic.
+本规格说明定义了 Paperclip 如何在保持运行时无关性的前提下实际运行 agents。
 
-- `doc/SPEC-implementation.md` remains the V1 baseline contract.
-- This document adds concrete subsystem detail for agent execution, including local CLI adapters, runtime state persistence, wakeup scheduling, and browser live updates.
-- If this doc conflicts with current runtime behavior in code, this doc is the target behavior for upcoming implementation.
+- `doc/SPEC-implementation.md` 仍为 V1 基线合约。
+- 本文档为 agent 执行新增了具体的子系统细节，包括本地 CLI 适配器、运行时状态持久化、唤醒调度以及浏览器实时更新。
+- 若本文档与代码中的当前运行时行为存在冲突，以本文档为即将实现的目标行为。
 
-## 2. Captured Intent (From Request)
+## 2. 意图记录（来自需求）
 
-The following intentions are explicitly preserved in this spec:
+以下意图在本规格说明中被明确保留：
 
-1. Paperclip is adapter-agnostic. The key is a protocol, not a specific runtime.
-2. We still need default built-ins to make the system useful immediately.
-3. First two built-ins are `claude-local` and `codex-local`.
-4. Those adapters run local CLIs directly on the host machine, unsandboxed.
-5. Agent config includes working directory and initial/default prompt.
-6. Heartbeats run the configured adapter process, Paperclip manages lifecycle, and on exit Paperclip parses JSON output and updates state.
-7. Session IDs and token usage must be persisted so later heartbeats can resume.
-8. Adapters should support status updates (short message + color) and optional streaming logs.
-9. UI should support prompt template "pills" for variable insertion.
-10. CLI errors must be visible in full (or as much as possible) in the UI.
-11. Status changes must live-update across task and agent views via server push.
-12. Wakeup triggers should be centralized by a heartbeat/wakeup service with at least:
-   - timer interval
-   - wake on task assignment
-   - explicit ping/request
+1. Paperclip 与适配器无关。核心是一套协议，而非特定的运行时。
+2. 仍需提供默认内置项，使系统能立即投入使用。
+3. 前两个内置项为 `claude-local` 和 `codex-local`。
+4. 这些适配器直接在宿主机上运行本地 CLI，无沙盒隔离。
+5. Agent 配置包含工作目录和初始/默认提示词。
+6. Heartbeat 运行已配置的适配器进程，Paperclip 管理其生命周期，进程退出后 Paperclip 解析 JSON 输出并更新状态。
+7. Session ID 和 token 用量必须持久化，以便后续 heartbeat 可以恢复。
+8. 适配器应支持状态更新（短消息 + 颜色）以及可选的流式日志。
+9. UI 应支持提示词模板"pills"用于变量插入。
+10. CLI 错误必须在 UI 中完整显示（或尽可能多地显示）。
+11. 状态变更必须通过服务端推送在任务视图和 agent 视图中实时更新。
+12. 唤醒触发器应由一个 heartbeat/wakeup 服务集中管理，至少支持：
+   - 定时器间隔
+   - 任务分配时唤醒
+   - 显式 ping/请求
 
 ## 3. Goals and Non-Goals
 

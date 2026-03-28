@@ -1,27 +1,27 @@
-# Workspace Product Model, Work Product, and PR Flow
+# 工作区产品模型、工作成果与 PR 流程
 
-## Context
+## 背景
 
-Paperclip needs to support two very different but equally valid ways of working:
+Paperclip 需要支持两种截然不同但同样合理的工作方式：
 
-- a solo developer working directly on `master`, or in a folder that is not even a git repo
-- a larger engineering workflow with isolated branches, previews, pull requests, and cleanup automation
+- 独立开发者直接在 `master` 上工作，或在一个甚至不是 git 仓库的文件夹中工作
+- 具有隔离分支、预览、Pull Request 及清理自动化的大型工程工作流
 
-Today, Paperclip already has the beginnings of this model:
+目前，Paperclip 已具备该模型的雏形：
 
-- `projects` can carry execution workspace policy
-- `project_workspaces` already exist as a durable project-scoped object
-- issues can carry execution workspace settings
-- runtime services can be attached to a workspace or issue
+- `projects` 可携带执行工作区策略
+- `project_workspaces` 已作为持久化项目级对象存在
+- issue 可携带执行工作区设置
+- 运行时服务可附加到工作区或 issue
 
-What is missing is a clear product model and UI that make these capabilities understandable and operable.
+缺少的是清晰的产品模型和 UI，使这些能力易于理解和操作。
 
-The main product risk is overloading one concept to do too much:
+主要的产品风险在于将一个概念过载以承担过多职责：
 
-- making subissues do the job of branches or PRs
-- making projects too infrastructure-heavy
-- making workspaces so hidden that users cannot form a mental model
-- making Paperclip feel like a code review tool instead of a control plane
+- 让子 issue 承担分支或 PR 的职责
+- 让项目变得过于基础设施繁重
+- 让工作区过于隐蔽，导致用户无法形成心智模型
+- 让 Paperclip 看起来像代码审查工具，而非控制平面
 
 ## Goals
 
