@@ -1,49 +1,49 @@
-## Thinking Path
+## 思路路径
 
 <!--
-  Required. Trace your reasoning from the top of the project down to this
-  specific change. Start with what Paperclip is, then narrow through the
-  subsystem, the problem, and why this PR exists. Use blockquote style.
-  Aim for 5–8 steps. See CONTRIBUTING.md for full examples.
+  必填。从项目顶层到本次具体变更，追溯你的推理过程。
+  从 Paperclip 是什么开始，然后逐步缩小到子系统、问题，
+  以及为什么需要这个 PR。使用引用块格式。
+  目标为 5-8 个步骤。完整示例参见 CONTRIBUTING.md。
 -->
 
-> - Paperclip orchestrates AI agents for zero-human companies
-> - [Which subsystem or capability is involved]
-> - [What problem or gap exists]
-> - [Why it needs to be addressed]
-> - This pull request ...
-> - The benefit is ...
+> - Paperclip 为零人力公司编排 AI 智能体
+> - [涉及哪个子系统或能力]
+> - [存在什么问题或缺口]
+> - [为什么需要解决]
+> - 本 Pull Request ...
+> - 带来的好处是 ...
 
-## What Changed
+## 变更内容
 
-<!-- Bullet list of concrete changes. One bullet per logical unit. -->
+<!-- 具体变更的要点列表。每个逻辑单元一条。 -->
 
 -
 
-## Verification
+## 验证方式
 
 <!--
-  How can a reviewer confirm this works? Include test commands, manual
-  steps, or both. For UI changes, include before/after screenshots.
--->
-
--
-
-## Risks
-
-<!--
-  What could go wrong? Mention migration safety, breaking changes,
-  behavioral shifts, or "Low risk" if genuinely minor.
+  审查者如何确认这些改动是有效的？包括测试命令、手动步骤，
+  或两者兼有。对于 UI 变更，请附上修改前/修改后的截图。
 -->
 
 -
 
-## Checklist
+## 风险
 
-- [ ] I have included a thinking path that traces from project context to this change
-- [ ] I have run tests locally and they pass
-- [ ] I have added or updated tests where applicable
-- [ ] If this change affects the UI, I have included before/after screenshots
-- [ ] I have updated relevant documentation to reflect my changes
-- [ ] I have considered and documented any risks above
-- [ ] I will address all Greptile and reviewer comments before requesting merge
+<!--
+  可能出现什么问题？说明迁移安全性、破坏性变更、
+  行为变化，或者如果确实影响很小则写"低风险"。
+-->
+
+-
+
+## 检查清单
+
+- [ ] 我已包含从项目上下文到本次变更的思路路径
+- [ ] 我已在本地运行测试并且通过
+- [ ] 我已在适用的地方添加或更新了测试
+- [ ] 如果此变更影响 UI，我已附上修改前/修改后的截图
+- [ ] 我已更新相关文档以反映我的变更
+- [ ] 我已考虑并在上方记录了所有风险
+- [ ] 我将在请求合并之前处理所有 Greptile 和审查者的评论

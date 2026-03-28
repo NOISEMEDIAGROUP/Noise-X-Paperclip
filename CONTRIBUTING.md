@@ -1,74 +1,74 @@
-# Contributing Guide
+# 贡献指南
 
-Thanks for wanting to contribute!
+感谢你愿意参与贡献！
 
-We really appreciate both small fixes and thoughtful larger changes.
+我们非常感谢小修复和深思熟虑的大改动。
 
-## Two Paths to Get Your Pull Request Accepted
+## 让你的 Pull Request 被接受的两种方式
 
-### Path 1: Small, Focused Changes (Fastest way to get merged)
+### 方式一：小而专注的改动（最快被合并的方式）
 
-- Pick **one** clear thing to fix/improve
-- Touch the **smallest possible number of files**
-- Make sure the change is very targeted and easy to review
-- All automated checks pass (including Greptile comments)
-- No new lint/test failures
+- 选择**一个**明确要修复/改进的内容
+- 涉及**尽可能少的文件**
+- 确保改动非常有针对性且易于审查
+- 所有自动化检查通过（包括 Greptile 评论）
+- 没有新的 lint/测试失败
 
-These almost always get merged quickly when they're clean.
+这类改动在整洁的情况下几乎总能被快速合并。
 
-### Path 2: Bigger or Impactful Changes
+### 方式二：更大或更有影响力的改动
 
-- **First** talk about it in Discord → #dev channel  
-  → Describe what you're trying to solve  
-  → Share rough ideas / approach
-- Once there's rough agreement, build it
-- In your PR include:
-  - Before / After screenshots (or short video if UI/behavior change)
-  - Clear description of what & why
-  - Proof it works (manual testing notes)
-  - All tests passing
-  - All Greptile + other PR comments addressed
+- **首先**在 Discord 的 #dev 频道中讨论
+  → 描述你想解决的问题
+  → 分享初步想法/方案
+- 在大致达成一致后再开始构建
+- 在你的 PR 中包含：
+  - 修改前/修改后截图（如果是 UI/行为变更，附上短视频）
+  - 清晰描述做了什么以及为什么
+  - 证明其可用（手动测试记录）
+  - 所有测试通过
+  - 所有 Greptile 及其他 PR 评论已处理
 
-PRs that follow this path are **much** more likely to be accepted, even when they're large.
+遵循这种方式的 PR **更有可能**被接受，即使改动很大。
 
-## General Rules (both paths)
+## 通用规则（适用于两种方式）
 
-- Write clear commit messages
-- Keep PR title + description meaningful
-- One PR = one logical change (unless it's a small related group)
-- Run tests locally first
-- Be kind in discussions 😄
+- 编写清晰的提交信息
+- PR 标题和描述要有意义
+- 一个 PR = 一个逻辑变更（除非是一组小的相关改动）
+- 先在本地运行测试
+- 在讨论中保持友善 😄
 
-## Writing a Good PR message
+## 编写良好的 PR 信息
 
-Please include a "thinking path" at the top of your PR message that explains from the top of the project down to what you fixed. E.g.:
+请在 PR 信息顶部包含一个"思路路径"，从项目顶层开始解释你修复的内容。例如：
 
-### Thinking Path Example 1:
+### 思路路径示例 1：
 
-> - Paperclip orchestrates ai-agents for zero-human companies
-> - There are many types of adapters for each LLM model provider
-> - But LLM's have a context limit and not all agents can automatically compact their context
-> - So we need to have an adapter-specific configuration for which adapters can and cannot automatically compact their context
-> - This pull request adds per-adapter configuration of compaction, either auto or paperclip managed
-> - That way we can get optimal performance from any adapter/provider in Paperclip
+> - Paperclip 为零人力公司编排 AI 智能体
+> - 每个 LLM 模型提供商有多种类型的适配器
+> - 但 LLM 有上下文长度限制，并非所有智能体都能自动压缩上下文
+> - 因此我们需要针对每个适配器进行特定配置，设定哪些适配器可以或不可以自动压缩上下文
+> - 本 Pull Request 添加了按适配器配置压缩方式的功能，支持自动模式或 Paperclip 托管模式
+> - 这样我们就能从 Paperclip 中的任何适配器/提供商获得最佳性能
 
-### Thinking Path Example 2:
+### 思路路径示例 2：
 
-> - Paperclip orchestrates ai-agents for zero-human companies
-> - But humans want to watch the agents and oversee their work
-> - Human users also operate in teams and so they need their own logins, profiles, views etc.
-> - So we have a multi-user system for humans
-> - But humans want to be able to update their own profile picture and avatar
-> - But the avatar upload form wasn't saving the avatar to the file storage system
-> - So this PR fixes the avatar upload form to use the file storage service
-> - The benefit is we don't have a one-off file storage for just one aspect of the system, which would cause confusion and extra configuration
+> - Paperclip 为零人力公司编排 AI 智能体
+> - 但人类希望观察智能体并监督其工作
+> - 人类用户也以团队方式运作，因此他们需要自己的登录、个人资料、视图等
+> - 所以我们有一个面向人类的多用户系统
+> - 但人类希望能够更新自己的头像和个人照片
+> - 然而头像上传表单没有将头像保存到文件存储系统
+> - 因此本 PR 修复了头像上传表单，使其使用文件存储服务
+> - 这样做的好处是我们不会为系统的某一个方面单独维护一套文件存储，避免造成混乱和额外配置
 
-Then have the rest of your normal PR message after the Thinking Path.
+在思路路径之后，继续编写正常的 PR 信息。
 
-This should include details about what you did, why you did it, why it matters & the benefits, how we can verify it works, and any risks.
+信息应包含你做了什么、为什么这样做、为什么重要及其好处、如何验证其有效，以及任何风险。
 
-Please include screenshots if possible if you have a visible change. (use something like the [agent-browser skill](https://github.com/vercel-labs/agent-browser/blob/main/skills/agent-browser/SKILL.md) or similar to take screenshots). Ideally, you include before and after screenshots.
+如果有可见的变更，请尽可能附上截图（可使用类似 [agent-browser skill](https://github.com/vercel-labs/agent-browser/blob/main/skills/agent-browser/SKILL.md) 的工具来截图）。理想情况下，请附上修改前和修改后的截图。
 
-Questions? Just ask in #dev — we're happy to help.
+有问题？在 #dev 频道提问——我们很乐意帮忙。
 
-Happy hacking!
+祝编码愉快！

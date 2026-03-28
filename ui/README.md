@@ -1,11 +1,11 @@
 # @paperclipai/ui
 
-Published static assets for the Paperclip board UI.
+Paperclip 面板 UI 的已发布静态资源。
 
-## What gets published
+## 发布内容
 
-The npm package contains the production build under `dist/`. It does not ship the UI source tree or workspace-only dependencies.
+npm 包包含 `dist/` 下的生产构建。它不包含 UI 源代码树或仅工作区依赖。
 
-## Typical use
+## 典型用法
 
-Install the package, then serve or copy the built files from `node_modules/@paperclipai/ui/dist`.
+安装该包，然后从 `node_modules/@paperclipai/ui/dist` 提供或复制构建后的文件。
