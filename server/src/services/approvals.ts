@@ -106,7 +106,7 @@ export function approvalService(db: Db) {
     approve: async (id: string, decidedByUserId: string, decisionNote?: string | null) => {
       const existing = await getExistingApproval(id);
       let prevalidatedAdapterConfig: Record<string, unknown> | null = null;
-      if (existing.type === "hire_agent") {
+      if (canResolveStatuses.has(existing.status) && existing.type === "hire_agent") {
         const payload = existing.payload as Record<string, unknown>;
         const payloadAgentId = typeof payload.agentId === "string" ? payload.agentId : null;
         if (!payloadAgentId) {

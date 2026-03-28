@@ -140,4 +140,28 @@ describe("approvalService resolution idempotency", () => {
     expect(dbStub.returning).not.toHaveBeenCalled();
     expect(mockAgentService.create).not.toHaveBeenCalled();
   });
+
+  it("keeps repeated approve retries as no-ops for already-approved opencode_local hires", async () => {
+    const approved = createApproval("approved");
+    approved.payload = {
+      name: "OpenCode Agent",
+      role: "general",
+      adapterType: "opencode_local",
+      adapterConfig: {},
+    };
+    const dbStub = createDbStub([[approved], [approved]], []);
+    mockPrepareAdapterConfigForPersistence.mockRejectedValueOnce(
+      new Error("OpenCode requires an explicit model in provider/model format."),
+    );
+
+    const svc = approvalService(dbStub.db as any);
+    const result = await svc.approve("approval-1", "board", "ship it");
+
+    expect(result.applied).toBe(false);
+    expect(result.approval.status).toBe("approved");
+    expect(mockPrepareAdapterConfigForPersistence).not.toHaveBeenCalled();
+    expect(mockAgentService.create).not.toHaveBeenCalled();
+    expect(mockAgentService.activatePendingApproval).not.toHaveBeenCalled();
+    expect(mockNotifyHireApproved).not.toHaveBeenCalled();
+  });
 });

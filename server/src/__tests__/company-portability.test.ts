@@ -2196,7 +2196,7 @@ describe("company portability", () => {
     expect(nestedMaterializedFiles?.["AGENTS.md"]).not.toContain('name: "ClaudeCoder"');
   });
 
-  it("rejects opencode_local imports without an explicit model", async () => {
+  it("warns and skips opencode_local imports without an explicit model", async () => {
     const portability = companyPortabilityService({} as any);
 
     companySvc.create.mockResolvedValue({
@@ -2208,8 +2208,7 @@ describe("company portability", () => {
       new Error("OpenCode requires an explicit model in provider/model format."),
     );
 
-    await expect(
-      portability.importBundle({
+    const result = await portability.importBundle({
         source: {
           type: "inline",
           rootPath: "paperclip-demo",
@@ -2249,9 +2248,23 @@ describe("company portability", () => {
             adapterConfig: {},
           },
         },
-      }, "user-1"),
-    ).rejects.toThrow("OpenCode requires an explicit model in provider/model format.");
+      }, "user-1");
 
+    expect(result.company).toEqual({
+      id: "company-imported",
+      name: "Imported Paperclip",
+      action: "created",
+    });
+    expect(result.warnings).toContain(
+      "Skipped agent opencode-agent: invalid adapter config (OpenCode requires an explicit model in provider/model format.)",
+    );
+    expect(result.agents).toContainEqual({
+      slug: "opencode-agent",
+      id: null,
+      action: "skipped",
+      name: "OpenCode Agent",
+      reason: "Invalid adapter config.",
+    });
     expect(agentSvc.create).not.toHaveBeenCalled();
   });
 });
