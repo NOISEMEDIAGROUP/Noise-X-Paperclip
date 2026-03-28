@@ -900,6 +900,7 @@ export function issueService(db: Db) {
     },
 
     update: async (id: string, data: Partial<typeof issues.$inferInsert> & { labelIds?: string[] }) => {
+      if (!isUuidLike(id)) return null;
       const existing = await db
         .select()
         .from(issues)
@@ -1005,6 +1006,9 @@ export function issueService(db: Db) {
     },
 
     remove: (id: string) =>
+      !isUuidLike(id)
+        ? Promise.resolve(null)
+        :
       db.transaction(async (tx) => {
         const attachmentAssetIds = await tx
           .select({ assetId: issueAttachments.assetId })

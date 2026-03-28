@@ -701,6 +701,12 @@ describe("issueService.list participantAgentId", () => {
     await expect(svc.getById("not-a-uuid")).resolves.toBeNull();
   });
 
+  it("returns null for malformed issue ids on update", async () => {
+    await expect(
+      svc.update("not-a-uuid", { title: "ignored" }),
+    ).resolves.toBeNull();
+  });
+
   it("returns not found for malformed issue ids on assertCheckoutOwner", async () => {
     await expect(
       svc.assertCheckoutOwner("not-a-uuid", randomUUID(), null),
@@ -708,6 +714,10 @@ describe("issueService.list participantAgentId", () => {
       status: 404,
       message: "Issue not found",
     });
+  });
+
+  it("returns null for malformed issue ids on remove", async () => {
+    await expect(svc.remove("not-a-uuid")).resolves.toBeNull();
   });
 
   it("returns null for malformed issue ids on release", async () => {
