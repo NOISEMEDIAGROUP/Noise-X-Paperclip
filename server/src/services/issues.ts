@@ -1392,9 +1392,10 @@ export function issueService(db: Db) {
       const order = opts?.order === "asc" ? "asc" : "desc";
       if (!isUuidLike(issueId)) return [];
       const afterCommentId = asNonEmptyString(opts?.afterCommentId) ?? null;
+      const rawLimit = opts?.limit;
       const limit =
-        opts?.limit && opts.limit > 0
-          ? Math.min(Math.floor(opts.limit), MAX_ISSUE_COMMENT_PAGE_LIMIT)
+        typeof rawLimit === "number" && Number.isFinite(rawLimit) && rawLimit > 0
+          ? Math.min(Math.floor(rawLimit), MAX_ISSUE_COMMENT_PAGE_LIMIT)
           : null;
       if (afterCommentId && !isUuidLike(afterCommentId)) return [];
 
