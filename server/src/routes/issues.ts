@@ -1330,13 +1330,18 @@ export function issueRoutes(db: Db, storage: StorageService) {
     // injection will fail silently (the runId is stale). This is intentional:
     // the wakeup/coalesce path that follows will still enqueue the comment for
     // the agent on its next run, so no user-visible data is lost.
+    let injected = false;
     if (!interruptRequested && currentIssue.executionRunId) {
       const commentAuthorIsExecutingAgent =
         actor.actorType === "agent" && actor.actorId === currentIssue.assigneeAgentId;
       if (!commentAuthorIsExecutingAgent) {
         const authorName = actor.actorType === "user" ? "board" : (actor.actorId ?? "agent");
         try {
-          heartbeat.injectComment(currentIssue.executionRunId, req.body.body, authorName);
+          injected = heartbeat.injectComment(currentIssue.executionRunId, req.body.body, authorName, {
+              companyId: currentIssue.companyId,
+              issueId: currentIssue.id,
+              commentId: comment.id,
+            });
         } catch (err) {
           logger.debug({ err, issueId: currentIssue.id, runId: currentIssue.executionRunId }, "live comment injection failed — stale runId race or process gone (non-fatal, wakeup path handles fallthrough)");
         }
@@ -1435,7 +1440,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       }
     })();
 
-    res.status(201).json(comment);
+    res.status(201).json({ ...comment, injected });
   });
 
   router.get("/issues/:id/attachments", async (req, res) => {

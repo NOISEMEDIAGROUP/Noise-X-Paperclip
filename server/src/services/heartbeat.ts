@@ -3715,12 +3715,19 @@ export function heartbeatService(db: Db) {
       return run ?? null;
     },
 
-    injectComment: (runId: string, commentBody: string, commentAuthor: string): boolean => {
+    injectComment: (runId: string, commentBody: string, commentAuthor: string, meta?: { companyId?: string; issueId?: string; commentId?: string }): boolean => {
       const message = `[Paperclip – live comment from ${commentAuthor}]: ${commentBody}`;
       const payload = JSON.stringify({ type: "user", message: { role: "user", content: message } }) + "\n";
       const ok = writeToRunningProcess(runId, payload);
       if (ok) {
         logger.info({ runId, commentAuthor }, "Injected live comment into running agent");
+        if (meta?.companyId) {
+          publishLiveEvent({
+            companyId: meta.companyId,
+            type: "issue.comment.injected",
+            payload: { commentId: meta.commentId, issueId: meta.issueId, runId, commentAuthor },
+          });
+        }
       } else {
         logger.debug({ runId, commentAuthor }, "Could not inject comment (process not running or stdin closed)");
       }
