@@ -117,8 +117,10 @@ type IssueUserContextInput = {
 type ProjectGoalReader = Pick<Db, "select">;
 
 function sameRunLock(checkoutRunId: string | null, actorRunId: string | null) {
-  if (actorRunId) return checkoutRunId === actorRunId;
-  return checkoutRunId == null;
+  const normalizedCheckoutRunId = typeof checkoutRunId === "string" ? checkoutRunId.trim().toLowerCase() : null;
+  const normalizedActorRunId = typeof actorRunId === "string" ? actorRunId.trim().toLowerCase() : null;
+  if (normalizedActorRunId) return normalizedCheckoutRunId === normalizedActorRunId;
+  return normalizedCheckoutRunId == null;
 }
 
 const TERMINAL_HEARTBEAT_RUN_STATUSES = new Set(["succeeded", "failed", "cancelled", "timed_out"]);
@@ -1090,6 +1092,7 @@ export function issueService(db: Db) {
       if (!isUuidLike(id)) throw notFound("Issue not found");
       if (!isUuidLike(agentId)) throw unprocessable("Invalid agentId");
       if (checkoutRunId && !isUuidLike(checkoutRunId)) throw unprocessable("Invalid checkoutRunId");
+      const normalizedCheckoutRunId = checkoutRunId ? checkoutRunId.toLowerCase() : null;
 
       const issueCompany = await db
         .select({ companyId: issues.companyId })
@@ -1109,22 +1112,22 @@ export function issueService(db: Db) {
       }
 
       const now = new Date();
-      const sameRunAssigneeCondition = checkoutRunId
+      const sameRunAssigneeCondition = normalizedCheckoutRunId
         ? and(
           eq(issues.assigneeAgentId, agentId),
-          or(isNull(issues.checkoutRunId), eq(issues.checkoutRunId, checkoutRunId)),
+          or(isNull(issues.checkoutRunId), eq(issues.checkoutRunId, normalizedCheckoutRunId)),
         )
         : and(eq(issues.assigneeAgentId, agentId), isNull(issues.checkoutRunId));
-      const executionLockCondition = checkoutRunId
-        ? or(isNull(issues.executionRunId), eq(issues.executionRunId, checkoutRunId))
+      const executionLockCondition = normalizedCheckoutRunId
+        ? or(isNull(issues.executionRunId), eq(issues.executionRunId, normalizedCheckoutRunId))
         : isNull(issues.executionRunId);
       const updated = await db
         .update(issues)
         .set({
           assigneeAgentId: agentId,
           assigneeUserId: null,
-          checkoutRunId,
-          executionRunId: checkoutRunId,
+          checkoutRunId: normalizedCheckoutRunId,
+          executionRunId: normalizedCheckoutRunId,
           status: "in_progress",
           startedAt: now,
           updatedAt: now,
@@ -1163,15 +1166,15 @@ export function issueService(db: Db) {
         current.assigneeAgentId === agentId &&
         current.status === "in_progress" &&
         current.checkoutRunId == null &&
-        checkoutRunId
+        normalizedCheckoutRunId
       ) {
         const staleExecutionLock =
           current.executionRunId !== null &&
-          current.executionRunId !== checkoutRunId &&
+          current.executionRunId !== normalizedCheckoutRunId &&
           (await isTerminalOrMissingHeartbeatRun(current.executionRunId));
         const executionCondition =
-          current.executionRunId == null || current.executionRunId === checkoutRunId
-            ? or(isNull(issues.executionRunId), eq(issues.executionRunId, checkoutRunId))
+          current.executionRunId == null || current.executionRunId === normalizedCheckoutRunId
+            ? or(isNull(issues.executionRunId), eq(issues.executionRunId, normalizedCheckoutRunId))
             : staleExecutionLock
               ? eq(issues.executionRunId, current.executionRunId)
               : null;
@@ -1187,8 +1190,8 @@ export function issueService(db: Db) {
         const adopted = await db
           .update(issues)
           .set({
-            checkoutRunId,
-            executionRunId: checkoutRunId,
+            checkoutRunId: normalizedCheckoutRunId,
+            executionRunId: normalizedCheckoutRunId,
             executionLockedAt: new Date(),
             updatedAt: new Date(),
           })
@@ -1207,16 +1210,16 @@ export function issueService(db: Db) {
       }
 
       if (
-        checkoutRunId &&
+        normalizedCheckoutRunId &&
         current.assigneeAgentId === agentId &&
         current.status === "in_progress" &&
         current.checkoutRunId &&
-        current.checkoutRunId !== checkoutRunId
+        current.checkoutRunId !== normalizedCheckoutRunId
       ) {
         const adopted = await adoptStaleCheckoutRun({
           issueId: id,
           actorAgentId: agentId,
-          actorRunId: checkoutRunId,
+          actorRunId: normalizedCheckoutRunId,
           expectedCheckoutRunId: current.checkoutRunId,
         });
         if (adopted) {
@@ -1230,7 +1233,7 @@ export function issueService(db: Db) {
       if (
         current.assigneeAgentId === agentId &&
         current.status === "in_progress" &&
-        sameRunLock(current.checkoutRunId, checkoutRunId)
+        sameRunLock(current.checkoutRunId, normalizedCheckoutRunId)
       ) {
         const row = await db.select().from(issues).where(eq(issues.id, id)).then((rows) => rows[0]!);
         const [enriched] = await withIssueLabels(db, [row]);
@@ -1250,6 +1253,7 @@ export function issueService(db: Db) {
       if (!isUuidLike(id)) throw notFound("Issue not found");
       if (!isUuidLike(actorAgentId)) throw conflict("Issue run ownership conflict");
       if (actorRunId && !isUuidLike(actorRunId)) throw conflict("Issue run ownership conflict");
+      const normalizedActorRunId = actorRunId ? actorRunId.toLowerCase() : null;
 
       const current = await db
         .select({
@@ -1267,22 +1271,22 @@ export function issueService(db: Db) {
       if (
         current.status === "in_progress" &&
         current.assigneeAgentId === actorAgentId &&
-        sameRunLock(current.checkoutRunId, actorRunId)
+        sameRunLock(current.checkoutRunId, normalizedActorRunId)
       ) {
         return { ...current, adoptedFromRunId: null as string | null };
       }
 
       if (
-        actorRunId &&
+        normalizedActorRunId &&
         current.status === "in_progress" &&
         current.assigneeAgentId === actorAgentId &&
         current.checkoutRunId &&
-        current.checkoutRunId !== actorRunId
+        current.checkoutRunId !== normalizedActorRunId
       ) {
         const adopted = await adoptStaleCheckoutRun({
           issueId: id,
           actorAgentId,
-          actorRunId,
+          actorRunId: normalizedActorRunId,
           expectedCheckoutRunId: current.checkoutRunId,
         });
 
@@ -1300,7 +1304,7 @@ export function issueService(db: Db) {
         assigneeAgentId: current.assigneeAgentId,
         checkoutRunId: current.checkoutRunId,
         actorAgentId,
-        actorRunId,
+        actorRunId: normalizedActorRunId,
       });
     },
 
@@ -1308,6 +1312,7 @@ export function issueService(db: Db) {
       if (!isUuidLike(id)) return null;
       if (actorAgentId && !isUuidLike(actorAgentId)) throw conflict("Only assignee can release issue");
       if (actorRunId && !isUuidLike(actorRunId)) throw conflict("Only checkout run can release issue");
+      const normalizedActorRunId = actorRunId ? actorRunId.toLowerCase() : null;
 
       const existing = await db
         .select()
@@ -1324,13 +1329,13 @@ export function issueService(db: Db) {
         existing.status === "in_progress" &&
         existing.assigneeAgentId === actorAgentId &&
         existing.checkoutRunId &&
-        !sameRunLock(existing.checkoutRunId, actorRunId ?? null)
+        !sameRunLock(existing.checkoutRunId, normalizedActorRunId)
       ) {
         throw conflict("Only checkout run can release issue", {
           issueId: existing.id,
           assigneeAgentId: existing.assigneeAgentId,
           checkoutRunId: existing.checkoutRunId,
-          actorRunId: actorRunId ?? null,
+          actorRunId: normalizedActorRunId,
         });
       }
 
