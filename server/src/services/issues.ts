@@ -1396,7 +1396,8 @@ export function issueService(db: Db) {
         limit?: number | null;
       },
     ) => {
-      const order = opts?.order === "asc" ? "asc" : "desc";
+      const orderRaw = asNonEmptyString(opts?.order)?.toLowerCase();
+      const order = orderRaw === "asc" ? "asc" : "desc";
       if (!isUuidLike(issueId)) return [];
       const afterCommentId = asNonEmptyString(opts?.afterCommentId) ?? null;
       const rawLimit = opts?.limit;

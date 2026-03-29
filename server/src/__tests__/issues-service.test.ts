@@ -494,6 +494,46 @@ describe("issueService.list participantAgentId", () => {
     expect(comments).toEqual([]);
   });
 
+  it("normalizes comment order filters for non-route callers", async () => {
+    const companyId = randomUUID();
+    const issueId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Order normalization",
+      status: "todo",
+      priority: "medium",
+    });
+
+    await db.insert(issueComments).values([
+      {
+        issueId,
+        companyId,
+        body: "older",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      },
+      {
+        issueId,
+        companyId,
+        body: "newer",
+        createdAt: new Date("2026-01-01T00:00:01.000Z"),
+      },
+    ]);
+
+    const comments = await svc.listComments(issueId, {
+      order: "ASC" as any,
+    });
+    expect(comments.map((comment) => comment.body)).toEqual(["older", "newer"]);
+  });
+
   it("ignores malformed non-string comment cursors instead of throwing", async () => {
     const comments = await svc.listComments(randomUUID(), {
       afterCommentId: { bad: true } as any,
