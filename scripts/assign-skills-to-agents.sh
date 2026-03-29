@@ -1,19 +1,14 @@
 #!/bin/bash
 # assign-skills-to-agents.sh
-# Asigna skills unificadas (gstack + superpowers + MiniMax + finance + agent-reach)
-# a los agentes pertinentes de TODAS las empresas en Paperclip.
+# Assigns gstack + superpowers as customSkillsDirs to technical agents
+# across ALL Paperclip companies.
 #
-# Skills built-in (automáticas para todos, desde /skills/):
-#   unified-dev-workflow, dev-methodology, iterative-optimization,
-#   internet-research, finance-analysis, agent-security,
-#   paperclip-operations, autoresearch, embedding-autoresearch,
-#   multimodal-search, peer-review-response
+# Technical agents (get gstack + superpowers):
+#   CTO, Founding Engineer, Frontend Lead, Head of AI, AutoResearch
 #
-# Skills externas (via customSkillsDirs, selectivas por rol):
-#   gstack      → CTO, Engineering, Frontend, QA, DevOps, Security, Design
-#   superpowers → Todos los developers/engineers (TDD, planning, subagents)
+# All other agents use built-in skills only (from /skills/ directory).
 #
-# Uso: bash scripts/assign-skills-to-agents.sh
+# Usage: bash scripts/assign-skills-to-agents.sh
 
 set -euo pipefail
 
@@ -66,27 +61,7 @@ fi
 echo "✓ Database connected"
 echo ""
 
-# ─── Step 3: Show current state ───
-echo "Current agents and their customSkillsDirs:"
-echo "────────────────────────────────────────────────────────────────"
-psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
-SELECT c.name AS company, a.name AS agent,
-       a.adapter_config->>'adapter' AS adapter,
-       a.adapter_config->>'model' AS model,
-       COALESCE(a.adapter_config->'customSkillsDirs'::text, '[]') AS custom_dirs
-FROM agents a
-JOIN companies c ON a.company_id = c.id
-WHERE a.adapter_config->>'adapter' IN ('claude_local', 'cursor_local')
-ORDER BY c.name, a.name;
-"
-
-echo ""
-
-# ─── Step 4: Build customSkillsDirs arrays per role ───
-# All technical roles get both gstack + superpowers
-# Non-technical roles (CEO, CMO, Legal, etc.) get neither (they use built-in skills only)
-
-# Build the JSON array of dirs to assign
+# ─── Step 3: Build customSkillsDirs JSON array ───
 DIRS_ARRAY="["
 FIRST=1
 if [ -d "$GSTACK_DIR" ]; then
@@ -104,54 +79,29 @@ DIRS_ARRAY="${DIRS_ARRAY}]"
 echo "Skills directories to assign: $DIRS_ARRAY"
 echo ""
 
-# Technical agent patterns (get gstack + superpowers)
-TECH_PATTERNS="
-  a.name ILIKE '%CTO%'
-  OR a.name ILIKE '%Tech Lead%'
-  OR a.name ILIKE '%Engineering%'
-  OR a.name ILIKE '%Frontend%'
-  OR a.name ILIKE '%Fullstack%'
-  OR a.name ILIKE '%Full Stack%'
-  OR a.name ILIKE '%Full-Stack%'
-  OR a.name ILIKE '%Backend%'
-  OR a.name ILIKE '%QA%'
-  OR a.name ILIKE '%Quality%'
-  OR a.name ILIKE '%DevOps%'
-  OR a.name ILIKE '%SRE%'
-  OR a.name ILIKE '%Security%'
-  OR a.name ILIKE '%Compliance%'
-  OR a.name ILIKE '%Designer%'
-  OR a.name ILIKE '%Design%'
-  OR a.name ILIKE '%Architect%'
-  OR a.name ILIKE '%Developer%'
-  OR a.name ILIKE '%Engineer%'
-  OR a.name ILIKE '%Lead%'
-  OR a.name ILIKE '%Writer%'
-  OR a.name ILIKE '%Documentation%'
-  OR a.name ILIKE '%AutoResearch%'
-  OR a.name ILIKE '%Research%'
-"
+# ─── Step 4: Show what will be updated ───
+# Technical agents matched by exact name
+TECH_WHERE="a.name IN ('CTO', 'Founding Engineer', 'Frontend Lead', 'Head of AI', 'AutoResearch')"
 
-echo "Agents that will receive external skills (gstack + superpowers):"
+echo "Agents that WILL receive external skills (gstack + superpowers):"
 echo "────────────────────────────────────────────────────────────────"
 psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
-SELECT c.name AS company, a.name AS agent, a.adapter_config->>'model' AS model
+SELECT c.name AS company, a.name AS agent, a.adapter_type,
+       a.adapter_config->>'model' AS model
 FROM agents a
 JOIN companies c ON a.company_id = c.id
-WHERE ($TECH_PATTERNS)
-  AND a.adapter_config->>'adapter' IN ('claude_local', 'cursor_local')
+WHERE $TECH_WHERE
 ORDER BY c.name, a.name;
 "
 
 echo ""
-echo "Agents that will use built-in skills ONLY (CEO, CMO, CFO, Legal, Sales, etc.):"
+echo "Agents that will use built-in skills ONLY:"
 echo "────────────────────────────────────────────────────────────────"
 psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
-SELECT c.name AS company, a.name AS agent, a.adapter_config->>'model' AS model
+SELECT c.name AS company, a.name AS agent, a.adapter_type
 FROM agents a
 JOIN companies c ON a.company_id = c.id
-WHERE NOT ($TECH_PATTERNS)
-  AND a.adapter_config->>'adapter' IN ('claude_local', 'cursor_local')
+WHERE NOT ($TECH_WHERE)
 ORDER BY c.name, a.name;
 "
 
@@ -169,12 +119,12 @@ echo "Updating technical agents..."
 UPDATED=$(psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "
 UPDATE agents a
 SET adapter_config = jsonb_set(
-  a.adapter_config,
+  COALESCE(a.adapter_config, '{}'::jsonb),
   '{customSkillsDirs}',
   '${DIRS_ARRAY}'::jsonb
 )
-WHERE ($TECH_PATTERNS)
-  AND a.adapter_config->>'adapter' IN ('claude_local', 'cursor_local')
+WHERE $TECH_WHERE
+  AND a.adapter_type IN ('claude_local', 'cursor_local')
 RETURNING a.name;
 ")
 
@@ -186,18 +136,11 @@ echo ""
 echo "════════════════════════════════════════════════════════════════"
 echo "  Updated $COUNT agents with external skills"
 echo ""
-echo "  Built-in skills (automatic for ALL agents):"
-echo "    - unified-dev-workflow    (gstack + superpowers combined)"
-echo "    - dev-methodology         (TDD, debugging, git worktrees)"
-echo "    - iterative-optimization  (structured iteration cycles)"
-echo "    - internet-research       (web, YouTube, RSS access)"
-echo "    - finance-analysis        (market data, sentiment, reports)"
-echo "    - agent-security          (sandboxing, policies, credentials)"
-echo "    - paperclip-operations    (Paperclip admin guide)"
-echo "    - autoresearch            (Karpathy experiment loop)"
-echo "    - embedding-autoresearch  (multimodal embeddings)"
-echo "    - multimodal-search       (Gemini Embedding 2 RAG)"
-echo "    - peer-review-response    (academic review patterns)"
+echo "  Built-in skills (automatic for ALL 56 agents):"
+echo "    unified-dev-workflow, dev-methodology, iterative-optimization,"
+echo "    internet-research, finance-analysis, agent-security,"
+echo "    paperclip-operations, autoresearch, embedding-autoresearch,"
+echo "    multimodal-search, peer-review-response"
 echo ""
 echo "  External skills (technical agents only):"
 if [ -d "$GSTACK_DIR" ]; then
