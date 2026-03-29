@@ -25,12 +25,15 @@ export const queryKeys = {
     configRevisions: (agentId: string) => ["agents", "config-revisions", agentId] as const,
     adapterModels: (companyId: string, adapterType: string) =>
       ["agents", companyId, "adapter-models", adapterType] as const,
+    detectModel: (companyId: string, adapterType: string) =>
+      ["agents", companyId, "detect-model", adapterType] as const,
   },
   issues: {
     list: (companyId: string) => ["issues", companyId] as const,
     search: (companyId: string, q: string, projectId?: string) =>
       ["issues", companyId, "search", q, projectId ?? "__all-projects__"] as const,
     listAssignedToMe: (companyId: string) => ["issues", companyId, "assigned-to-me"] as const,
+    listMineByMe: (companyId: string) => ["issues", companyId, "mine-by-me"] as const,
     listTouchedByMe: (companyId: string) => ["issues", companyId, "touched-by-me"] as const,
     listUnreadTouchedByMe: (companyId: string) => ["issues", companyId, "unread-touched-by-me"] as const,
     labels: (companyId: string) => ["issues", companyId, "labels"] as const,
@@ -47,6 +50,12 @@ export const queryKeys = {
     liveRuns: (issueId: string) => ["issues", "live-runs", issueId] as const,
     activeRun: (issueId: string) => ["issues", "active-run", issueId] as const,
     workProducts: (issueId: string) => ["issues", "work-products", issueId] as const,
+  },
+  routines: {
+    list: (companyId: string) => ["routines", companyId] as const,
+    detail: (id: string) => ["routines", "detail", id] as const,
+    runs: (id: string) => ["routines", "runs", id] as const,
+    activity: (companyId: string, id: string) => ["routines", "activity", companyId, id] as const,
   },
   executionWorkspaces: {
     list: (companyId: string, filters?: Record<string, string | boolean | undefined>) =>

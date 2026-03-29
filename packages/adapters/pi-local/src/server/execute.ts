@@ -266,10 +266,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         `The above agent instructions were loaded from ${resolvedInstructionsFilePath}. ` +
         `Resolve any relative file references from ${instructionsFileDir}.\n\n` +
         `You are agent {{agent.id}} ({{agent.name}}). Continue your Paperclip work.`;
-      await onLog(
-        "stdout",
-        `[paperclip] Loaded agent instructions file: ${resolvedInstructionsFilePath}\n`,
-      );
     } catch (err) {
       instructionsReadFailed = true;
       const reason = err instanceof Error ? err.message : String(err);
@@ -330,8 +326,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const buildArgs = (sessionFile: string): string[] => {
     const args: string[] = [];
     
-    // Use RPC mode for proper lifecycle management (waits for agent completion)
-    args.push("--mode", "rpc");
+    // Use JSON mode for structured output with print mode (non-interactive)
+    args.push("--mode", "json");
+    args.push("-p"); // Non-interactive mode: process prompt and exit
     
     // Use --append-system-prompt to extend Pi's default system prompt
     args.push("--append-system-prompt", renderedSystemPromptExtension);
@@ -339,25 +336,19 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     if (provider) args.push("--provider", provider);
     if (modelId) args.push("--model", modelId);
     if (thinking) args.push("--thinking", thinking);
-    
+
     args.push("--tools", "read,bash,edit,write,grep,find,ls");
     args.push("--session", sessionFile);
-    
+
     // Add Paperclip skills directory so Pi can load the paperclip skill
     args.push("--skill", PI_AGENT_SKILLS_DIR);
-    
+
     if (extraArgs.length > 0) args.push(...extraArgs);
     
-    return args;
-  };
+    // Add the user prompt as the last argument
+    args.push(userPrompt);
 
-  const buildRpcStdin = (): string => {
-    // Send the prompt as an RPC command
-    const promptCommand = {
-      type: "prompt",
-      message: userPrompt,
-    };
-    return JSON.stringify(promptCommand) + "\n";
+    return args;
   };
 
   const runAttempt = async (sessionFile: string) => {
@@ -406,7 +397,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       graceSec,
       onSpawn,
       onLog: bufferedOnLog,
-      stdin: buildRpcStdin(),
     });
     
     // Flush any remaining buffer content
