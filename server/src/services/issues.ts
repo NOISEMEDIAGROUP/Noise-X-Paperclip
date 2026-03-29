@@ -585,14 +585,14 @@ export function issueService(db: Db) {
       const normalizedCompanyId = asCanonicalUuid(companyId);
       if (!normalizedCompanyId) return [];
       const statusFilter = asNonEmptyString(filters?.status)?.toLowerCase();
-      const assigneeAgentIdFilter = asNonEmptyString(filters?.assigneeAgentId);
-      const participantAgentIdFilter = asNonEmptyString(filters?.participantAgentId);
+      const assigneeAgentIdFilterRaw = asNonEmptyString(filters?.assigneeAgentId);
+      const participantAgentIdFilterRaw = asNonEmptyString(filters?.participantAgentId);
       const assigneeUserIdFilter = asNonEmptyString(filters?.assigneeUserId);
       const touchedByUserIdFilter = asNonEmptyString(filters?.touchedByUserId);
       const unreadForUserIdFilter = asNonEmptyString(filters?.unreadForUserId);
-      const projectIdFilter = asNonEmptyString(filters?.projectId);
-      const parentIdFilter = asNonEmptyString(filters?.parentId);
-      const labelIdFilter = asNonEmptyString(filters?.labelId);
+      const projectIdFilterRaw = asNonEmptyString(filters?.projectId);
+      const parentIdFilterRaw = asNonEmptyString(filters?.parentId);
+      const labelIdFilterRaw = asNonEmptyString(filters?.labelId);
       const originKindFilter = asNonEmptyString(filters?.originKind)?.toLowerCase();
       const originIdFilterRaw = asNonEmptyString(filters?.originId);
       const originIdFilter =
@@ -607,11 +607,16 @@ export function issueService(db: Db) {
           (includeRoutineExecutionsRaw.trim().toLowerCase() === "true" ||
             includeRoutineExecutionsRaw.trim().toLowerCase() === "1"));
       const rawSearch = asNonEmptyString(filters?.q) ?? "";
-      if (assigneeAgentIdFilter && !isUuidLike(assigneeAgentIdFilter)) return [];
-      if (participantAgentIdFilter && !isUuidLike(participantAgentIdFilter)) return [];
-      if (projectIdFilter && !isUuidLike(projectIdFilter)) return [];
-      if (parentIdFilter && !isUuidLike(parentIdFilter)) return [];
-      if (labelIdFilter && !isUuidLike(labelIdFilter)) return [];
+      if (assigneeAgentIdFilterRaw && !isUuidLike(assigneeAgentIdFilterRaw)) return [];
+      if (participantAgentIdFilterRaw && !isUuidLike(participantAgentIdFilterRaw)) return [];
+      if (projectIdFilterRaw && !isUuidLike(projectIdFilterRaw)) return [];
+      if (parentIdFilterRaw && !isUuidLike(parentIdFilterRaw)) return [];
+      if (labelIdFilterRaw && !isUuidLike(labelIdFilterRaw)) return [];
+      const assigneeAgentIdFilter = assigneeAgentIdFilterRaw ? assigneeAgentIdFilterRaw.trim().toLowerCase() : null;
+      const participantAgentIdFilter = participantAgentIdFilterRaw ? participantAgentIdFilterRaw.trim().toLowerCase() : null;
+      const projectIdFilter = projectIdFilterRaw ? projectIdFilterRaw.trim().toLowerCase() : null;
+      const parentIdFilter = parentIdFilterRaw ? parentIdFilterRaw.trim().toLowerCase() : null;
+      const labelIdFilter = labelIdFilterRaw ? labelIdFilterRaw.trim().toLowerCase() : null;
       const conditions = [eq(issues.companyId, normalizedCompanyId)];
       const touchedByUserId = touchedByUserIdFilter;
       const unreadForUserId = unreadForUserIdFilter;

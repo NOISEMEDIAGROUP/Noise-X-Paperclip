@@ -14,8 +14,10 @@ import {
   ensurePostgresDatabase,
   heartbeatRuns,
   issueComments,
+  issueLabels,
   issueReadStates,
   issues,
+  labels,
 } from "@paperclipai/db";
 import { issueService, type IssueFilters } from "../services/issues.ts";
 
@@ -908,6 +910,84 @@ describe("issueService.list participantAgentId", () => {
       const result = await svc.list(companyId, { [key]: "not-a-uuid" } as Pick<IssueFilters, typeof key>);
       expect(result).toEqual([]);
     }
+  });
+
+  it("normalizes uuid list filters for non-route callers", async () => {
+    const companyId = randomUUID();
+    const agentId = randomUUID();
+    const parentId = randomUUID();
+    const issueId = randomUUID();
+    const otherIssueId = randomUUID();
+    const labelId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(agents).values({
+      id: agentId,
+      companyId,
+      name: "FilterNormalizeAgent",
+      role: "engineer",
+      status: "active",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+
+    await db.insert(issues).values([
+      {
+        id: parentId,
+        companyId,
+        title: "Parent issue",
+        status: "todo",
+        priority: "medium",
+      },
+      {
+        id: issueId,
+        companyId,
+        title: "Target issue",
+        status: "todo",
+        priority: "medium",
+        assigneeAgentId: agentId,
+        parentId,
+      },
+      {
+        id: otherIssueId,
+        companyId,
+        title: "Other issue",
+        status: "todo",
+        priority: "medium",
+      },
+    ]);
+
+    await db.insert(labels).values({
+      id: labelId,
+      companyId,
+      name: "urgent",
+      color: "#FF0000",
+    });
+    await db.insert(issueLabels).values({
+      issueId,
+      labelId,
+      companyId,
+    });
+
+    const assigneeResult = await svc.list(companyId, { assigneeAgentId: ` ${agentId.toUpperCase()} ` });
+    expect(assigneeResult.map((issue) => issue.id)).toContain(issueId);
+
+    const participantResult = await svc.list(companyId, { participantAgentId: ` ${agentId.toUpperCase()} ` });
+    expect(participantResult.map((issue) => issue.id)).toContain(issueId);
+
+    const parentResult = await svc.list(companyId, { parentId: ` ${parentId.toUpperCase()} ` });
+    expect(parentResult.map((issue) => issue.id)).toContain(issueId);
+
+    const labelResult = await svc.list(companyId, { labelId: ` ${labelId.toUpperCase()} ` });
+    expect(labelResult.map((issue) => issue.id)).toContain(issueId);
   });
 
   it("normalizes status and originKind filters for non-route callers", async () => {
