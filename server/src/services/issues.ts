@@ -1890,7 +1890,10 @@ export function issueService(db: Db) {
       if (tokens.size === 0 && explicitAgentMentionIds.length === 0) return [];
       const rows = await db.select({ id: agents.id, name: agents.name })
         .from(agents).where(eq(agents.companyId, normalizedCompanyId));
-      const resolved = new Set<string>(explicitAgentMentionIds);
+      const companyAgentIds = new Set(rows.map((agent) => agent.id));
+      const resolved = new Set<string>(
+        explicitAgentMentionIds.filter((agentId) => companyAgentIds.has(agentId)),
+      );
       for (const agent of rows) {
         if (tokens.has(agent.name.toLowerCase())) {
           resolved.add(agent.id);

@@ -2105,6 +2105,18 @@ describe("issueService.list participantAgentId", () => {
       permissions: {},
     });
 
+    await db.insert(agents).values({
+      id: explicitValidMentionId,
+      companyId,
+      name: "ExplicitAgent",
+      role: "engineer",
+      status: "active",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+
     const result = await svc.findMentionedAgents(
       companyId,
       [
@@ -2145,12 +2157,81 @@ describe("issueService.list participantAgentId", () => {
       permissions: {},
     });
 
+    await db.insert(agents).values({
+      id: explicitValidMentionId,
+      companyId,
+      name: "ExplicitAgent",
+      role: "engineer",
+      status: "active",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+
     const result = await svc.findMentionedAgents(
       ` ${companyId.toUpperCase()} `,
       `[good](agent://${explicitValidMentionId.toUpperCase()}) @WakeAgent`,
     );
 
     expect(result.sort()).toEqual([explicitValidMentionId, mentionedByNameId].sort());
+  });
+
+  it("ignores explicit agent mention ids that do not belong to the company", async () => {
+    const companyId = randomUUID();
+    const otherCompanyId = randomUUID();
+    const companyMentionId = randomUUID();
+    const otherCompanyMentionId = randomUUID();
+
+    await db.insert(companies).values([
+      {
+        id: companyId,
+        name: "Paperclip",
+        issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+        requireBoardApprovalForNewAgents: false,
+      },
+      {
+        id: otherCompanyId,
+        name: "Other",
+        issuePrefix: `T${otherCompanyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+        requireBoardApprovalForNewAgents: false,
+      },
+    ]);
+
+    await db.insert(agents).values([
+      {
+        id: companyMentionId,
+        companyId,
+        name: "WakeAgent",
+        role: "engineer",
+        status: "active",
+        adapterType: "codex_local",
+        adapterConfig: {},
+        runtimeConfig: {},
+        permissions: {},
+      },
+      {
+        id: otherCompanyMentionId,
+        companyId: otherCompanyId,
+        name: "OtherAgent",
+        role: "engineer",
+        status: "active",
+        adapterType: "codex_local",
+        adapterConfig: {},
+        runtimeConfig: {},
+        permissions: {},
+      },
+    ]);
+
+    const result = await svc.findMentionedAgents(
+      companyId,
+      [
+        `[good](agent://${companyMentionId})`,
+        `[foreign](agent://${otherCompanyMentionId})`,
+      ].join(" "),
+    );
+
+    expect(result).toEqual([companyMentionId]);
   });
 
   it("returns an empty list for malformed issue ids on getAncestors", async () => {
