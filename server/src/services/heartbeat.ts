@@ -3808,8 +3808,14 @@ export function heartbeatService(db: Db) {
       let checked = 0;
       let enqueued = 0;
       let skipped = 0;
+      let nullEntries = 0;
 
       for (const agent of allAgents) {
+        if (!agent) {
+          nullEntries += 1;
+          logger.warn({ nullEntries }, "tickTimers: null entry in allAgents result");
+          continue;
+        }
         if (agent.status === "paused" || agent.status === "terminated" || agent.status === "pending_approval") continue;
         const policy = parseHeartbeatPolicy(agent);
         if (!policy.enabled || policy.intervalSec <= 0) continue;
@@ -3835,7 +3841,7 @@ export function heartbeatService(db: Db) {
         else skipped += 1;
       }
 
-      return { checked, enqueued, skipped };
+      return { checked, enqueued, skipped, nullEntries };
     },
 
     cancelRun: (runId: string) => cancelRunInternal(runId),
