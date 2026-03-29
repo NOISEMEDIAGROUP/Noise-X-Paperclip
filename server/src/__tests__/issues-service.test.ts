@@ -899,6 +899,30 @@ describe("issueService.list participantAgentId", () => {
     await expect(svc.list("not-a-uuid", {})).resolves.toEqual([]);
   });
 
+  it("normalizes companyId casing/whitespace for non-route list callers", async () => {
+    const companyId = randomUUID();
+    const issueId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Company id normalization",
+      status: "todo",
+      priority: "medium",
+      originKind: "manual",
+    });
+
+    const normalized = await svc.list(` ${companyId.toUpperCase()} `, {});
+    expect(normalized.map((issue) => issue.id)).toContain(issueId);
+  });
+
   it("ignores malformed non-string unread status filters instead of throwing", async () => {
     const companyId = randomUUID();
     const issueId = randomUUID();

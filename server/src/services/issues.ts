@@ -82,6 +82,11 @@ function asNonEmptyString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function asCanonicalUuid(value: unknown): string | undefined {
+  if (typeof value !== "string" || !isUuidLike(value)) return undefined;
+  return value.trim().toLowerCase();
+}
+
 function assertOptionalUuidField(value: unknown, fieldName: string) {
   if (value == null) return;
   if (typeof value !== "string" || !isUuidLike(value.trim())) {
@@ -577,7 +582,8 @@ export function issueService(db: Db) {
 
   return {
     list: async (companyId: string, filters?: IssueFilters) => {
-      if (!isUuidLike(companyId)) return [];
+      const normalizedCompanyId = asCanonicalUuid(companyId);
+      if (!normalizedCompanyId) return [];
       const statusFilter = asNonEmptyString(filters?.status)?.toLowerCase();
       const assigneeAgentIdFilter = asNonEmptyString(filters?.assigneeAgentId);
       const participantAgentIdFilter = asNonEmptyString(filters?.participantAgentId);
@@ -606,7 +612,7 @@ export function issueService(db: Db) {
       if (projectIdFilter && !isUuidLike(projectIdFilter)) return [];
       if (parentIdFilter && !isUuidLike(parentIdFilter)) return [];
       if (labelIdFilter && !isUuidLike(labelIdFilter)) return [];
-      const conditions = [eq(issues.companyId, companyId)];
+      const conditions = [eq(issues.companyId, normalizedCompanyId)];
       const touchedByUserId = touchedByUserIdFilter;
       const unreadForUserId = unreadForUserIdFilter;
       const contextUserId = unreadForUserId ?? touchedByUserId;
@@ -624,7 +630,7 @@ export function issueService(db: Db) {
           SELECT 1
           FROM ${issueComments}
           WHERE ${issueComments.issueId} = ${issues.id}
-            AND ${issueComments.companyId} = ${companyId}
+            AND ${issueComments.companyId} = ${normalizedCompanyId}
             AND ${issueComments.body} ILIKE ${containsPattern} ESCAPE '\\'
         )
       `;
@@ -636,16 +642,16 @@ export function issueService(db: Db) {
         conditions.push(eq(issues.assigneeAgentId, assigneeAgentIdFilter));
       }
       if (participantAgentIdFilter) {
-        conditions.push(participatedByAgentCondition(companyId, participantAgentIdFilter));
+        conditions.push(participatedByAgentCondition(normalizedCompanyId, participantAgentIdFilter));
       }
       if (assigneeUserIdFilter) {
         conditions.push(eq(issues.assigneeUserId, assigneeUserIdFilter));
       }
       if (touchedByUserId) {
-        conditions.push(touchedByUserCondition(companyId, touchedByUserId));
+        conditions.push(touchedByUserCondition(normalizedCompanyId, touchedByUserId));
       }
       if (unreadForUserId) {
-        conditions.push(unreadForUserCondition(companyId, unreadForUserId));
+        conditions.push(unreadForUserCondition(normalizedCompanyId, unreadForUserId));
       }
       if (projectIdFilter) conditions.push(eq(issues.projectId, projectIdFilter));
       if (parentIdFilter) conditions.push(eq(issues.parentId, parentIdFilter));
@@ -655,7 +661,7 @@ export function issueService(db: Db) {
         const labeledIssueIds = await db
           .select({ issueId: issueLabels.issueId })
           .from(issueLabels)
-          .where(and(eq(issueLabels.companyId, companyId), eq(issueLabels.labelId, labelIdFilter)));
+          .where(and(eq(issueLabels.companyId, normalizedCompanyId), eq(issueLabels.labelId, labelIdFilter)));
         if (labeledIssueIds.length === 0) return [];
         conditions.push(inArray(issues.id, labeledIssueIds.map((row) => row.issueId)));
       }
@@ -717,7 +723,7 @@ export function issueService(db: Db) {
         .from(issueComments)
         .where(
           and(
-            eq(issueComments.companyId, companyId),
+            eq(issueComments.companyId, normalizedCompanyId),
             inArray(issueComments.issueId, issueIds),
           ),
         )
@@ -730,7 +736,7 @@ export function issueService(db: Db) {
         .from(issueReadStates)
         .where(
           and(
-            eq(issueReadStates.companyId, companyId),
+            eq(issueReadStates.companyId, normalizedCompanyId),
             eq(issueReadStates.userId, contextUserId),
             inArray(issueReadStates.issueId, issueIds),
           ),
