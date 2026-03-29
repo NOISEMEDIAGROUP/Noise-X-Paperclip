@@ -14,6 +14,7 @@ import {
   ensurePostgresDatabase,
   heartbeatRuns,
   issueComments,
+  issueReadStates,
   issues,
 } from "@paperclipai/db";
 import { issueService, type IssueFilters } from "../services/issues.ts";
@@ -100,6 +101,7 @@ describe("issueService.list participantAgentId", () => {
 
   afterEach(async () => {
     await db.delete(issueComments);
+    await db.delete(issueReadStates);
     await db.delete(activityLog);
     await db.delete(issues);
     await db.delete(heartbeatRuns);
@@ -1128,6 +1130,32 @@ describe("issueService.list participantAgentId", () => {
       status: 422,
       message: "Invalid userId",
     });
+  });
+
+  it("trims markRead user ids for non-route callers", async () => {
+    const companyId = randomUUID();
+    const issueId = randomUUID();
+    const userId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "markRead userId trim normalization",
+      status: "todo",
+      priority: "medium",
+    });
+
+    const readAt = new Date("2026-02-01T00:00:00.000Z");
+    const row = await svc.markRead(companyId, issueId, ` ${userId} `, readAt);
+    expect(row.userId).toBe(userId);
+    expect(new Date(row.lastReadAt).toISOString()).toBe(readAt.toISOString());
   });
 
   it("returns unprocessable for malformed readAt values on markRead", async () => {
