@@ -195,7 +195,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
     if (!isUuidLike(rawId)) {
       throw new HttpError(400, "Invalid issue id. Use UUID or identifier like PAP-123.");
     }
-    return rawId;
+    return rawId.trim().toLowerCase();
   }
 
   async function resolveIssueProjectAndGoal(issue: {
