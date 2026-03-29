@@ -87,7 +87,7 @@ export async function testEnvironment(
       level: "error",
       message: err instanceof Error ? err.message : "Command is not executable",
       detail: command,
-      hint: "Install Copilot CLI: npm install -g @githubnext/github-copilot-cli, then run `copilot login`.",
+      hint: "Install GitHub Copilot CLI (https://docs.github.com/copilot/how-tos/copilot-cli), then run `copilot login`.",
     });
   }
 
