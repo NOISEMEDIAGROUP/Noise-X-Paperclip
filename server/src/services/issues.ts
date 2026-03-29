@@ -1855,7 +1855,8 @@ export function issueService(db: Db) {
     },
 
     findMentionedProjectIds: async (issueId: string) => {
-      if (!isUuidLike(issueId)) return [];
+      const normalizedIssueId = asCanonicalUuid(issueId);
+      if (!normalizedIssueId) return [];
       const issue = await db
         .select({
           companyId: issues.companyId,
@@ -1863,14 +1864,14 @@ export function issueService(db: Db) {
           description: issues.description,
         })
         .from(issues)
-        .where(eq(issues.id, issueId))
+        .where(eq(issues.id, normalizedIssueId))
         .then((rows) => rows[0] ?? null);
       if (!issue) return [];
 
       const comments = await db
         .select({ body: issueComments.body })
         .from(issueComments)
-        .where(eq(issueComments.issueId, issueId));
+        .where(eq(issueComments.issueId, normalizedIssueId));
 
       const mentionedIds = new Set<string>();
       for (const source of [
@@ -1883,7 +1884,11 @@ export function issueService(db: Db) {
         }
       }
       if (mentionedIds.size === 0) return [];
-      const candidateProjectIds = [...mentionedIds].filter((projectId) => isUuidLike(projectId));
+      const candidateProjectIds = [...new Set(
+        [...mentionedIds]
+          .map((projectId) => asCanonicalUuid(projectId))
+          .filter((projectId): projectId is string => projectId != null),
+      )];
       if (candidateProjectIds.length === 0) return [];
 
       const rows = await db
@@ -1900,14 +1905,15 @@ export function issueService(db: Db) {
     },
 
     getAncestors: async (issueId: string) => {
-      if (!isUuidLike(issueId)) return [];
+      const normalizedIssueId = asCanonicalUuid(issueId);
+      if (!normalizedIssueId) return [];
       const raw: Array<{
         id: string; identifier: string | null; title: string; description: string | null;
         status: string; priority: string;
         assigneeAgentId: string | null; projectId: string | null; goalId: string | null;
       }> = [];
-      const visited = new Set<string>([issueId]);
-      const start = await db.select().from(issues).where(eq(issues.id, issueId)).then(r => r[0] ?? null);
+      const visited = new Set<string>([normalizedIssueId]);
+      const start = await db.select().from(issues).where(eq(issues.id, normalizedIssueId)).then(r => r[0] ?? null);
       let currentId = start?.parentId ?? null;
       while (currentId && !visited.has(currentId) && raw.length < 50) {
         visited.add(currentId);

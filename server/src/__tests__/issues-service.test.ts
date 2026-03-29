@@ -18,6 +18,7 @@ import {
   issueReadStates,
   issues,
   labels,
+  projects,
 } from "@paperclipai/db";
 import { issueService, type IssueFilters } from "../services/issues.ts";
 
@@ -1943,6 +1944,38 @@ describe("issueService.list participantAgentId", () => {
     await expect(svc.findMentionedProjectIds("not-a-uuid")).resolves.toEqual([]);
   });
 
+  it("normalizes findMentionedProjectIds issue and mentioned project uuids for non-route callers", async () => {
+    const companyId = randomUUID();
+    const issueId = randomUUID();
+    const projectId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(projects).values({
+      id: projectId,
+      companyId,
+      name: "Risk Controls",
+      status: "todo",
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: `Investigate [project](project://${projectId.toUpperCase()})`,
+      description: null,
+      status: "todo",
+      priority: "medium",
+    });
+
+    await expect(svc.findMentionedProjectIds(` ${issueId.toUpperCase()} `)).resolves.toEqual([projectId]);
+    await db.delete(projects).where(eq(projects.id, projectId));
+  });
+
   it("ignores malformed project mention ids instead of throwing", async () => {
     const companyId = randomUUID();
     const issueId = randomUUID();
@@ -2010,6 +2043,40 @@ describe("issueService.list participantAgentId", () => {
 
   it("returns an empty list for malformed issue ids on getAncestors", async () => {
     await expect(svc.getAncestors("not-a-uuid")).resolves.toEqual([]);
+  });
+
+  it("normalizes getAncestors issue uuid casing/whitespace for non-route callers", async () => {
+    const companyId = randomUUID();
+    const parentId = randomUUID();
+    const childId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(issues).values([
+      {
+        id: parentId,
+        companyId,
+        title: "Parent issue",
+        status: "todo",
+        priority: "medium",
+      },
+      {
+        id: childId,
+        companyId,
+        title: "Child issue",
+        status: "todo",
+        priority: "medium",
+        parentId,
+      },
+    ]);
+
+    const ancestors = await svc.getAncestors(` ${childId.toUpperCase()} `);
+    expect(ancestors.map((row) => row.id)).toEqual([parentId]);
   });
 
   it("returns null for malformed issue ids on release", async () => {
