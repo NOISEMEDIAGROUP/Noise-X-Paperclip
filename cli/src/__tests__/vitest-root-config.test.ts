@@ -30,6 +30,29 @@ describe("vitest root config resolver", () => {
     expect(sourceRoot).toBe("/repo");
   });
 
+  it("builds root projects/aliases and keeps root-only excludes in root mode", () => {
+    const root = "/repo";
+    const existing = new Set(REQUIRED_MANIFESTS.map((relativePath) => withBase(root, relativePath)));
+
+    const context = resolveVitestRootConfigContext({
+      repoRoot: root,
+      fileExists: (candidate) => existing.has(candidate),
+    });
+
+    expect(context.projects).toEqual([
+      "packages/db",
+      "packages/shared",
+      "packages/adapters/opencode-local",
+      "server",
+      "ui",
+      "cli",
+    ]);
+    expect(context.exclude).toContain("**/paperclip-orginal/**");
+    expect(context.alias["@paperclipai/adapter-utils/server-utils"]).toBe(
+      "/repo/packages/adapter-utils/src/server-utils.ts",
+    );
+  });
+
   it("falls back to paperclip-orginal when root manifests are missing", () => {
     const root = "/repo";
     const fallbackRoot = "/repo/paperclip-orginal";

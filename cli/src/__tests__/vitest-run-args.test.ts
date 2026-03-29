@@ -8,6 +8,12 @@ describe("normalizeVitestRunArgs", () => {
     ]);
   });
 
+  it("strips repeated forwarded delimiters", () => {
+    expect(
+      normalizeVitestRunArgs(["--", "--", "cli/src/__tests__/vitest-root-config.test.ts"]),
+    ).toEqual(["cli/src/__tests__/vitest-root-config.test.ts"]);
+  });
+
   it("preserves args that do not start with a delimiter", () => {
     expect(normalizeVitestRunArgs(["server/src/__tests__/paperclip-skill-utils.test.ts"])).toEqual([
       "server/src/__tests__/paperclip-skill-utils.test.ts",
