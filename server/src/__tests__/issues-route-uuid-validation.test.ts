@@ -138,6 +138,22 @@ describe("issues routes UUID validation", () => {
     expect(mockIssueService.listComments).not.toHaveBeenCalled();
   });
 
+  it("accepts equivalent after cursors that differ only by UUID case", async () => {
+    const cursorUpper = "22222222-2222-4222-8222-2222222222AB";
+    const cursorLower = cursorUpper.toLowerCase();
+    const res = await request(createApp()).get(
+      `/api/issues/11111111-1111-4111-8111-111111111111/comments?after=${cursorUpper}&afterCommentId=${cursorLower}`,
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockIssueService.listComments).toHaveBeenCalledWith(
+      "11111111-1111-4111-8111-111111111111",
+      expect.objectContaining({
+        afterCommentId: cursorLower,
+      }),
+    );
+  });
+
   it("returns 400 for invalid comment order query values", async () => {
     const res = await request(createApp()).get(
       "/api/issues/11111111-1111-4111-8111-111111111111/comments?order=sideways",

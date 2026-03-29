@@ -1305,19 +1305,22 @@ export function issueRoutes(db: Db, storage: StorageService) {
     const afterCommentIdLegacy = afterCommentIdLegacyRaw && afterCommentIdLegacyRaw.trim().length > 0
       ? afterCommentIdLegacyRaw.trim()
       : null;
+    const normalizedAfterCommentIdQuery = afterCommentIdQuery?.toLowerCase() ?? null;
+    const normalizedAfterCommentIdLegacy = afterCommentIdLegacy?.toLowerCase() ?? null;
     if (
-      afterCommentIdQuery &&
-      afterCommentIdLegacy &&
-      afterCommentIdQuery !== afterCommentIdLegacy
+      normalizedAfterCommentIdQuery &&
+      normalizedAfterCommentIdLegacy &&
+      normalizedAfterCommentIdQuery !== normalizedAfterCommentIdLegacy
     ) {
       res.status(400).json({ error: "Conflicting comment cursors: after and afterCommentId must match" });
       return;
     }
-    const afterCommentId = afterCommentIdQuery ?? afterCommentIdLegacy;
-    if (afterCommentId && !isUuidLike(afterCommentId)) {
+    const afterCommentIdRaw = afterCommentIdQuery ?? afterCommentIdLegacy;
+    if (afterCommentIdRaw && !isUuidLike(afterCommentIdRaw)) {
       res.status(400).json({ error: "Invalid after comment cursor" });
       return;
     }
+    const afterCommentId = afterCommentIdRaw ? afterCommentIdRaw.toLowerCase() : null;
     const orderRaw = readQueryString(req.query.order);
     const normalizedOrder = orderRaw?.trim().toLowerCase();
     if (normalizedOrder && normalizedOrder !== "asc" && normalizedOrder !== "desc") {
