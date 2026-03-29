@@ -1630,6 +1630,17 @@ export function issueService(db: Db) {
         .then((rows) => rows[0] ?? null);
       if (!issue) throw notFound("Issue not found");
 
+      if (normalizedCreatedByAgentId) {
+        const createdByAgent = await db
+          .select({ id: agents.id, companyId: agents.companyId })
+          .from(agents)
+          .where(eq(agents.id, normalizedCreatedByAgentId))
+          .then((rows) => rows[0] ?? null);
+        if (!createdByAgent || createdByAgent.companyId !== issue.companyId) {
+          throw unprocessable("Invalid createdByAgentId");
+        }
+      }
+
       if (normalizedIssueCommentId) {
         const comment = await db
           .select({ id: issueComments.id, companyId: issueComments.companyId, issueId: issueComments.issueId })
