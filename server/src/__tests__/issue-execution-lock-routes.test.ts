@@ -117,6 +117,49 @@ describe("issue execution lock cleanup routes", () => {
     expect(mockHeartbeatService.cancelRun).toHaveBeenCalledWith("run-1", { suppressDeferredPromotion: true });
   });
 
+  it("cancels stale queued run when PATCH moves issue back to todo", async () => {
+    const existing = makeIssue("in_progress");
+    mockIssueService.getById.mockResolvedValue(existing);
+    mockIssueService.update.mockResolvedValue({
+      ...existing,
+      status: "todo",
+      checkoutRunId: null,
+      executionRunId: null,
+      executionAgentNameKey: null,
+      executionLockedAt: null,
+    });
+
+    const res = await request(createApp())
+      .patch(`/api/issues/${existing.id}`)
+      .send({ status: "todo" });
+
+    expect(res.status).toBe(200);
+    expect(mockIssueService.update).toHaveBeenCalledWith(existing.id, { status: "todo" });
+    expect(mockHeartbeatService.cancelRun).toHaveBeenCalledWith("run-1", { suppressDeferredPromotion: true });
+  });
+
+  it("cancels stale queued run when PATCH reassigns issue", async () => {
+    const existing = makeIssue("in_progress");
+    const nextAssignee = "33333333-3333-4333-8333-333333333333";
+    mockIssueService.getById.mockResolvedValue(existing);
+    mockIssueService.update.mockResolvedValue({
+      ...existing,
+      assigneeAgentId: nextAssignee,
+      checkoutRunId: null,
+      executionRunId: null,
+      executionAgentNameKey: null,
+      executionLockedAt: null,
+    });
+
+    const res = await request(createApp())
+      .patch(`/api/issues/${existing.id}`)
+      .send({ assigneeAgentId: nextAssignee });
+
+    expect(res.status).toBe(200);
+    expect(mockIssueService.update).toHaveBeenCalledWith(existing.id, { assigneeAgentId: nextAssignee });
+    expect(mockHeartbeatService.cancelRun).toHaveBeenCalledWith("run-1", { suppressDeferredPromotion: true });
+  });
+
   it("cancels stale queued run on release", async () => {
     const existing = makeIssue("todo");
     mockIssueService.getById.mockResolvedValue(existing);
