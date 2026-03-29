@@ -1552,6 +1552,16 @@ export function issueService(db: Db) {
         .then((rows) => rows[0] ?? null);
 
       if (!issue) throw notFound("Issue not found");
+      if (normalizedAuthorAgentId) {
+        const authorAgent = await db
+          .select({ id: agents.id, companyId: agents.companyId })
+          .from(agents)
+          .where(eq(agents.id, normalizedAuthorAgentId))
+          .then((rows) => rows[0] ?? null);
+        if (!authorAgent || authorAgent.companyId !== issue.companyId) {
+          throw unprocessable("Invalid authorAgentId");
+        }
+      }
 
       const currentUserRedactionOptions = {
         enabled: (await instanceSettings.getGeneral()).censorUsernameInLogs,

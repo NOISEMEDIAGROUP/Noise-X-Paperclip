@@ -1407,6 +1407,33 @@ describe("issueService.list participantAgentId", () => {
     });
   });
 
+  it("returns unprocessable for unknown author agent ids on addComment", async () => {
+    const companyId = randomUUID();
+    const issueId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "addComment author agent existence validation",
+      status: "todo",
+      priority: "medium",
+    });
+
+    await expect(
+      svc.addComment(issueId, "hello", { agentId: randomUUID() }),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: "Invalid authorAgentId",
+    });
+  });
+
   it("returns unprocessable for malformed author user ids on addComment", async () => {
     await expect(
       svc.addComment(randomUUID(), "hello", { userId: { bad: true } as any }),
