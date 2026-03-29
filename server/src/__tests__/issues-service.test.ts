@@ -1080,6 +1080,39 @@ describe("issueService.list participantAgentId", () => {
     expect(unreadCount).toBe(1);
   });
 
+  it("normalizes unread count company ids for non-route callers", async () => {
+    const companyId = randomUUID();
+    const issueId = randomUUID();
+    const userId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Unread company id normalization",
+      status: "todo",
+      priority: "medium",
+      createdByUserId: userId,
+    });
+
+    await db.insert(issueComments).values({
+      issueId,
+      companyId,
+      body: "new external comment",
+      authorAgentId: null,
+      authorUserId: null,
+    });
+
+    const unreadCount = await svc.countUnreadTouchedByUser(` ${companyId.toUpperCase()} `, userId, "todo");
+    expect(unreadCount).toBe(1);
+  });
+
   it("returns zero unread count when companyId is malformed", async () => {
     const unreadCount = await svc.countUnreadTouchedByUser("not-a-uuid", randomUUID(), "todo");
     expect(unreadCount).toBe(0);
