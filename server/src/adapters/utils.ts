@@ -22,11 +22,11 @@ export {
   ensurePathInEnv,
   ensureAbsoluteDirectory,
   ensureCommandResolvable,
-} from "@paperclipai/adapter-utils/server-utils";
+} from "../../../packages/adapter-utils/src/server-utils.js";
 
 // Re-export runChildProcess with the server's pino logger wired in.
-import { runChildProcess as _runChildProcess } from "@paperclipai/adapter-utils/server-utils";
-import type { RunProcessResult } from "@paperclipai/adapter-utils/server-utils";
+import { runChildProcess as _runChildProcess } from "../../../packages/adapter-utils/src/server-utils.js";
+import type { RunProcessResult } from "../../../packages/adapter-utils/src/server-utils.js";
 
 export async function runChildProcess(
   runId: string,

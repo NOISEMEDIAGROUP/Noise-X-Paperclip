@@ -1,6 +1,11 @@
 import fs from "node:fs";
-import { paperclipConfigSchema, type PaperclipConfig } from "@paperclipai/shared";
 import { resolvePaperclipConfigPath } from "./paths.js";
+
+type PaperclipConfig = {
+  logging?: {
+    logDir?: string;
+  };
+};
 
 export function readConfigFile(): PaperclipConfig | null {
   const configPath = resolvePaperclipConfigPath();
@@ -8,8 +13,7 @@ export function readConfigFile(): PaperclipConfig | null {
   if (!fs.existsSync(configPath)) return null;
 
   try {
-    const raw = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    return paperclipConfigSchema.parse(raw);
+    return JSON.parse(fs.readFileSync(configPath, "utf-8")) as PaperclipConfig;
   } catch {
     return null;
   }
