@@ -106,30 +106,30 @@ echo ""
 
 # Technical agent patterns (get gstack + superpowers)
 TECH_PATTERNS="
-  name ILIKE '%CTO%'
-  OR name ILIKE '%Tech Lead%'
-  OR name ILIKE '%Engineering%'
-  OR name ILIKE '%Frontend%'
-  OR name ILIKE '%Fullstack%'
-  OR name ILIKE '%Full Stack%'
-  OR name ILIKE '%Full-Stack%'
-  OR name ILIKE '%Backend%'
-  OR name ILIKE '%QA%'
-  OR name ILIKE '%Quality%'
-  OR name ILIKE '%DevOps%'
-  OR name ILIKE '%SRE%'
-  OR name ILIKE '%Security%'
-  OR name ILIKE '%Compliance%'
-  OR name ILIKE '%Designer%'
-  OR name ILIKE '%Design%'
-  OR name ILIKE '%Architect%'
-  OR name ILIKE '%Developer%'
-  OR name ILIKE '%Engineer%'
-  OR name ILIKE '%Lead%'
-  OR name ILIKE '%Writer%'
-  OR name ILIKE '%Documentation%'
-  OR name ILIKE '%AutoResearch%'
-  OR name ILIKE '%Research%'
+  a.name ILIKE '%CTO%'
+  OR a.name ILIKE '%Tech Lead%'
+  OR a.name ILIKE '%Engineering%'
+  OR a.name ILIKE '%Frontend%'
+  OR a.name ILIKE '%Fullstack%'
+  OR a.name ILIKE '%Full Stack%'
+  OR a.name ILIKE '%Full-Stack%'
+  OR a.name ILIKE '%Backend%'
+  OR a.name ILIKE '%QA%'
+  OR a.name ILIKE '%Quality%'
+  OR a.name ILIKE '%DevOps%'
+  OR a.name ILIKE '%SRE%'
+  OR a.name ILIKE '%Security%'
+  OR a.name ILIKE '%Compliance%'
+  OR a.name ILIKE '%Designer%'
+  OR a.name ILIKE '%Design%'
+  OR a.name ILIKE '%Architect%'
+  OR a.name ILIKE '%Developer%'
+  OR a.name ILIKE '%Engineer%'
+  OR a.name ILIKE '%Lead%'
+  OR a.name ILIKE '%Writer%'
+  OR a.name ILIKE '%Documentation%'
+  OR a.name ILIKE '%AutoResearch%'
+  OR a.name ILIKE '%Research%'
 "
 
 echo "Agents that will receive external skills (gstack + superpowers):"
@@ -167,15 +167,15 @@ echo ""
 echo "Updating technical agents..."
 
 UPDATED=$(psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "
-UPDATE agents
+UPDATE agents a
 SET adapter_config = jsonb_set(
-  adapter_config,
+  a.adapter_config,
   '{customSkillsDirs}',
   '${DIRS_ARRAY}'::jsonb
 )
 WHERE ($TECH_PATTERNS)
-  AND adapter_config->>'adapter' IN ('claude_local', 'cursor_local')
-RETURNING name;
+  AND a.adapter_config->>'adapter' IN ('claude_local', 'cursor_local')
+RETURNING a.name;
 ")
 
 echo "$UPDATED"
