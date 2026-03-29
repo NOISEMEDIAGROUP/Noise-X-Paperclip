@@ -4,6 +4,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { asc, eq } from "drizzle-orm";
 import {
   activityLog,
   agents,
@@ -574,6 +575,54 @@ describe("issueService.list participantAgentId", () => {
     });
     expect(comments).toHaveLength(1);
     expect(comments[0]?.body).toBe("older");
+  });
+
+  it("normalizes comment cursor case for non-route callers", async () => {
+    const companyId = randomUUID();
+    const issueId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Cursor case normalization",
+      status: "todo",
+      priority: "medium",
+    });
+
+    await db.insert(issueComments).values([
+      {
+        issueId,
+        companyId,
+        body: "first",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      },
+      {
+        issueId,
+        companyId,
+        body: "second",
+        createdAt: new Date("2026-01-01T00:00:01.000Z"),
+      },
+    ]);
+    const firstCommentId = await db
+      .select({ id: issueComments.id })
+      .from(issueComments)
+      .where(eq(issueComments.issueId, issueId))
+      .orderBy(asc(issueComments.createdAt), asc(issueComments.id))
+      .then((rows) => rows[0]?.id ?? null);
+    expect(firstCommentId).toBeTruthy();
+
+    const comments = await svc.listComments(issueId, {
+      order: "asc",
+      afterCommentId: firstCommentId!.toUpperCase(),
+    });
+    expect(comments.map((comment) => comment.body)).toEqual(["second"]);
   });
 
   it("ignores malformed non-string comment cursors instead of throwing", async () => {

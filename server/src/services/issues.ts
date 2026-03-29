@@ -1399,7 +1399,8 @@ export function issueService(db: Db) {
       const orderRaw = asNonEmptyString(opts?.order)?.toLowerCase();
       const order = orderRaw === "asc" ? "asc" : "desc";
       if (!isUuidLike(issueId)) return [];
-      const afterCommentId = asNonEmptyString(opts?.afterCommentId) ?? null;
+      const afterCommentIdRaw = asNonEmptyString(opts?.afterCommentId) ?? null;
+      const afterCommentId = afterCommentIdRaw ? afterCommentIdRaw.toLowerCase() : null;
       const rawLimit = opts?.limit as unknown;
       const parsedLimit =
         typeof rawLimit === "number"
@@ -1425,15 +1426,18 @@ export function issueService(db: Db) {
           .then((rows) => rows[0] ?? null);
 
         if (!anchor) return [];
+        const anchorCreatedAt = anchor.createdAt instanceof Date
+          ? anchor.createdAt.toISOString()
+          : anchor.createdAt;
         conditions.push(
           order === "asc"
             ? sql<boolean>`(
-                ${issueComments.createdAt} > ${anchor.createdAt}
-                OR (${issueComments.createdAt} = ${anchor.createdAt} AND ${issueComments.id} > ${anchor.id})
+                ${issueComments.createdAt} > ${anchorCreatedAt}
+                OR (${issueComments.createdAt} = ${anchorCreatedAt} AND ${issueComments.id} > ${anchor.id})
               )`
             : sql<boolean>`(
-                ${issueComments.createdAt} < ${anchor.createdAt}
-                OR (${issueComments.createdAt} = ${anchor.createdAt} AND ${issueComments.id} < ${anchor.id})
+                ${issueComments.createdAt} < ${anchorCreatedAt}
+                OR (${issueComments.createdAt} = ${anchorCreatedAt} AND ${issueComments.id} < ${anchor.id})
               )`,
         );
       }
