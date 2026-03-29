@@ -1599,6 +1599,12 @@ export function issueService(db: Db) {
       if (input.issueCommentId && !normalizedIssueCommentId) {
         throw notFound("Issue comment not found");
       }
+      const normalizedCreatedByAgentId = input.createdByAgentId == null
+        ? null
+        : asCanonicalUuid(input.createdByAgentId);
+      if (input.createdByAgentId != null && !normalizedCreatedByAgentId) {
+        throw unprocessable("Invalid createdByAgentId");
+      }
 
       const issue = await db
         .select({ id: issues.id, companyId: issues.companyId })
@@ -1630,7 +1636,7 @@ export function issueService(db: Db) {
             byteSize: input.byteSize,
             sha256: input.sha256,
             originalFilename: input.originalFilename ?? null,
-            createdByAgentId: input.createdByAgentId ?? null,
+            createdByAgentId: normalizedCreatedByAgentId,
             createdByUserId: input.createdByUserId ?? null,
           })
           .returning();
