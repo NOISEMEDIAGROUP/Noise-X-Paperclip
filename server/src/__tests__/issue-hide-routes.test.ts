@@ -44,7 +44,7 @@ vi.mock("../services/index.js", () => ({
   workProductService: () => ({}),
 }));
 
-function createApp(source: "local_implicit" | "board_key" = "board_key") {
+function createApp() {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
@@ -52,7 +52,7 @@ function createApp(source: "local_implicit" | "board_key" = "board_key") {
       type: "board",
       userId: "local-board",
       companyIds: ["company-1"],
-      source,
+      source: "local_implicit",
       isInstanceAdmin: false,
     };
     next();
@@ -62,87 +62,54 @@ function createApp(source: "local_implicit" | "board_key" = "board_key") {
   return app;
 }
 
-function makeIssue(status: "todo" | "done") {
+function makeIssue() {
   return {
     id: "11111111-1111-4111-8111-111111111111",
     companyId: "company-1",
-    status,
+    status: "todo",
     assigneeAgentId: "22222222-2222-4222-8222-222222222222",
     assigneeUserId: null,
+    executionRunId: null,
     createdByUserId: "local-board",
-    identifier: "PAP-580",
-    title: "Comment reopen default",
+    identifier: "PAP-581",
+    title: "Hide agent-owned issue",
+    hiddenAt: null,
   };
 }
 
-describe("issue comment reopen routes", () => {
+describe("issue hide routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockAccessService.canUser.mockResolvedValue(true);
-    mockAccessService.hasPermission.mockResolvedValue(true);
-    mockIssueService.addComment.mockResolvedValue({
-      id: "comment-1",
-      issueId: "11111111-1111-4111-8111-111111111111",
-      companyId: "company-1",
-      body: "hello",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      authorAgentId: null,
-      authorUserId: "local-board",
-    });
     mockIssueService.findMentionedAgents.mockResolvedValue([]);
-  });
-
-  it("treats reopen=true as a no-op when the issue is already open", async () => {
-    mockIssueService.getById.mockResolvedValue(makeIssue("todo"));
+    mockIssueService.getById.mockResolvedValue(makeIssue());
     mockIssueService.update.mockImplementation(async (_id: string, patch: Record<string, unknown>) => ({
-      ...makeIssue("todo"),
+      ...makeIssue(),
       ...patch,
     }));
+  });
+
+  it("allows local implicit board actor to hide an agent-owned issue via hiddenAt-only patch", async () => {
+    const hiddenAt = "2026-03-29T14:11:38.478Z";
 
     const res = await request(createApp())
       .patch("/api/issues/11111111-1111-4111-8111-111111111111")
-      .send({ comment: "hello", reopen: true, assigneeAgentId: "33333333-3333-4333-8333-333333333333" });
+      .send({ hiddenAt });
 
     expect(res.status).toBe(200);
     expect(mockIssueService.update).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", {
-      assigneeAgentId: "33333333-3333-4333-8333-333333333333",
+      hiddenAt: new Date(hiddenAt),
     });
-    expect(mockLogActivity).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        action: "issue.updated",
-        details: expect.not.objectContaining({ reopened: true }),
-      }),
-    );
   });
 
-  it("reopens closed issues via the PATCH comment path", async () => {
-    mockIssueService.getById.mockResolvedValue(makeIssue("done"));
-    mockIssueService.update.mockImplementation(async (_id: string, patch: Record<string, unknown>) => ({
-      ...makeIssue("done"),
-      ...patch,
-    }));
-
+  it("still blocks local implicit board actor from mutating protected fields on an agent-owned issue", async () => {
     const res = await request(createApp())
       .patch("/api/issues/11111111-1111-4111-8111-111111111111")
-      .send({ comment: "hello", reopen: true, assigneeAgentId: "33333333-3333-4333-8333-333333333333" });
+      .send({ status: "done" });
 
-    expect(res.status).toBe(200);
-    expect(mockIssueService.update).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", {
-      assigneeAgentId: "33333333-3333-4333-8333-333333333333",
-      status: "todo",
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({
+      error: "Agent authentication required for issue mutation on agent-owned issue",
     });
-    expect(mockLogActivity).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        action: "issue.updated",
-        details: expect.objectContaining({
-          reopened: true,
-          reopenedFrom: "done",
-          status: "todo",
-        }),
-      }),
-    );
+    expect(mockIssueService.update).not.toHaveBeenCalled();
   });
 });
