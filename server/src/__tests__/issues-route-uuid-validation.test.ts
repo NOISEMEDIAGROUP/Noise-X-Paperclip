@@ -10,6 +10,7 @@ const mockIssueService = vi.hoisted(() => ({
   list: vi.fn(),
   getById: vi.fn(),
   checkout: vi.fn(),
+  update: vi.fn(),
   listComments: vi.fn(),
   getByIdentifier: vi.fn(),
   getAttachmentById: vi.fn(),
@@ -80,6 +81,14 @@ describe("issues routes UUID validation", () => {
       status: "todo",
     });
     mockIssueService.checkout.mockResolvedValue(null);
+    mockIssueService.update.mockImplementation(async (_id: string, patch: Record<string, unknown>) => ({
+      id: "22222222-2222-4222-8222-222222222222",
+      companyId: COMPANY_ID,
+      status: "todo",
+      assigneeAgentId: patch.assigneeAgentId ?? null,
+      assigneeUserId: patch.assigneeUserId ?? null,
+      createdByUserId: "creator-user",
+    }));
     mockIssueService.listComments.mockResolvedValue([]);
     mockIssueService.getAttachmentById.mockResolvedValue(null);
     mockWorkProductService.getById.mockResolvedValue(null);
@@ -302,6 +311,47 @@ describe("issues routes UUID validation", () => {
       agentId,
       ["todo"],
       "44444444-4444-4444-8444-444444444444",
+    );
+  });
+
+  it("allows agent returning issue to creator when assignee/actor ids differ only by case", async () => {
+    const issueId = "11111111-1111-4111-8111-111111111111";
+    const agentId = "33333333-3333-4333-8333-333333333333";
+    const creatorUserId = "creator-user";
+    mockIssueService.getById.mockResolvedValueOnce({
+      id: issueId,
+      companyId: COMPANY_ID,
+      status: "todo",
+      assigneeAgentId: agentId,
+      assigneeUserId: null,
+      createdByUserId: creatorUserId,
+    });
+    mockIssueService.update.mockResolvedValueOnce({
+      id: issueId,
+      companyId: COMPANY_ID,
+      status: "todo",
+      assigneeAgentId: null,
+      assigneeUserId: creatorUserId,
+      createdByUserId: creatorUserId,
+    });
+    const app = createApp({
+      type: "agent",
+      companyId: COMPANY_ID,
+      agentId: ` ${agentId.toUpperCase()} `,
+      runId: "44444444-4444-4444-8444-444444444444",
+    });
+
+    const res = await request(app)
+      .patch(`/api/issues/${issueId}`)
+      .send({ assigneeAgentId: null, assigneeUserId: creatorUserId });
+
+    expect(res.status).toBe(200);
+    expect(mockIssueService.update).toHaveBeenCalledWith(
+      issueId,
+      expect.objectContaining({
+        assigneeAgentId: null,
+        assigneeUserId: creatorUserId,
+      }),
     );
   });
 

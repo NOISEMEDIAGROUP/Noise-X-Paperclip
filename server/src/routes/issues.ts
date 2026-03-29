@@ -941,11 +941,17 @@ export function issueRoutes(db: Db, storage: StorageService) {
     const assigneeWillChange =
       (req.body.assigneeAgentId !== undefined && req.body.assigneeAgentId !== existing.assigneeAgentId) ||
       (req.body.assigneeUserId !== undefined && req.body.assigneeUserId !== existing.assigneeUserId);
+    const normalizedActorAgentId = typeof req.actor.agentId === "string"
+      ? req.actor.agentId.trim().toLowerCase()
+      : "";
+    const normalizedExistingAssigneeAgentId = typeof existing.assigneeAgentId === "string"
+      ? existing.assigneeAgentId.trim().toLowerCase()
+      : "";
 
     const isAgentReturningIssueToCreator =
       req.actor.type === "agent" &&
-      !!req.actor.agentId &&
-      existing.assigneeAgentId === req.actor.agentId &&
+      !!normalizedActorAgentId &&
+      normalizedExistingAssigneeAgentId === normalizedActorAgentId &&
       req.body.assigneeAgentId === null &&
       typeof req.body.assigneeUserId === "string" &&
       !!existing.createdByUserId &&
