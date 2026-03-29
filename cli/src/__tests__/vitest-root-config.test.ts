@@ -53,47 +53,30 @@ describe("vitest root config resolver", () => {
     );
   });
 
-  it("falls back to paperclip-orginal when root manifests are missing", () => {
+  it("fails fast when root manifests are missing", () => {
     const root = "/repo";
-    const fallbackRoot = "/repo/paperclip-orginal";
-    const existing = new Set(
-      REQUIRED_MANIFESTS.map((relativePath) => withBase(fallbackRoot, relativePath)),
-    );
+    const existing = new Set<string>();
 
-    const sourceRoot = resolveVitestSourceRoot({
-      repoRoot: root,
-      fileExists: (candidate) => existing.has(candidate),
-    });
-
-    expect(sourceRoot).toBe("/repo/paperclip-orginal");
+    expect(() =>
+      resolveVitestSourceRoot({
+        repoRoot: root,
+        fileExists: (candidate) => existing.has(candidate),
+      }))
+      .toThrow("Missing workspace manifests");
   });
 
-  it("builds fallback projects/aliases and relaxes root-only excludes in fallback mode", () => {
+  it("mentions legacy mirror risk when root manifests are missing but paperclip-orginal looks complete", () => {
     const root = "/repo";
     const fallbackRoot = "/repo/paperclip-orginal";
     const existing = new Set(
       REQUIRED_MANIFESTS.map((relativePath) => withBase(fallbackRoot, relativePath)),
     );
 
-    const context = resolveVitestRootConfigContext({
-      repoRoot: root,
-      fileExists: (candidate) => existing.has(candidate),
-    });
-
-    expect(context.projects).toEqual([
-      "paperclip-orginal/packages/db",
-      "paperclip-orginal/packages/shared",
-      "paperclip-orginal/packages/adapters/opencode-local",
-      "paperclip-orginal/server",
-      "paperclip-orginal/ui",
-      "paperclip-orginal/cli",
-    ]);
-    expect(context.exclude).not.toContain("**/paperclip-orginal/**");
-    expect(context.alias["@paperclipai/db"]).toBe(
-      "/repo/paperclip-orginal/packages/db/src/index.ts",
-    );
-    expect(context.alias["@paperclipai/adapter-utils/server-utils"]).toBe(
-      "/repo/paperclip-orginal/packages/adapter-utils/src/server-utils.ts",
-    );
+    expect(() =>
+      resolveVitestRootConfigContext({
+        repoRoot: root,
+        fileExists: (candidate) => existing.has(candidate),
+      }))
+      .toThrow("paperclip-orginal");
   });
 });

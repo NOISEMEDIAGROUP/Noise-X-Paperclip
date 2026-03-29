@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-const FALLBACK_ROOT_DIRNAME = "paperclip-orginal";
+const LEGACY_MIRROR_DIRNAME = "paperclip-orginal";
 
 const REQUIRED_WORKSPACE_MANIFESTS = [
   "packages/db/package.json",
@@ -38,26 +38,51 @@ const CRITICAL_IMPORT_ALIASES = {
   "@paperclipai/adapter-cursor-local/server": "packages/adapters/cursor-local/src/server/index.ts",
 };
 
-function hasRequiredWorkspaceManifests(baseDir, fileExists) {
-  return REQUIRED_WORKSPACE_MANIFESTS.every((relativePath) =>
-    fileExists(path.join(baseDir, relativePath)),
+function findMissingWorkspaceManifests(baseDir, fileExists) {
+  return REQUIRED_WORKSPACE_MANIFESTS.filter((relativePath) =>
+    !fileExists(path.join(baseDir, relativePath)));
+}
+
+function buildMissingManifestError({ repoRoot, missingManifests, mirrorHasManifests }) {
+  const lines = [
+    "Root verification gate failed before Vitest started.",
+    "",
+    `- Missing workspace manifests in root: ${missingManifests.join(", ")}`,
+  ];
+
+  if (mirrorHasManifests) {
+    lines.push(
+      `- Detected ${LEGACY_MIRROR_DIRNAME}/ with workspace manifests. Do not use it as fallback discovery.`,
+    );
+  }
+
+  lines.push("");
+  lines.push(
+    "Run the gate from a clean candidate worktree/ref (example: ./scripts/qa-gate.sh --candidate-ref HEAD).",
   );
+  lines.push(`Root checked: ${repoRoot}`);
+  return lines.join("\n");
 }
 
 export function resolveVitestSourceRoot({
   repoRoot = process.cwd(),
   fileExists = existsSync,
 } = {}) {
-  if (hasRequiredWorkspaceManifests(repoRoot, fileExists)) {
-    return repoRoot;
+  const missingManifests = findMissingWorkspaceManifests(repoRoot, fileExists);
+  if (missingManifests.length === 0) {
+    return path.resolve(repoRoot);
   }
 
-  const fallbackRoot = path.join(repoRoot, FALLBACK_ROOT_DIRNAME);
-  if (hasRequiredWorkspaceManifests(fallbackRoot, fileExists)) {
-    return fallbackRoot;
-  }
+  const legacyMirrorRoot = path.join(repoRoot, LEGACY_MIRROR_DIRNAME);
+  const mirrorHasManifests = findMissingWorkspaceManifests(legacyMirrorRoot, fileExists).length === 0;
 
-  return repoRoot;
+  throw new Error(
+    buildMissingManifestError({
+      repoRoot: path.resolve(repoRoot),
+      missingManifests,
+      mirrorHasManifests,
+    }),
+  );
 }
 
 function buildVitestProjects({ repoRoot, sourceRoot }) {
