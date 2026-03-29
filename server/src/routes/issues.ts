@@ -1281,10 +1281,23 @@ export function issueRoutes(db: Db, storage: StorageService) {
       return;
     }
     assertCompanyAccess(req, issue.companyId);
-    const afterCommentIdRaw = readQueryString(req.query.after) ?? readQueryString(req.query.afterCommentId);
-    const afterCommentId = afterCommentIdRaw && afterCommentIdRaw.trim().length > 0
-      ? afterCommentIdRaw.trim()
+    const afterCommentIdQueryRaw = readQueryString(req.query.after);
+    const afterCommentIdLegacyRaw = readQueryString(req.query.afterCommentId);
+    const afterCommentIdQuery = afterCommentIdQueryRaw && afterCommentIdQueryRaw.trim().length > 0
+      ? afterCommentIdQueryRaw.trim()
       : null;
+    const afterCommentIdLegacy = afterCommentIdLegacyRaw && afterCommentIdLegacyRaw.trim().length > 0
+      ? afterCommentIdLegacyRaw.trim()
+      : null;
+    if (
+      afterCommentIdQuery &&
+      afterCommentIdLegacy &&
+      afterCommentIdQuery !== afterCommentIdLegacy
+    ) {
+      res.status(400).json({ error: "Conflicting comment cursors: after and afterCommentId must match" });
+      return;
+    }
+    const afterCommentId = afterCommentIdQuery ?? afterCommentIdLegacy;
     if (afterCommentId && !isUuidLike(afterCommentId)) {
       res.status(400).json({ error: "Invalid after comment cursor" });
       return;

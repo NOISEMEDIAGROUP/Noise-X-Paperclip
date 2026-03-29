@@ -124,6 +124,16 @@ describe("issues routes UUID validation", () => {
     expect(mockIssueService.listComments).not.toHaveBeenCalled();
   });
 
+  it("returns 400 when after and afterCommentId cursors conflict", async () => {
+    const res = await request(createApp()).get(
+      "/api/issues/11111111-1111-4111-8111-111111111111/comments?after=22222222-2222-4222-8222-222222222222&afterCommentId=33333333-3333-4333-8333-333333333333",
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("Conflicting comment cursors");
+    expect(mockIssueService.listComments).not.toHaveBeenCalled();
+  });
+
   it("returns 400 for invalid comment order query values", async () => {
     const res = await request(createApp()).get(
       "/api/issues/11111111-1111-4111-8111-111111111111/comments?order=sideways",
