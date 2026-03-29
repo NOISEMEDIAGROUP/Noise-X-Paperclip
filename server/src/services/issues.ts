@@ -750,9 +750,9 @@ export function issueService(db: Db) {
         unreadForUserCondition(companyId, userId),
         ne(issues.originKind, "routine_execution"),
       ];
-      const normalizedStatus = asNonEmptyString(status);
+      const normalizedStatus = asNonEmptyString(status)?.toLowerCase();
       if (normalizedStatus) {
-        const statuses = normalizedStatus.split(",").map((s) => s.trim()).filter(Boolean);
+        const statuses = normalizedStatus.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
         if (statuses.length === 1) {
           conditions.push(eq(issues.status, statuses[0]));
         } else if (statuses.length > 1) {
