@@ -594,6 +594,53 @@ describe("issueService.list participantAgentId", () => {
     }
   });
 
+  it("keeps routine_execution issues excluded by default for malformed non-route origin/include filters", async () => {
+    const companyId = randomUUID();
+    const routineIssueId = randomUUID();
+    const manualIssueId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(issues).values([
+      {
+        id: routineIssueId,
+        companyId,
+        title: "Routine execution issue",
+        status: "todo",
+        priority: "medium",
+        originKind: "routine_execution",
+        originId: randomUUID(),
+      },
+      {
+        id: manualIssueId,
+        companyId,
+        title: "Manual issue",
+        status: "todo",
+        priority: "medium",
+        originKind: "manual",
+      },
+    ]);
+
+    const defaultLikeResult = await svc.list(companyId, {
+      includeRoutineExecutions: "false" as unknown as boolean,
+      originKind: { bad: true } as unknown as string,
+      originId: { bad: true } as unknown as string,
+    });
+    expect(defaultLikeResult.map((issue) => issue.id)).toEqual([manualIssueId]);
+
+    const explicitIncludeResult = await svc.list(companyId, {
+      includeRoutineExecutions: "true" as unknown as boolean,
+    });
+    expect(new Set(explicitIncludeResult.map((issue) => issue.id))).toEqual(
+      new Set([manualIssueId, routineIssueId]),
+    );
+  });
+
   it("returns an empty list when companyId is malformed for list", async () => {
     await expect(svc.list("not-a-uuid", {})).resolves.toEqual([]);
   });

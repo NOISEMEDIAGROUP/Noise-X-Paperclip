@@ -587,6 +587,13 @@ export function issueService(db: Db) {
       const labelIdFilter = asNonEmptyString(filters?.labelId);
       const originKindFilter = asNonEmptyString(filters?.originKind);
       const originIdFilter = asNonEmptyString(filters?.originId);
+      const includeRoutineExecutionsRaw = filters?.includeRoutineExecutions as unknown;
+      const includeRoutineExecutions =
+        includeRoutineExecutionsRaw === true ||
+        includeRoutineExecutionsRaw === 1 ||
+        (typeof includeRoutineExecutionsRaw === "string" &&
+          (includeRoutineExecutionsRaw.trim().toLowerCase() === "true" ||
+            includeRoutineExecutionsRaw.trim().toLowerCase() === "1"));
       const rawSearch = asNonEmptyString(filters?.q) ?? "";
       if (assigneeAgentIdFilter && !isUuidLike(assigneeAgentIdFilter)) return [];
       if (participantAgentIdFilter && !isUuidLike(participantAgentIdFilter)) return [];
@@ -656,7 +663,7 @@ export function issueService(db: Db) {
           )!,
         );
       }
-      if (!filters?.includeRoutineExecutions && !filters?.originKind && !filters?.originId) {
+      if (!includeRoutineExecutions && !originKindFilter && !originIdFilter) {
         conditions.push(ne(issues.originKind, "routine_execution"));
       }
       conditions.push(isNull(issues.hiddenAt));
