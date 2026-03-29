@@ -705,10 +705,17 @@ export function agentRoutes(db: Db) {
           newInstances.push({ instanceId: result.instanceId, status: "running" });
         }
       }
-      return [
+      const allInstances = [
         ...current.map((i) => ({ instanceId: i.instanceId, status: i.status })),
         ...newInstances,
       ];
+      if (newInstances.length > 0) {
+        await svc.updateRuntimeStatus(agent.id, {
+          status: "running",
+          instanceId: newInstances[0].instanceId,
+        });
+      }
+      return allInstances;
     }
 
     if (targetCount < currentCount) {

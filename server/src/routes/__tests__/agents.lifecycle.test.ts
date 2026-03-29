@@ -3,6 +3,7 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { agentRoutes } from "../agents.js";
 import { errorHandler } from "../../middleware/index.js";
+import { findServerAdapter } from "../../adapters/index.js";
 
 // Create mocks using vi.hoisted so they persist
 const agentServiceImpl = vi.hoisted(() => ({
@@ -204,12 +205,15 @@ describe("POST /agents/:id/start", () => {
   });
 
   it("falls back to stateless execute() when start not implemented", async () => {
+    vi.mocked(findServerAdapter).mockReturnValueOnce({ ...mockAdapter, start: undefined });
     agentServiceImpl.getById.mockResolvedValue(mockAgent);
-    agentServiceImpl.update.mockResolvedValue({ ...mockRunningAgent });
+    agentServiceImpl.updateRuntimeStatus.mockResolvedValue({ ...mockRunningAgent });
 
     const res = await request(createApp()).post(`/api/agents/${agentId}/start`);
 
     expect(res.status).toBe(200);
+    expect(mockAdapter.execute).toHaveBeenCalled();
+    expect(res.body).toHaveProperty("instanceId", "stateless");
   });
 
   it("sets status to running and stores instanceId", async () => {
@@ -292,17 +296,14 @@ describe("POST /agents/:id/stop", () => {
   });
 
   it("falls back to cancelActiveForAgent when stop not implemented", async () => {
-    // Note: With the current mock setup, adapter.stop is always defined (truthy),
-    // so the fallback path (cancelActiveForAgent) is not exercised.
-    // This test verifies the stop route works when adapter.stop IS available.
+    vi.mocked(findServerAdapter).mockReturnValueOnce({ ...mockAdapter, stop: undefined });
     agentServiceImpl.getById.mockResolvedValue(mockRunningAgent);
     agentServiceImpl.updateRuntimeStatus.mockResolvedValue({ ...mockAgent });
 
     const res = await request(createApp()).post(`/api/agents/${agentId}/stop`);
 
     expect(res.status).toBe(200);
-    // Since adapter.stop IS defined, cancelActiveForAgent is NOT called
-    expect(agentServiceImpl.cancelActiveForAgent).not.toHaveBeenCalled();
+    expect(heartbeatServiceImpl.cancelActiveForAgent).toHaveBeenCalledWith(agentId);
   });
 
   it("sets status to idle and clears instanceId", async () => {
