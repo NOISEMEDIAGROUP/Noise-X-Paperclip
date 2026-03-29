@@ -306,7 +306,7 @@ export function companyService(db: Db) {
         await tx.delete(documentRevisions).where(eq(documentRevisions.companyId, id));
         await tx.delete(documents).where(eq(documents.companyId, id));
 
-        // --- Tables referencing approvals ---
+        // --- Tables referencing approvals and/or budget_policies ---
         await tx.delete(approvalComments).where(eq(approvalComments.companyId, id));
         await tx.delete(budgetIncidents).where(eq(budgetIncidents.companyId, id));
         await tx.delete(approvals).where(eq(approvals.companyId, id));

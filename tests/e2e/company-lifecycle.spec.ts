@@ -7,21 +7,30 @@ import { test, expect } from "@playwright/test";
  * and confirms all data is removed from the database.
  */
 
-const COMPANY_NAME = `E2E-Lifecycle-${Date.now()}`;
-
 test.describe("Company lifecycle", () => {
+  let companyId: string | null = null;
+
+  test.afterEach(async ({ request, baseURL }) => {
+    if (companyId) {
+      await request.delete(`${baseURL}/api/companies/${companyId}`);
+      companyId = null;
+    }
+  });
+
   test("creates and deletes a company via API", async ({ request, baseURL }) => {
+    const companyName = `E2E-Lifecycle-${Date.now()}`;
+
     // --- Create a company ---
     const createRes = await request.post(`${baseURL}/api/companies`, {
-      data: { name: COMPANY_NAME },
+      data: { name: companyName },
     });
     expect(createRes.ok()).toBe(true);
     const company = await createRes.json();
-    expect(company.name).toBe(COMPANY_NAME);
+    expect(company.name).toBe(companyName);
     expect(company.id).toBeTruthy();
     expect(company.issuePrefix).toBeTruthy();
 
-    const companyId = company.id;
+    companyId = company.id;
 
     // --- Verify it appears in the list ---
     const listRes = await request.get(`${baseURL}/api/companies`);
@@ -59,14 +68,17 @@ test.describe("Company lifecycle", () => {
     const deleteBody = await deleteRes.json();
     expect(deleteBody.ok).toBe(true);
 
+    // Mark as cleaned up so afterEach doesn't retry
+    companyId = null;
+
     // --- Verify company is gone from the list ---
     const listAfterRes = await request.get(`${baseURL}/api/companies`);
     expect(listAfterRes.ok()).toBe(true);
     const companiesAfter = await listAfterRes.json();
-    expect(companiesAfter.some((c: { id: string }) => c.id === companyId)).toBe(false);
+    expect(companiesAfter.some((c: { id: string }) => c.id === company.id)).toBe(false);
 
     // --- Verify agent is gone (endpoint may return empty list or 404) ---
-    const agentAfterRes = await request.get(`${baseURL}/api/companies/${companyId}/agents`);
+    const agentAfterRes = await request.get(`${baseURL}/api/companies/${company.id}/agents`);
     if (agentAfterRes.ok()) {
       const agentsAfter = await agentAfterRes.json();
       expect(agentsAfter).toHaveLength(0);
