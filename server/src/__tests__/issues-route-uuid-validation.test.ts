@@ -256,6 +256,32 @@ describe("issues routes UUID validation", () => {
     );
   });
 
+  it("enforces run-id checkout ownership on patch when assignee/actor ids differ only by case", async () => {
+    const issueId = "11111111-1111-4111-8111-111111111111";
+    const agentId = "33333333-3333-4333-8333-333333333333";
+    mockIssueService.getById.mockResolvedValueOnce({
+      id: issueId,
+      companyId: COMPANY_ID,
+      status: "in_progress",
+      assigneeAgentId: agentId,
+      checkoutRunId: "44444444-4444-4444-8444-444444444444",
+    });
+    const app = createApp({
+      type: "agent",
+      companyId: COMPANY_ID,
+      agentId: ` ${agentId.toUpperCase()} `,
+      runId: { bad: true },
+    });
+
+    const res = await request(app)
+      .patch(`/api/issues/${issueId}`)
+      .send({ priority: "high" });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error).toContain("run id");
+    expect(mockIssueService.update).not.toHaveBeenCalled();
+  });
+
   it("does not enqueue assignee wakeup for checkout no-op when issue already owned in-progress", async () => {
     const issueId = "11111111-1111-4111-8111-111111111111";
     const agentId = "33333333-3333-4333-8333-333333333333";

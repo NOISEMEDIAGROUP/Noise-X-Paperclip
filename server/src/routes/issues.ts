@@ -147,12 +147,13 @@ export function issueRoutes(db: Db, storage: StorageService) {
     issue: { id: string; companyId: string; status: string; assigneeAgentId: string | null },
   ) {
     if (req.actor.type !== "agent") return true;
-    const actorAgentId = req.actor.agentId;
+    const actorAgentId = typeof req.actor.agentId === "string" ? req.actor.agentId.trim().toLowerCase() : "";
     if (!actorAgentId) {
       res.status(403).json({ error: "Agent authentication required" });
       return false;
     }
-    if (issue.status !== "in_progress" || issue.assigneeAgentId !== actorAgentId) {
+    const assigneeAgentId = typeof issue.assigneeAgentId === "string" ? issue.assigneeAgentId.trim().toLowerCase() : "";
+    if (issue.status !== "in_progress" || assigneeAgentId !== actorAgentId) {
       return true;
     }
     const runId = requireAgentRunId(req, res);
