@@ -283,6 +283,10 @@ export function issueRoutes(db: Db, storage: StorageService) {
       res.status(400).json({ error: `Invalid originKind filter: ${originKindFilter}` });
       return;
     }
+    if (originKindFilter === "routine_execution" && originIdFilter && !isNonEmptyUuid(originIdFilter)) {
+      res.status(400).json({ error: "Invalid originId filter for routine_execution originKind" });
+      return;
+    }
     const statusFilterNormalized = normalizedStatuses.length > 0 ? Array.from(new Set(normalizedStatuses)).join(",") : undefined;
 
     const assigneeUserId =
