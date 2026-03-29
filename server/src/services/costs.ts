@@ -381,7 +381,7 @@ export function costService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
           runCount: sql<number>`count(distinct ${costEvents.heartbeatRunId})::int`,
         })
         .from(costEvents)
-        .innerJoin(issues, eq(issues.id, costEvents.issueId))
+        .innerJoin(issues, and(eq(issues.id, costEvents.issueId), eq(issues.companyId, companyId)))
         .where(and(...conditions))
         .groupBy(costEvents.issueId, issues.identifier, issues.title)
         .orderBy(desc(shadowCostCentsExpr));
