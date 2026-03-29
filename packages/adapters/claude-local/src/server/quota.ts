@@ -190,13 +190,10 @@ function formatExtraUsageLabel(extraUsage: AnthropicExtraUsage): string | null {
   return `${formatCurrencyAmount(usedCredits, extraUsage.currency)} / ${formatCurrencyAmount(monthlyLimit, extraUsage.currency)}`;
 }
 
-/** Convert utilization to a 0-100 integer percent. Returns null for null/undefined input.
- *  The Anthropic API may return either a 0-1 fraction or a 0-100 percentage.
- *  Values > 1 are treated as already being percentages. */
+/** Convert a 0-1 utilization fraction to a 0-100 integer percent. Returns null for null/undefined input. */
 export function toPercent(utilization: number | null | undefined): number | null {
   if (utilization == null) return null;
-  const pct = utilization > 1 ? utilization : utilization * 100;
-  return Math.min(100, Math.round(pct));
+  return Math.min(100, Math.round(utilization * 100));
 }
 
 /** fetch with an abort-based timeout so a hanging provider api doesn't block the response indefinitely */

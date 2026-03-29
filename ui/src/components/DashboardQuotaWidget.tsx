@@ -196,7 +196,7 @@ export function DashboardQuotaWidget({ companyId }: DashboardQuotaWidgetProps) {
           <div className="flex items-center gap-2">
             <Gauge className="h-4 w-4 text-muted-foreground/50" />
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              API 사용량
+              API Usage
             </h3>
           </div>
         </div>

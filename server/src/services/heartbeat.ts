@@ -61,7 +61,8 @@ import {
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_MAX = 10;
-const COMPANY_MAX_CONCURRENT_RUNS_DEFAULT = parseInt(process.env.PAPERCLIP_MAX_CONCURRENT_COMPANY_RUNS ?? "2", 10);
+const _rawCompanyMax = parseInt(process.env.PAPERCLIP_MAX_CONCURRENT_COMPANY_RUNS ?? "2", 10);
+const COMPANY_MAX_CONCURRENT_RUNS_DEFAULT = Number.isFinite(_rawCompanyMax) && _rawCompanyMax > 0 ? _rawCompanyMax : 2;
 const DEFERRED_WAKE_CONTEXT_KEY = "_paperclipWakeContext";
 const DETACHED_PROCESS_ERROR_CODE = "process_detached";
 const startLocksByAgent = new Map<string, Promise<void>>();
@@ -1632,16 +1633,18 @@ export function heartbeatService(db: Db) {
   const THROTTLED_ADAPTER_TYPES = new Set(["claude_local", "gemini_local", "pi_local"]);
 
   async function countRunningRunsForCompany(companyId: string) {
-    const runningRuns = await db
-      .select({ agentId: heartbeatRuns.agentId })
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)` })
       .from(heartbeatRuns)
-      .where(and(eq(heartbeatRuns.companyId, companyId), eq(heartbeatRuns.status, "running")));
-    let count = 0;
-    for (const r of runningRuns) {
-      const agent = await getAgent(r.agentId);
-      if (agent && THROTTLED_ADAPTER_TYPES.has(agent.adapterType)) count++;
-    }
-    return count;
+      .innerJoin(agents, eq(heartbeatRuns.agentId, agents.id))
+      .where(
+        and(
+          eq(heartbeatRuns.companyId, companyId),
+          eq(heartbeatRuns.status, "running"),
+          inArray(agents.adapterType, [...THROTTLED_ADAPTER_TYPES]),
+        ),
+      );
+    return Number(count ?? 0);
   }
 
   async function claimQueuedRun(run: typeof heartbeatRuns.$inferSelect) {
@@ -2637,7 +2640,7 @@ export function heartbeatService(db: Db) {
             source: "automation",
             triggerDetail: "system",
             reason: `rate-limit auto-retry (attempt ${(rateLimitRetryCount ?? 0) + 1}/3)`,
-            contextSnapshot: { _rateLimitRetryCount: (rateLimitRetryCount ?? 0) + 1 },
+            contextSnapshot: { ...((run.contextSnapshot as Record<string, unknown> | null) ?? {}), _rateLimitRetryCount: (rateLimitRetryCount ?? 0) + 1 },
           }).catch((err) => logger.warn({ err, agentId: agent.id }, "rate-limit retry enqueue failed"));
         }, delaySec * 1000);
       }
