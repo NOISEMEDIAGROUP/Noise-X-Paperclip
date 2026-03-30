@@ -125,6 +125,27 @@ describe("issues routes UUID validation", () => {
     expect(mockIssueService.getById).not.toHaveBeenCalled();
   });
 
+  it("trims identifier-style issue path params before lookup", async () => {
+    const identifier = "PAP-123";
+    const issueId = "11111111-1111-4111-8111-111111111111";
+    mockIssueService.getByIdentifier.mockResolvedValueOnce({
+      id: issueId,
+      companyId: COMPANY_ID,
+      status: "todo",
+    });
+    mockIssueService.getById.mockResolvedValueOnce({
+      id: issueId,
+      companyId: COMPANY_ID,
+      status: "todo",
+    });
+
+    const res = await request(createApp()).get(`/api/issues/%20${identifier}%20/comments`);
+
+    expect(res.status).toBe(200);
+    expect(mockIssueService.getByIdentifier).toHaveBeenCalledWith(identifier);
+    expect(mockIssueService.getById).toHaveBeenCalledWith(issueId);
+  });
+
   it("normalizes UUID issue id path params to lowercase before service calls", async () => {
     const issueIdLower = "11111111-1111-4111-8111-111111111111";
     const issueIdUpper = issueIdLower.toUpperCase();
