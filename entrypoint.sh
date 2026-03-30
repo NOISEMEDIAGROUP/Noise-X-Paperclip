@@ -4,6 +4,31 @@ set -e
 # Resolve the port (Render overrides PORT)
 APP_PORT="${PORT:-3100}"
 
+# Ensure config directory and file exist for the CLI
+CONFIG_DIR="/paperclip/instances/default"
+CONFIG_FILE="$CONFIG_DIR/config.json"
+if [ ! -f "$CONFIG_FILE" ]; then
+  echo "[entrypoint] Creating minimal config.json for CLI..."
+  mkdir -p "$CONFIG_DIR"
+  cat > "$CONFIG_FILE" << 'CFGEOF'
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 10000,
+    "deploymentMode": "authenticated",
+    "deploymentExposure": "private"
+  },
+  "database": {
+    "mode": "embedded-postgres",
+    "embeddedPostgresPort": 54329
+  },
+  "auth": {
+    "baseUrlMode": "auto"
+  }
+}
+CFGEOF
+fi
+
 # Start the server in the background
 node --import ./server/node_modules/tsx/dist/loader.mjs server/dist/index.js &
 SERVER_PID=$!
@@ -15,7 +40,6 @@ for i in $(seq 1 90); do
     echo "[entrypoint] Server is healthy!"
     break
   fi
-  echo "[entrypoint] Waiting... ($i/90)"
   sleep 2
 done
 
@@ -26,7 +50,7 @@ echo "[entrypoint] Bootstrap status: $BOOTSTRAP_STATUS"
 
 if [ "$BOOTSTRAP_STATUS" = "bootstrap_pending" ]; then
   echo "[entrypoint] Bootstrap pending - generating CEO invite..."
-  pnpm paperclipai auth bootstrap-ceo --base-url "${PAPERCLIP_PUBLIC_URL:-https://noise-x-paperclip.onrender.com}" || echo "[entrypoint] Bootstrap command failed (may already be bootstrapped)"
+  pnpm paperclipai auth bootstrap-ceo --base-url "${PAPERCLIP_PUBLIC_URL:-https://noise-x-paperclip.onrender.com}" || echo "[entrypoint] Bootstrap command failed"
 else
   echo "[entrypoint] Skipping bootstrap-ceo (status: $BOOTSTRAP_STATUS)"
 fi
