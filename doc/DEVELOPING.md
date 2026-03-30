@@ -89,6 +89,10 @@ docker compose -f docker-compose.quickstart.yml up --build
 
 See `doc/DOCKER.md` for API key wiring (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`) and persistence details.
 
+## Docker For Untrusted PR Review
+
+For a separate review-oriented container that keeps `codex`/`claude` login state in Docker volumes and checks out PRs into an isolated scratch workspace, see `doc/UNTRUSTED-PR-REVIEW.md`.
+
 ## Database in Dev (Auto-Handled)
 
 For local development, leave `DATABASE_URL` unset.
@@ -142,7 +146,7 @@ This command:
 - creates an isolated instance under `~/.paperclip-worktrees/instances/<worktree-id>/`
 - when run inside a linked git worktree, mirrors the effective git hooks into that worktree's private git dir
 - picks a free app port and embedded PostgreSQL port
-- by default seeds the isolated DB in `minimal` mode from your main instance via a logical SQL snapshot
+- by default seeds the isolated DB in `minimal` mode from the current effective Paperclip instance/config (repo-local worktree config when present, otherwise the default instance) via a logical SQL snapshot
 
 Seed modes:
 
