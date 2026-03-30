@@ -79,6 +79,12 @@ export function issueRoutes(db: Db, storage: StorageService) {
     return true;
   }
 
+  function normalizeCompanyIdPathParam(res: Response, rawCompanyId: unknown): string | null {
+    const companyId = typeof rawCompanyId === "string" ? rawCompanyId.trim().toLowerCase() : "";
+    if (!assertValidCompanyId(res, companyId)) return null;
+    return companyId;
+  }
+
   function withContentPath<T extends { id: string }>(attachment: T) {
     return {
       ...attachment,
@@ -254,8 +260,8 @@ export function issueRoutes(db: Db, storage: StorageService) {
   });
 
   router.get("/companies/:companyId/issues", async (req, res) => {
-    const companyId = (req.params.companyId as string).trim().toLowerCase();
-    if (!assertValidCompanyId(res, companyId)) return;
+    const companyId = normalizeCompanyIdPathParam(res, req.params.companyId);
+    if (!companyId) return;
     assertCompanyAccess(req, companyId);
     const statusFilter = readQueryString(req.query.status)?.trim();
     const assigneeAgentIdFilter = readQueryString(req.query.assigneeAgentId);
@@ -380,16 +386,16 @@ export function issueRoutes(db: Db, storage: StorageService) {
   });
 
   router.get("/companies/:companyId/labels", async (req, res) => {
-    const companyId = (req.params.companyId as string).trim().toLowerCase();
-    if (!assertValidCompanyId(res, companyId)) return;
+    const companyId = normalizeCompanyIdPathParam(res, req.params.companyId);
+    if (!companyId) return;
     assertCompanyAccess(req, companyId);
     const result = await svc.listLabels(companyId);
     res.json(result);
   });
 
   router.post("/companies/:companyId/labels", validate(createIssueLabelSchema), async (req, res) => {
-    const companyId = (req.params.companyId as string).trim().toLowerCase();
-    if (!assertValidCompanyId(res, companyId)) return;
+    const companyId = normalizeCompanyIdPathParam(res, req.params.companyId);
+    if (!companyId) return;
     assertCompanyAccess(req, companyId);
     const label = await svc.createLabel(companyId, req.body);
     const actor = getActorInfo(req);
@@ -904,8 +910,8 @@ export function issueRoutes(db: Db, storage: StorageService) {
   });
 
   router.post("/companies/:companyId/issues", validate(createIssueSchema), async (req, res) => {
-    const companyId = (req.params.companyId as string).trim().toLowerCase();
-    if (!assertValidCompanyId(res, companyId)) return;
+    const companyId = normalizeCompanyIdPathParam(res, req.params.companyId);
+    if (!companyId) return;
     assertCompanyAccess(req, companyId);
     if (req.body.assigneeAgentId || req.body.assigneeUserId) {
       await assertCanAssignTasks(req, companyId);
@@ -1661,8 +1667,8 @@ export function issueRoutes(db: Db, storage: StorageService) {
   });
 
   router.post("/companies/:companyId/issues/:issueId/attachments", async (req, res) => {
-    const companyId = (req.params.companyId as string).trim().toLowerCase();
-    if (!assertValidCompanyId(res, companyId)) return;
+    const companyId = normalizeCompanyIdPathParam(res, req.params.companyId);
+    if (!companyId) return;
     const issueId = req.params.issueId as string;
     assertCompanyAccess(req, companyId);
     const issue = await svc.getById(issueId);
