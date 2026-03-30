@@ -830,12 +830,14 @@ export function pluginLoader(
 
       try {
         // Use execFile (not exec) to avoid shell injection from package name/version.
+        // On Windows, npm resolves to npm.cmd (a batch script); execFile can run
+        // .cmd files directly without shell: true, preserving the injection guard.
         // --ignore-scripts prevents preinstall/install/postinstall hooks from
         // executing arbitrary code on the host before manifest validation.
         await execFileAsync(
-          "npm",
+          process.platform === "win32" ? "npm.cmd" : "npm",
           ["install", spec, "--prefix", targetInstallDir, "--save", "--ignore-scripts"],
-          { timeout: 120_000 }, // 2 minute timeout for npm install
+          { timeout: 120_000 },
         );
       } catch (err) {
         throw new Error(`npm install failed for ${spec}: ${String(err)}`);
@@ -1399,7 +1401,7 @@ export function pluginLoader(
       if (existsSync(packageJsonPath)) {
         try {
           await execFileAsync(
-            "npm",
+            process.platform === "win32" ? "npm.cmd" : "npm",
             ["uninstall", plugin.packageName, "--prefix", localPluginDir, "--ignore-scripts"],
             { timeout: 120_000 },
           );
