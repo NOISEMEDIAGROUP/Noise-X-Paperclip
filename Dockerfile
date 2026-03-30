@@ -54,5 +54,7 @@ ENV NODE_ENV=production \
 
 EXPOSE 3100
 
+RUN chmod +x entrypoint.sh
+
 USER node
-CMD ["node", "--import", "./server/node_modules/tsx/dist/loader.mjs", "server/dist/index.js"]
+CMD ["sh", "./entrypoint.sh"]
