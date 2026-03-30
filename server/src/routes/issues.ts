@@ -15,6 +15,7 @@ import {
   updateIssueSchema,
 } from "@paperclipai/shared";
 import type { StorageService } from "../storage/types.js";
+import type { PluginToolDispatcher } from "../services/plugin-tool-dispatcher.js";
 import { validate } from "../middleware/validate.js";
 import {
   accessService,
@@ -39,11 +40,11 @@ import { queueIssueAssignmentWakeup } from "../services/issue-assignment-wakeup.
 
 const MAX_ISSUE_COMMENT_LIMIT = 500;
 
-export function issueRoutes(db: Db, storage: StorageService) {
+export function issueRoutes(db: Db, storage: StorageService, toolDispatcher?: PluginToolDispatcher) {
   const router = Router();
   const svc = issueService(db);
   const access = accessService(db);
-  const heartbeat = heartbeatService(db);
+  const heartbeat = heartbeatService(db, toolDispatcher);
   const agentsSvc = agentService(db);
   const projectsSvc = projectService(db);
   const goalsSvc = goalService(db);
