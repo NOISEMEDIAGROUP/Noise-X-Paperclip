@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState, type ChangeEvent } from "re
 import { Link, useLocation } from "react-router-dom";
 import type { IssueComment, Agent } from "@paperclipai/shared";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Check, Copy, Paperclip } from "lucide-react";
 import { Identity } from "./Identity";
 import { InlineEntitySelector, type InlineEntityOption } from "./InlineEntitySelector";
@@ -12,7 +13,7 @@ import { AgentIcon } from "./AgentIconPicker";
 import { formatDateTime } from "../lib/utils";
 import { PluginSlotOutlet } from "@/plugins/slots";
 
-interface CommentWithRunMeta extends IssueComment {
+export interface CommentWithRunMeta extends IssueComment {
   runId?: string | null;
   runAgentId?: string | null;
 }
@@ -48,6 +49,15 @@ interface CommentThreadProps {
   currentAssigneeValue?: string;
   suggestedAssigneeValue?: string;
   mentions?: MentionOption[];
+  submitLabel?: string;
+  placeholder?: string;
+  stickyInput?: boolean;
+  hideReopen?: boolean;
+  hideHeader?: boolean;
+  /** Content shown when the timeline is empty. Pass null to suppress. Defaults to a text message. */
+  emptyState?: React.ReactNode;
+  /** When provided, inline code that looks like a file path becomes clickable in rendered comments. */
+  onFilePathClick?: (path: string) => void;
 }
 
 const DRAFT_DEBOUNCE_MS = 800;
@@ -118,21 +128,29 @@ type TimelineItem =
   | { kind: "comment"; id: string; createdAtMs: number; comment: CommentWithRunMeta }
   | { kind: "run"; id: string; createdAtMs: number; run: LinkedRunItem };
 
+const DEFAULT_EMPTY_STATE = (
+  <p className="text-sm text-muted-foreground">No comments or runs yet.</p>
+);
+
 const TimelineList = memo(function TimelineList({
   timeline,
   agentMap,
   companyId,
   projectId,
   highlightCommentId,
+  emptyState = DEFAULT_EMPTY_STATE,
+  onFilePathClick,
 }: {
   timeline: TimelineItem[];
   agentMap?: Map<string, Agent>;
   companyId?: string | null;
   projectId?: string | null;
   highlightCommentId?: string | null;
+  emptyState?: React.ReactNode;
+  onFilePathClick?: (path: string) => void;
 }) {
   if (timeline.length === 0) {
-    return <p className="text-sm text-muted-foreground">No comments or runs yet.</p>;
+    return emptyState ? <>{emptyState}</> : null;
   }
 
   return (
@@ -155,12 +173,19 @@ const TimelineList = memo(function TimelineList({
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-muted-foreground">Run</span>
-                <Link
-                  to={`/agents/${run.agentId}/runs/${run.runId}`}
-                  className="inline-flex items-center rounded-md border border-border bg-accent/40 px-2 py-1 font-mono text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
-                >
-                  {run.runId.slice(0, 8)}
-                </Link>
+                <Tooltip delayDuration={300}>
+                  <TooltipTrigger asChild>
+                    <Link
+                      to={`/agents/${run.agentId}/runs/${run.runId}`}
+                      className="inline-flex items-center rounded-md border border-border bg-accent/40 px-2 py-1 font-mono text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+                    >
+                      {run.runId.slice(0, 8)}
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">
+                    View full run transcript
+                  </TooltipContent>
+                </Tooltip>
                 <StatusBadge status={run.status} />
               </div>
             </div>
@@ -212,7 +237,7 @@ const TimelineList = memo(function TimelineList({
                 <CopyMarkdownButton text={comment.body} />
               </span>
             </div>
-            <MarkdownBody className="text-sm">{comment.body}</MarkdownBody>
+            <MarkdownBody className="text-sm" onFilePathClick={onFilePathClick}>{comment.body}</MarkdownBody>
             {companyId ? (
               <div className="mt-2 space-y-2">
                 <PluginSlotOutlet
@@ -270,6 +295,13 @@ export function CommentThread({
   currentAssigneeValue = "",
   suggestedAssigneeValue,
   mentions: providedMentions,
+  submitLabel,
+  placeholder: placeholderProp,
+  stickyInput = false,
+  hideReopen = false,
+  hideHeader = false,
+  emptyState,
+  onFilePathClick,
 }: CommentThreadProps) {
   const [body, setBody] = useState("");
   const [reopen, setReopen] = useState(true);
@@ -401,7 +433,7 @@ export function CommentThread({
 
   return (
     <div className="space-y-4">
-      <h3 className="text-sm font-semibold">Comments &amp; Runs ({timeline.length})</h3>
+      {!hideHeader && <h3 className="text-sm font-semibold">Comments &amp; Runs ({timeline.length})</h3>}
 
       <TimelineList
         timeline={timeline}
@@ -409,20 +441,22 @@ export function CommentThread({
         companyId={companyId}
         projectId={projectId}
         highlightCommentId={highlightCommentId}
+        emptyState={emptyState}
+        onFilePathClick={onFilePathClick}
       />
 
       {liveRunSlot}
 
-      <div className="space-y-2">
+      <div className={stickyInput ? "space-y-2 sticky bottom-0 bg-background pt-2 pb-1 max-h-[33vh] overflow-y-auto border-t border-border" : "space-y-2"}>
         <MarkdownEditor
           ref={editorRef}
           value={body}
           onChange={setBody}
-          placeholder="Leave a comment..."
+          placeholder={placeholderProp ?? "Leave a comment..."}
           mentions={mentions}
           onSubmit={handleSubmit}
           imageUploadHandler={imageUploadHandler}
-          contentClassName="min-h-[60px] text-sm"
+          contentClassName={stickyInput ? "min-h-[60px] max-h-[25vh] overflow-y-auto text-sm" : "min-h-[60px] text-sm"}
         />
         <div className="flex items-center justify-end gap-3">
           {(imageUploadHandler || onAttachImage) && (
@@ -445,15 +479,17 @@ export function CommentThread({
               </Button>
             </div>
           )}
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={reopen}
-              onChange={(e) => setReopen(e.target.checked)}
-              className="rounded border-border"
-            />
-            Re-open
-          </label>
+          {!hideReopen && (
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={reopen}
+                onChange={(e) => setReopen(e.target.checked)}
+                className="rounded border-border"
+              />
+              Re-open
+            </label>
+          )}
           {enableReassign && reassignOptions.length > 0 && (
             <InlineEntitySelector
               value={reassignTarget}
@@ -492,9 +528,16 @@ export function CommentThread({
               }}
             />
           )}
-          <Button size="sm" disabled={!canSubmit} onClick={handleSubmit}>
-            {submitting ? "Posting..." : "Comment"}
-          </Button>
+          <Tooltip delayDuration={300}>
+            <TooltipTrigger asChild>
+              <Button size="sm" disabled={!canSubmit} onClick={handleSubmit}>
+                {submitting ? "Posting..." : (submitLabel ?? "Comment")}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              Ctrl+Enter to send
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
     </div>
