@@ -29,6 +29,8 @@ const mockHeartbeat = vi.hoisted(() => ({
 
 const mockWorkProductService = vi.hoisted(() => ({
   getById: vi.fn(),
+  update: vi.fn(),
+  remove: vi.fn(),
 }));
 
 vi.mock("../services/index.js", () => ({
@@ -110,6 +112,8 @@ describe("issues routes UUID validation", () => {
     mockIssueApprovalService.unlink.mockResolvedValue(undefined);
     mockHeartbeat.wakeup.mockResolvedValue(undefined);
     mockHeartbeat.reportRunActivity.mockResolvedValue(undefined);
+    mockWorkProductService.update.mockResolvedValue(null);
+    mockWorkProductService.remove.mockResolvedValue(null);
   });
 
   it("returns 400 for invalid UUID-based list filters", async () => {
@@ -407,6 +411,30 @@ describe("issues routes UUID validation", () => {
 
     expect(res.status).toBe(404);
     expect(mockWorkProductService.getById).toHaveBeenCalledWith(workProductId);
+  });
+
+  it("trims workProductId path on work product patch route", async () => {
+    const workProductId = "77777777-7777-4777-8777-777777777777";
+    mockWorkProductService.getById.mockResolvedValueOnce({
+      id: workProductId,
+      companyId: COMPANY_ID,
+      issueId: "11111111-1111-4111-8111-111111111111",
+      type: "artifact",
+    });
+    mockWorkProductService.update.mockResolvedValueOnce({
+      id: workProductId,
+      companyId: COMPANY_ID,
+      issueId: "11111111-1111-4111-8111-111111111111",
+      type: "artifact",
+    });
+
+    const res = await request(createApp())
+      .patch(`/api/work-products/%20${workProductId.toUpperCase()}%20`)
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(mockWorkProductService.getById).toHaveBeenCalledWith(workProductId);
+    expect(mockWorkProductService.update).toHaveBeenCalledWith(workProductId, {});
   });
 
   it("trims approvalId path on issue approval unlink route", async () => {
