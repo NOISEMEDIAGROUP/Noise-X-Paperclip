@@ -1,29 +1,47 @@
 #!/bin/sh
 set -e
 
-# Resolve the port (Render overrides PORT)
 APP_PORT="${PORT:-3100}"
 
-# Ensure config directory and file exist for the CLI
+# Ensure config file exists for the CLI (server creates its own, but CLI needs one too)
 CONFIG_DIR="/paperclip/instances/default"
 CONFIG_FILE="$CONFIG_DIR/config.json"
 if [ ! -f "$CONFIG_FILE" ]; then
-  echo "[entrypoint] Creating minimal config.json for CLI..."
+  echo "[entrypoint] Creating config.json for CLI..."
   mkdir -p "$CONFIG_DIR"
   cat > "$CONFIG_FILE" << 'CFGEOF'
 {
-  "server": {
-    "host": "0.0.0.0",
-    "port": 10000,
-    "deploymentMode": "authenticated",
-    "deploymentExposure": "private"
+  "$meta": {
+    "version": 1,
+    "updatedAt": "2026-03-30T00:00:00.000Z",
+    "source": "onboard"
   },
   "database": {
     "mode": "embedded-postgres",
-    "embeddedPostgresPort": 54329
+    "embeddedPostgresDataDir": "/paperclip/instances/default/db",
+    "embeddedPostgresPort": 54329,
+    "backup": {
+      "enabled": true,
+      "intervalMinutes": 60,
+      "retentionDays": 30,
+      "dir": "/paperclip/instances/default/data/backups"
+    }
+  },
+  "logging": {
+    "mode": "file",
+    "logDir": "/paperclip/instances/default/logs"
+  },
+  "server": {
+    "deploymentMode": "authenticated",
+    "exposure": "private",
+    "host": "0.0.0.0",
+    "port": 10000,
+    "allowedHostnames": ["noise-x-paperclip.onrender.com"],
+    "serveUi": true
   },
   "auth": {
-    "baseUrlMode": "auto"
+    "baseUrlMode": "auto",
+    "disableSignUp": false
   }
 }
 CFGEOF
