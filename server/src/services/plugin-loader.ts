@@ -29,7 +29,7 @@ import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import type { Db } from "@paperclipai/db";
 import type {
@@ -76,25 +76,35 @@ export const DEFAULT_LOCAL_PLUGIN_DIR = path.join(
   "plugins",
 );
 
-export function getNpmExecOptions(
+export function getNpmCommand(
   platform: NodeJS.Platform = process.platform,
-): { shell?: boolean } {
-  return platform === "win32" ? { shell: true } : {};
+): string {
+  return platform === "win32" ? "npm.cmd" : "npm";
 }
 
 export function getManifestImportTarget(
   manifestPath: string,
   platform: NodeJS.Platform = process.platform,
 ): string {
-  if (platform === "win32" && path.win32.isAbsolute(manifestPath)) {
-    const normalizedPath = manifestPath.replace(/\\/g, "/");
-    if (/^[A-Za-z]:\//.test(normalizedPath)) {
-      return new URL(`file:///${normalizedPath}`).href;
-    }
-    return new URL(`file:${normalizedPath}`).href;
+  if (platform !== "win32" || !path.win32.isAbsolute(manifestPath)) {
+    return manifestPath;
   }
 
-  return manifestPath;
+  if (process.platform === "win32") {
+    return pathToFileURL(manifestPath).href;
+  }
+
+  const normalizedPath = manifestPath.replace(/\\/g, "/");
+
+  if (normalizedPath.startsWith("//")) {
+    const uncMatch = /^\/\/([^/]+)(\/.*)$/.exec(normalizedPath);
+    if (uncMatch) {
+      const [, host, pathname] = uncMatch;
+      return `file://${host}${pathToFileURL(pathname).pathname}`;
+    }
+  }
+
+  return pathToFileURL(`/${normalizedPath}`).href;
 }
 
 const DEV_TSX_LOADER_PATH = path.resolve(__dirname, "../../../cli/node_modules/tsx/dist/loader.mjs");
@@ -854,9 +864,9 @@ export function pluginLoader(
         // --ignore-scripts prevents preinstall/install/postinstall hooks from
         // executing arbitrary code on the host before manifest validation.
         await execFileAsync(
-          "npm",
+          getNpmCommand(),
           ["install", spec, "--prefix", targetInstallDir, "--save", "--ignore-scripts"],
-          { timeout: 120_000, ...getNpmExecOptions() }, // 2 minute timeout for npm install
+          { timeout: 120_000 }, // 2 minute timeout for npm install
         );
       } catch (err) {
         throw new Error(`npm install failed for ${spec}: ${String(err)}`);
@@ -1420,9 +1430,9 @@ export function pluginLoader(
       if (existsSync(packageJsonPath)) {
         try {
           await execFileAsync(
-            "npm",
+            getNpmCommand(),
             ["uninstall", plugin.packageName, "--prefix", localPluginDir, "--ignore-scripts"],
-            { timeout: 120_000, ...getNpmExecOptions() },
+            { timeout: 120_000 },
           );
         } catch (err) {
           log.warn(
