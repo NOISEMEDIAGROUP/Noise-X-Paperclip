@@ -246,4 +246,29 @@ describe("queueIssueAssignmentWakeup", () => {
       }),
     );
   });
+
+  it("drops requester ids when requester actor type is missing", async () => {
+    const wakeup = vi.fn(async () => undefined);
+
+    await queueIssueAssignmentWakeup({
+      heartbeat: { wakeup },
+      issue: {
+        id: "11111111-1111-4111-8111-111111111111",
+        assigneeAgentId: "22222222-2222-4222-8222-222222222222",
+        status: "todo",
+      },
+      reason: "issue_assigned",
+      mutation: "update",
+      contextSource: "test",
+      requestedByActorId: "33333333-3333-4333-8333-333333333333",
+    });
+
+    expect(wakeup).toHaveBeenCalledWith(
+      "22222222-2222-4222-8222-222222222222",
+      expect.objectContaining({
+        requestedByActorType: undefined,
+        requestedByActorId: null,
+      }),
+    );
+  });
 });

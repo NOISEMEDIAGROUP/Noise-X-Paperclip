@@ -64,6 +64,9 @@ export function queueIssueAssignmentWakeup(input: {
   ) {
     return;
   }
+  const requestedByActorIdForPayload = input.requestedByActorType
+    ? normalizedRequestedByActorId
+    : null;
 
   return input.heartbeat
     .wakeup(normalizedAssigneeAgentId, {
@@ -72,7 +75,7 @@ export function queueIssueAssignmentWakeup(input: {
       reason: input.reason,
       payload: { issueId: normalizedIssueId || input.issue.id, mutation: input.mutation },
       requestedByActorType: input.requestedByActorType,
-      requestedByActorId: normalizedRequestedByActorId ?? null,
+      requestedByActorId: requestedByActorIdForPayload,
       contextSnapshot: { issueId: normalizedIssueId || input.issue.id, source: input.contextSource },
     })
     .catch((err) => {
