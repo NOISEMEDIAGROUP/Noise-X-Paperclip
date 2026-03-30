@@ -147,6 +147,26 @@ describe("issues list query parsing", () => {
     expect(mockIssueService.list).not.toHaveBeenCalled();
   });
 
+  it("returns 403 for touchedByUserId=me when board user id is malformed", async () => {
+    const res = await request(createApp({ userId: { bad: true } })).get(
+      `/api/companies/${COMPANY_ID}/issues?touchedByUserId=me`,
+    );
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain("touchedByUserId=me");
+    expect(mockIssueService.list).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 for unreadForUserId=me when board user id is malformed", async () => {
+    const res = await request(createApp({ userId: { bad: true } })).get(
+      `/api/companies/${COMPANY_ID}/issues?unreadForUserId=me`,
+    );
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain("unreadForUserId=me");
+    expect(mockIssueService.list).not.toHaveBeenCalled();
+  });
+
   it("returns 400 for invalid status filters instead of passing bad enum values to service", async () => {
     const res = await request(createApp()).get(`/api/companies/${COMPANY_ID}/issues?status=todo,not_a_status`);
 
