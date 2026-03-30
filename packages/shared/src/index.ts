@@ -566,6 +566,7 @@ export {
   storageLocalDiskConfigSchema,
   storageS3ConfigSchema,
   secretsLocalEncryptedConfigSchema,
+  scaleAgentSchema,
   type PaperclipConfig,
   type LlmConfig,
   type DatabaseBackupConfig,
