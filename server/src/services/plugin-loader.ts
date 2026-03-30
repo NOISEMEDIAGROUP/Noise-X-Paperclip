@@ -76,6 +76,27 @@ export const DEFAULT_LOCAL_PLUGIN_DIR = path.join(
   "plugins",
 );
 
+export function getNpmExecOptions(
+  platform: NodeJS.Platform = process.platform,
+): { shell?: boolean } {
+  return platform === "win32" ? { shell: true } : {};
+}
+
+export function getManifestImportTarget(
+  manifestPath: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  if (platform === "win32" && path.win32.isAbsolute(manifestPath)) {
+    const normalizedPath = manifestPath.replace(/\\/g, "/");
+    if (/^[A-Za-z]:\//.test(normalizedPath)) {
+      return new URL(`file:///${normalizedPath}`).href;
+    }
+    return new URL(`file:${normalizedPath}`).href;
+  }
+
+  return manifestPath;
+}
+
 const DEV_TSX_LOADER_PATH = path.resolve(__dirname, "../../../cli/node_modules/tsx/dist/loader.mjs");
 
 // ---------------------------------------------------------------------------
@@ -835,7 +856,7 @@ export function pluginLoader(
         await execFileAsync(
           "npm",
           ["install", spec, "--prefix", targetInstallDir, "--save", "--ignore-scripts"],
-          { timeout: 120_000 }, // 2 minute timeout for npm install
+          { timeout: 120_000, ...getNpmExecOptions() }, // 2 minute timeout for npm install
         );
       } catch (err) {
         throw new Error(`npm install failed for ${spec}: ${String(err)}`);
@@ -927,7 +948,7 @@ export function pluginLoader(
 
     try {
       // Dynamic import works for both .js (ESM) and .cjs (CJS) manifests
-      const mod = await import(manifestPath) as Record<string, unknown>;
+      const mod = await import(getManifestImportTarget(manifestPath)) as Record<string, unknown>;
       // The manifest may be the default export or the module itself
       raw = mod["default"] ?? mod;
     } catch (err) {
@@ -1401,7 +1422,7 @@ export function pluginLoader(
           await execFileAsync(
             "npm",
             ["uninstall", plugin.packageName, "--prefix", localPluginDir, "--ignore-scripts"],
-            { timeout: 120_000 },
+            { timeout: 120_000, ...getNpmExecOptions() },
           );
         } catch (err) {
           log.warn(
