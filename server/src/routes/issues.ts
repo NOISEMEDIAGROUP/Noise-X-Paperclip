@@ -741,17 +741,18 @@ export function issueRoutes(db: Db, storage: StorageService) {
 
   router.patch("/work-products/:workProductId", validate(updateIssueWorkProductSchema), async (req, res) => {
     const id = req.params.workProductId as string;
-    if (!isUuidLike(id)) {
+    const normalizedWorkProductId = typeof id === "string" ? id.trim().toLowerCase() : "";
+    if (!isUuidLike(normalizedWorkProductId)) {
       res.status(400).json({ error: "Invalid work product id" });
       return;
     }
-    const existing = await workProductsSvc.getById(id);
+    const existing = await workProductsSvc.getById(normalizedWorkProductId);
     if (!existing) {
       res.status(404).json({ error: "Work product not found" });
       return;
     }
     assertCompanyAccess(req, existing.companyId);
-    const product = await workProductsSvc.update(id, req.body);
+    const product = await workProductsSvc.update(normalizedWorkProductId, req.body);
     if (!product) {
       res.status(404).json({ error: "Work product not found" });
       return;
@@ -773,17 +774,18 @@ export function issueRoutes(db: Db, storage: StorageService) {
 
   router.delete("/work-products/:workProductId", async (req, res) => {
     const id = req.params.workProductId as string;
-    if (!isUuidLike(id)) {
+    const normalizedWorkProductId = typeof id === "string" ? id.trim().toLowerCase() : "";
+    if (!isUuidLike(normalizedWorkProductId)) {
       res.status(400).json({ error: "Invalid work product id" });
       return;
     }
-    const existing = await workProductsSvc.getById(id);
+    const existing = await workProductsSvc.getById(normalizedWorkProductId);
     if (!existing) {
       res.status(404).json({ error: "Work product not found" });
       return;
     }
     assertCompanyAccess(req, existing.companyId);
-    const removed = await workProductsSvc.remove(id);
+    const removed = await workProductsSvc.remove(normalizedWorkProductId);
     if (!removed) {
       res.status(404).json({ error: "Work product not found" });
       return;
@@ -881,7 +883,8 @@ export function issueRoutes(db: Db, storage: StorageService) {
   router.delete("/issues/:id/approvals/:approvalId", async (req, res) => {
     const id = req.params.id as string;
     const approvalId = req.params.approvalId as string;
-    if (!isUuidLike(approvalId)) {
+    const normalizedApprovalId = typeof approvalId === "string" ? approvalId.trim().toLowerCase() : "";
+    if (!isUuidLike(normalizedApprovalId)) {
       res.status(400).json({ error: "Invalid approvalId" });
       return;
     }
@@ -892,7 +895,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
     }
     if (!(await assertCanManageIssueApprovalLinks(req, res, issue.companyId))) return;
 
-    await issueApprovalsSvc.unlink(id, approvalId);
+    await issueApprovalsSvc.unlink(id, normalizedApprovalId);
 
     const actor = getActorInfo(req);
     await logActivity(db, {
@@ -904,7 +907,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       action: "issue.approval_unlinked",
       entityType: "issue",
       entityId: issue.id,
-      details: { approvalId },
+      details: { approvalId: normalizedApprovalId },
     });
 
     res.json({ ok: true });

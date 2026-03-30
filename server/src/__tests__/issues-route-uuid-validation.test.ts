@@ -399,6 +399,33 @@ describe("issues routes UUID validation", () => {
     expect(mockIssueService.checkout).not.toHaveBeenCalled();
   });
 
+  it("trims workProductId path on work product delete route", async () => {
+    const workProductId = "77777777-7777-4777-8777-777777777777";
+    mockWorkProductService.getById.mockResolvedValueOnce(null);
+
+    const res = await request(createApp()).delete(`/api/work-products/%20${workProductId.toUpperCase()}%20`);
+
+    expect(res.status).toBe(404);
+    expect(mockWorkProductService.getById).toHaveBeenCalledWith(workProductId);
+  });
+
+  it("trims approvalId path on issue approval unlink route", async () => {
+    const issueId = "11111111-1111-4111-8111-111111111111";
+    const approvalId = "88888888-8888-4888-8888-888888888888";
+    mockIssueService.getById.mockResolvedValueOnce({
+      id: issueId,
+      companyId: COMPANY_ID,
+      status: "todo",
+    });
+
+    const res = await request(createApp()).delete(
+      `/api/issues/${issueId}/approvals/%20${approvalId.toUpperCase()}%20`,
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockIssueApprovalService.unlink).toHaveBeenCalledWith(issueId, approvalId);
+  });
+
   it("returns 401 for agent checkout when runId is malformed non-uuid string", async () => {
     const agentId = "33333333-3333-4333-8333-333333333333";
     const app = createApp({
