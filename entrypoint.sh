@@ -54,19 +54,56 @@ if [ -d "$DB_DIR" ]; then
   echo "[entrypoint] Fixed db directory permissions"
 fi
 
-# Start the server in the background
-node --import ./server/node_modules/tsx/dist/loader.mjs server/dist/index.js &
-SERVER_PID=$!
+# Disable exit-on-error for server startup (embedded Postgres may need retries)
+set +e
 
-# Wait for server to be healthy
-echo "[entrypoint] Waiting for server on port $APP_PORT..."
-for i in $(seq 1 90); do
-  if curl -sf http://localhost:$APP_PORT/api/health > /dev/null 2>&1; then
-    echo "[entrypoint] Server is healthy!"
+# Start server with retry logic
+MAX_RETRIES=3
+RETRY=0
+HEALTHY=false
+
+while [ $RETRY -lt $MAX_RETRIES ]; do
+  RETRY=$((RETRY + 1))
+  echo "[entrypoint] Starting server (attempt $RETRY/$MAX_RETRIES)..."
+  node --import ./server/node_modules/tsx/dist/loader.mjs server/dist/index.js &
+  SERVER_PID=$!
+
+  # Wait for server to be healthy
+  echo "[entrypoint] Waiting for server on port $APP_PORT..."
+  for i in $(seq 1 60); do
+    if ! kill -0 $SERVER_PID 2>/dev/null; then
+      echo "[entrypoint] Server process exited unexpectedly"
+      break
+    fi
+    if curl -sf http://localhost:$APP_PORT/api/health > /dev/null 2>&1; then
+      echo "[entrypoint] Server is healthy!"
+      HEALTHY=true
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "$HEALTHY" = "true" ]; then
     break
   fi
-  sleep 2
+
+  # Kill server if still running but not healthy
+  kill $SERVER_PID 2>/dev/null || true
+  wait $SERVER_PID 2>/dev/null || true
+
+  if [ $RETRY -lt $MAX_RETRIES ]; then
+    echo "[entrypoint] Retrying in 5 seconds..."
+    sleep 5
+  fi
 done
+
+if [ "$HEALTHY" != "true" ]; then
+  echo "[entrypoint] ERROR: Server failed to start after $MAX_RETRIES attempts"
+  exit 1
+fi
+
+# Re-enable exit-on-error
+set -e
 
 # Check bootstrap status
 BOOTSTRAP_STATUS=$(curl -sf http://localhost:$APP_PORT/api/health | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{console.log(JSON.parse(d).bootstrapStatus)}catch(e){console.log('unknown')}})" 2>/dev/null || echo "unknown")
