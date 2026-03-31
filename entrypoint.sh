@@ -47,6 +47,13 @@ if [ ! -f "$CONFIG_FILE" ]; then
 CFGEOF
 fi
 
+# Fix PostgreSQL data directory permissions (required after Render disk mount)
+DB_DIR="/paperclip/instances/default/db"
+if [ -d "$DB_DIR" ]; then
+  chmod 700 "$DB_DIR"
+  echo "[entrypoint] Fixed db directory permissions"
+fi
+
 # Start the server in the background
 node --import ./server/node_modules/tsx/dist/loader.mjs server/dist/index.js &
 SERVER_PID=$!
